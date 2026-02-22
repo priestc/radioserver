@@ -159,6 +159,24 @@ def download_song(request, playlist_item_id):
     return FileResponse(open(path, "rb"))
 
 
+MAX_COVER_SIZE = 600
+
+
+def _resize_cover(image_data):
+    """Resize cover art to fit within MAX_COVER_SIZE pixels, return JPEG bytes."""
+    from PIL import Image
+
+    img = Image.open(BytesIO(image_data))
+    if img.width > MAX_COVER_SIZE or img.height > MAX_COVER_SIZE:
+        img.thumbnail((MAX_COVER_SIZE, MAX_COVER_SIZE), Image.LANCZOS)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    buf.seek(0)
+    return buf
+
+
 @require_api_key
 def cover_art(request, album_id):
     try:
@@ -169,11 +187,12 @@ def cover_art(request, album_id):
     # Try file on disk first
     cover_path = _find_cover_file(album)
     if cover_path:
-        return FileResponse(open(cover_path, "rb"))
+        image_data = cover_path.read_bytes()
+        return FileResponse(_resize_cover(image_data), content_type="image/jpeg")
 
     # Fall back to embedded art
     data, mime = _extract_embedded_art(album)
     if data:
-        return FileResponse(BytesIO(data), content_type=mime)
+        return FileResponse(_resize_cover(data), content_type="image/jpeg")
 
     raise Http404
