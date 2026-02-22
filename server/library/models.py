@@ -6,6 +6,7 @@ from django.db import models
 class Artist(models.Model):
     name = models.CharField(max_length=500)
     sort_name = models.CharField(max_length=500, blank=True, default="")
+    exclude_from_playlist = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["sort_name", "name"]
@@ -22,6 +23,7 @@ class Album(models.Model):
     year = models.PositiveSmallIntegerField(null=True, blank=True)
     total_tracks = models.PositiveSmallIntegerField(null=True, blank=True)
     total_discs = models.PositiveSmallIntegerField(null=True, blank=True)
+    exclude_from_playlist = models.BooleanField(default=False)
 
     class Meta:
         unique_together = [("title", "artist")]
@@ -60,6 +62,7 @@ class Track(models.Model):
     bitrate = models.PositiveIntegerField(null=True, blank=True, help_text="Bitrate in bps")
     sample_rate = models.PositiveIntegerField(null=True, blank=True, help_text="Sample rate in Hz")
     channels = models.PositiveSmallIntegerField(null=True, blank=True)
+    exclude_from_playlist = models.BooleanField(default=False)
     file_path = models.CharField(max_length=1000, unique=True)
     file_size = models.PositiveBigIntegerField(null=True, blank=True)
     file_mtime = models.FloatField(null=True, blank=True)

@@ -66,14 +66,28 @@ class AlbumForm(forms.ModelForm):
 
 @admin.register(Artist)
 class ArtistAdmin(admin.ModelAdmin):
-    list_display = ["name", "sort_name"]
+    list_display = ["display_name", "sort_name", "exclude_from_playlist"]
+    list_editable = ["exclude_from_playlist"]
     search_fields = ["name"]
+
+    @admin.display(description="Name")
+    def display_name(self, obj):
+        if obj.exclude_from_playlist:
+            return format_html('<span style="opacity:0.35">{}</span>', obj.name)
+        return obj.name
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change and "exclude_from_playlist" in form.changed_data:
+            obj.albums.update(exclude_from_playlist=obj.exclude_from_playlist)
+            obj.tracks.update(exclude_from_playlist=obj.exclude_from_playlist)
 
 
 @admin.register(Album)
 class AlbumAdmin(admin.ModelAdmin):
     form = AlbumForm
-    list_display = ["title", "artist", "year", "total_tracks", "has_artwork"]
+    list_display = ["display_title", "artist", "year", "total_tracks", "has_artwork", "exclude_from_playlist"]
+    list_editable = ["exclude_from_playlist"]
     list_filter = ["year"]
     search_fields = ["title", "artist__name"]
     readonly_fields = ["cover_art"]
@@ -98,17 +112,38 @@ class AlbumAdmin(admin.ModelAdmin):
     def has_artwork(self, obj):
         return has_cover(obj)
 
+    @admin.display(description="Title")
+    def display_title(self, obj):
+        greyed = obj.exclude_from_playlist or obj.artist.exclude_from_playlist
+        if greyed:
+            return format_html('<span style="opacity:0.35">{}</span>', obj.title)
+        return obj.title
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        if change and "exclude_from_playlist" in form.changed_data:
+            obj.tracks.update(exclude_from_playlist=obj.exclude_from_playlist)
         from library.tags import write_album_tags
         write_album_tags(obj)
 
 
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
-    list_display = ["title", "artist", "album", "track_number", "genre", "format", "duration"]
+    list_display = ["display_title", "artist", "album", "track_number", "genre", "format", "duration", "exclude_from_playlist"]
+    list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre"]
     search_fields = ["title", "artist__name", "album__title"]
+
+    @admin.display(description="Title")
+    def display_title(self, obj):
+        greyed = (
+            obj.exclude_from_playlist
+            or obj.artist.exclude_from_playlist
+            or (obj.album and obj.album.exclude_from_playlist)
+        )
+        if greyed:
+            return format_html('<span style="opacity:0.35">{}</span>', obj.title)
+        return obj.title
 
 
 @admin.register(GenreGroup)
