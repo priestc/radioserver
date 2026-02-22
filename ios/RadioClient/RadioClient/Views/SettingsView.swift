@@ -40,9 +40,18 @@ struct SettingsView: View {
                 }
 
                 Section("Cache") {
+                    HStack {
+                        Text("Buffer Size (MB)")
+                        Spacer()
+                        TextField("MB", value: $api.bufferCacheMB, format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+
                     let size = CacheManager.shared.totalCacheSizeMB()
                     HStack {
-                        Text("Cache Size")
+                        Text("Current Usage")
                         Spacer()
                         Text(String(format: "%.1f MB", size))
                             .foregroundColor(.secondary)

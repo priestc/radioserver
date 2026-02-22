@@ -7,10 +7,15 @@ class APIService: ObservableObject {
     @Published var apiKey: String {
         didSet { UserDefaults.standard.set(apiKey, forKey: "apiKey") }
     }
+    @Published var bufferCacheMB: Int {
+        didSet { UserDefaults.standard.set(bufferCacheMB, forKey: "bufferCacheMB") }
+    }
 
     init() {
         self.serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
         self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
+        let saved = UserDefaults.standard.integer(forKey: "bufferCacheMB")
+        self.bufferCacheMB = saved > 0 ? saved : 100
     }
 
     var isConfigured: Bool {
@@ -53,10 +58,10 @@ class APIService: ObservableObject {
         return syncResponse.download
     }
 
-    func downloadSong(playlistItemId: Int) async throws -> URL {
+    func downloadSong(playlistItemId: Int, fileExtension: String = "mp3") async throws -> URL {
         let cache = CacheManager.shared
-        if cache.hasCached(playlistItemId: playlistItemId) {
-            return cache.fileURL(for: playlistItemId)
+        if cache.hasCached(playlistItemId: playlistItemId, ext: fileExtension) {
+            return cache.fileURL(for: playlistItemId, ext: fileExtension)
         }
 
         guard let base = baseURL else { throw APIError.invalidURL }
@@ -69,7 +74,7 @@ class APIService: ObservableObject {
             throw APIError.serverError(code)
         }
 
-        let dest = cache.fileURL(for: playlistItemId)
+        let dest = cache.fileURL(for: playlistItemId, ext: fileExtension)
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: tempURL, to: dest)
         return dest

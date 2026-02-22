@@ -72,7 +72,7 @@ class AudioPlayer: ObservableObject {
 
         do {
             let played = pendingPlayed
-            let newItems = try await api.sync(played: played, bufferCacheMB: 100)
+            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB)
             await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
 
             // Add new items to queue (skip already queued)
@@ -85,8 +85,8 @@ class AudioPlayer: ObservableObject {
 
             // Download songs in background
             for item in newItems {
-                if !CacheManager.shared.hasCached(playlistItemId: item.id) {
-                    _ = try? await api.downloadSong(playlistItemId: item.id)
+                if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
+                    _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
                 }
             }
 
@@ -116,9 +116,9 @@ class AudioPlayer: ObservableObject {
         removeObservers()
 
         currentSong = song
-        let fileURL = CacheManager.shared.fileURL(for: song.id)
+        let fileURL = CacheManager.shared.fileURL(for: song.id, ext: song.fileExtension)
 
-        guard CacheManager.shared.hasCached(playlistItemId: song.id) else {
+        guard CacheManager.shared.hasCached(playlistItemId: song.id, ext: song.fileExtension) else {
             // Not downloaded yet, skip to next
             skipToNext()
             return

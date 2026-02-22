@@ -10,12 +10,12 @@ class CacheManager {
         return dir
     }
 
-    func fileURL(for playlistItemId: Int) -> URL {
-        cacheDir.appendingPathComponent("\(playlistItemId).audio")
+    func fileURL(for playlistItemId: Int, ext: String = "mp3") -> URL {
+        cacheDir.appendingPathComponent("\(playlistItemId).\(ext)")
     }
 
-    func hasCached(playlistItemId: Int) -> Bool {
-        FileManager.default.fileExists(atPath: fileURL(for: playlistItemId).path)
+    func hasCached(playlistItemId: Int, ext: String = "mp3") -> Bool {
+        FileManager.default.fileExists(atPath: fileURL(for: playlistItemId, ext: ext).path)
     }
 
     func totalCacheSizeMB() -> Double {
@@ -32,8 +32,8 @@ class CacheManager {
         return Double(total) / (1024 * 1024)
     }
 
-    func removeFile(for playlistItemId: Int) {
-        try? FileManager.default.removeItem(at: fileURL(for: playlistItemId))
+    func removeFile(for playlistItemId: Int, ext: String = "mp3") {
+        try? FileManager.default.removeItem(at: fileURL(for: playlistItemId, ext: ext))
     }
 
     func clearCache() {

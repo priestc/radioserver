@@ -135,6 +135,7 @@ def client_sync(request):
             "album_id": track.album_id,
             "year": track.year,
             "duration": track.duration,
+            "file_format": track.format,
         })
         total += size
         if total >= buffer_bytes:
