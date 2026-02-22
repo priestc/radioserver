@@ -66,11 +66,6 @@ class AlbumForm(forms.ModelForm):
         model = Album
         fields = "__all__"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk and _find_cover(self.instance):
-            del self.fields["cover_upload"]
-
     def save(self, commit=True):
         instance = super().save(commit=commit)
         uploaded = self.cleaned_data.get("cover_upload")
@@ -97,6 +92,12 @@ class AlbumAdmin(admin.ModelAdmin):
     list_filter = ["year"]
     search_fields = ["title", "artist__name"]
     readonly_fields = ["cover_art"]
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj and _find_cover(obj):
+            fields = [f for f in fields if f != "cover_upload"]
+        return fields
 
     @admin.display(description="Cover Art")
     def cover_art(self, obj):
