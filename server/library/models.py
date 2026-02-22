@@ -74,7 +74,8 @@ class Track(models.Model):
         ordering = ["album", "disc_number", "track_number", "title"]
 
     def __str__(self):
-        return f"{self.artist} — {self.title}"
+        parts = [str(self.artist), str(self.year or ""), str(self.album or ""), self.title]
+        return " - ".join(p for p in parts if p)
 
 
 class GenreGroup(models.Model):
