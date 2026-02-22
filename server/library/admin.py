@@ -63,8 +63,18 @@ class TrackAdmin(admin.ModelAdmin):
 @admin.register(GenreGroup)
 class GenreGroupAdmin(admin.ModelAdmin):
     form = GenreGroupForm
-    list_display = ["name", "genres"]
+    list_display = ["name", "genres", "track_count"]
     search_fields = ["name", "genres"]
+
+    @admin.display(description="Tracks")
+    def track_count(self, obj):
+        genres = obj.genre_list()
+        if not genres:
+            return "0 (0%)"
+        total = Track.objects.count()
+        count = Track.objects.filter(genre__in=genres).count()
+        pct = (count / total * 100) if total else 0
+        return f"{count} ({pct:.1f}%)"
 
 
 @admin.register(PlaylistSettings)
