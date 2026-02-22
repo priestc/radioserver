@@ -76,7 +76,7 @@ class AudioPlayer: ObservableObject {
             await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
 
             // Add new items to queue (skip already queued)
-            let existingIds = Set(await MainActor.run { queue.map(\.id) })
+            let existingIds = Set(await MainActor.run { self.queue.map(\.id) })
             let toAdd = newItems.filter { !existingIds.contains($0.id) }
 
             if !toAdd.isEmpty {
@@ -91,8 +91,9 @@ class AudioPlayer: ObservableObject {
             }
 
             // Auto-start playback if nothing is playing
-            if await MainActor.run({ currentSong == nil && !queue.isEmpty }) {
-                await MainActor.run { playNext() }
+            let shouldStart = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+            if shouldStart {
+                await MainActor.run { self.playNext() }
             }
         } catch {
             print("Sync failed: \(error)")
