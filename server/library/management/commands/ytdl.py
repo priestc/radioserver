@@ -17,6 +17,19 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("url", help="YouTube Music album/playlist URL")
 
+    def _crop_to_square(self, path: Path):
+        from PIL import Image
+        img = Image.open(path)
+        w, h = img.size
+        if w == h:
+            return
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+        img.save(path)
+        self.stdout.write(f"  Cropped {path.name} from {w}x{h} to {side}x{side}")
+
     def handle(self, **options):
         url = options["url"]
 
@@ -65,6 +78,10 @@ class Command(BaseCommand):
                         thumb.rename(item / "folder.jpg")
                         self.stdout.write(f"  Renamed {thumb.name} -> folder.jpg in {item.name}/")
                         break
+
+                cover = item / "folder.jpg"
+                if cover.exists():
+                    self._crop_to_square(cover)
 
                 dest = library_dir / item.name
                 if dest.exists():
