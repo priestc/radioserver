@@ -9,6 +9,7 @@ requires-python = ">=3.9"
 dependencies = [
     "Django>=4.2,<4.3",
     "mutagen",
+    "Pillow",
 ]
 
 [project.scripts]
