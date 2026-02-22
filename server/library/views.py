@@ -8,7 +8,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 
 from library.models import Album
 
-COVER_NAMES = ("cover.jpg", "cover.png", "folder.jpg", "folder.png")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}
+COVER_KEYWORDS = ("cover", "front", "folder")
 
 
 def _find_cover_file(album):
@@ -17,10 +18,13 @@ def _find_cover_file(album):
     if not track:
         return None
     album_dir = Path(track.file_path).parent
-    for name in COVER_NAMES:
-        cover = album_dir / name
-        if cover.exists():
-            return cover
+    if not album_dir.is_dir():
+        return None
+    for path in album_dir.iterdir():
+        if path.suffix.lower() in IMAGE_EXTENSIONS:
+            name_lower = path.stem.lower()
+            if any(kw in name_lower for kw in COVER_KEYWORDS):
+                return path
     return None
 
 

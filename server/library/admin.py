@@ -73,7 +73,7 @@ class ArtistAdmin(admin.ModelAdmin):
 @admin.register(Album)
 class AlbumAdmin(admin.ModelAdmin):
     form = AlbumForm
-    list_display = ["title", "artist", "year", "total_tracks"]
+    list_display = ["title", "artist", "year", "total_tracks", "has_artwork"]
     list_filter = ["year"]
     search_fields = ["title", "artist__name"]
     readonly_fields = ["cover_art"]
@@ -93,6 +93,10 @@ class AlbumAdmin(admin.ModelAdmin):
             url = reverse("library:cover_art", args=[obj.pk])
             return format_html('<img src="{}" style="max-width:300px; max-height:300px;">', url)
         return "No cover found — use the upload field below."
+
+    @admin.display(description="Artwork", boolean=True)
+    def has_artwork(self, obj):
+        return has_cover(obj)
 
 
 @admin.register(Track)
