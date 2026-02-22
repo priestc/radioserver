@@ -11,5 +11,8 @@ dependencies = [
     "mutagen",
 ]
 
+[project.scripts]
+radioserver = "manage:main"
+
 [tool.setuptools.packages.find]
 where = ["server"]
