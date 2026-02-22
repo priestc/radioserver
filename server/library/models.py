@@ -129,3 +129,14 @@ class PlaylistSettings(models.Model):
 
     def __str__(self):
         return "Playlist Settings"
+
+
+class PlaylistItem(models.Model):
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="playlist_items")
+    played_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"#{self.id} — {self.track}"

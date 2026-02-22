@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
 
-from library.models import Album, Artist, GenreGroup, PlaylistSettings, Track
+from library.models import Album, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
 from library.views import has_cover
 
 
@@ -199,6 +199,12 @@ class GenreGroupAdmin(admin.ModelAdmin):
         count = Track.objects.filter(genre__in=genres).count()
         pct = (count / total * 100) if total else 0
         return f"{count} ({pct:.1f}%)"
+
+
+@admin.register(PlaylistItem)
+class PlaylistItemAdmin(admin.ModelAdmin):
+    list_display = ["id", "track", "played_at"]
+    ordering = ["-id"]
 
 
 @admin.register(PlaylistSettings)
