@@ -53,6 +53,8 @@ class Command(BaseCommand):
             meta = json.loads(meta_result.stdout.strip().split("\n")[0])
             album_title = meta.get("album") or meta.get("playlist_title") or ""
             artist_name = meta.get("artist") or meta.get("channel") or ""
+            if artist_name.endswith(" - Topic"):
+                artist_name = artist_name[: -len(" - Topic")]
             if album_title and artist_name:
                 if Album.objects.filter(
                     title__iexact=album_title, artist__name__iexact=artist_name,
