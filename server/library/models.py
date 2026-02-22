@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+from django.db import models
+
+
+class Artist(models.Model):
+    name = models.CharField(max_length=500)
+    sort_name = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        ordering = ["sort_name", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Album(models.Model):
+    title = models.CharField(max_length=500)
+    artist = models.ForeignKey(
+        Artist, on_delete=models.CASCADE, related_name="albums"
+    )
+    year = models.PositiveSmallIntegerField(null=True, blank=True)
+    total_tracks = models.PositiveSmallIntegerField(null=True, blank=True)
+    total_discs = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [("title", "artist")]
+        ordering = ["artist", "year", "title"]
+
+    def __str__(self):
+        return f"{self.artist} — {self.title}"
+
+
+class Track(models.Model):
+    title = models.CharField(max_length=500)
+    artist = models.ForeignKey(
+        Artist,
+        on_delete=models.CASCADE,
+        related_name="tracks",
+    )
+    album = models.ForeignKey(
+        Album,
+        on_delete=models.CASCADE,
+        related_name="tracks",
+        null=True,
+        blank=True,
+    )
+    album_artist = models.ForeignKey(
+        Artist,
+        on_delete=models.SET_NULL,
+        related_name="album_artist_tracks",
+        null=True,
+        blank=True,
+    )
+    track_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    disc_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    genre = models.CharField(max_length=200, blank=True, default="")
+    year = models.PositiveSmallIntegerField(null=True, blank=True)
+    duration = models.FloatField(null=True, blank=True, help_text="Duration in seconds")
+    bitrate = models.PositiveIntegerField(null=True, blank=True, help_text="Bitrate in bps")
+    sample_rate = models.PositiveIntegerField(null=True, blank=True, help_text="Sample rate in Hz")
+    channels = models.PositiveSmallIntegerField(null=True, blank=True)
+    file_path = models.CharField(max_length=1000, unique=True)
+    file_size = models.PositiveBigIntegerField(null=True, blank=True)
+    file_mtime = models.FloatField(null=True, blank=True)
+    format = models.CharField(max_length=20, blank=True, default="")
+    date_added = models.DateTimeField(auto_now_add=True)
+    date_modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["album", "disc_number", "track_number", "title"]
+
+    def __str__(self):
+        return f"{self.artist} — {self.title}"

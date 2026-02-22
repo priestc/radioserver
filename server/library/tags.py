@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import mutagen
+from mutagen import File as MutagenFile
+
+
+def _first(tags: dict, key: str, default: str = "") -> str:
+    """Return the first value for *key* from an EasyTags dict, or *default*."""
+    vals = tags.get(key)
+    if vals:
+        return str(vals[0]).strip()
+    return default
+
+
+def _parse_number(value: str) -> int | None:
+    """Parse '3/12' or '3' style track/disc numbers, returning the first part."""
+    if not value:
+        return None
+    try:
+        return int(value.split("/")[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_total(value: str) -> int | None:
+    """Parse '3/12' returning the second part (total), if present."""
+    if not value or "/" not in value:
+        return None
+    try:
+        return int(value.split("/")[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_year(value: str) -> int | None:
+    """Extract a 4-digit year from strings like '2023' or '2023-05-14'."""
+    if not value:
+        return None
+    try:
+        return int(value[:4])
+    except (ValueError, IndexError):
+        return None
+
+
+FORMAT_MAP = {
+    "MP3": "mp3",
+    "FLAC": "flac",
+    "OggVorbis": "ogg",
+    "OggOpus": "opus",
+    "MP4": "m4a",
+    "AAC": "aac",
+    "WavPack": "wav",
+    "ASF": "wma",
+    "WAV": "wav",  # mutagen calls it WAVE sometimes
+}
+
+
+def read_tags(path: str | Path) -> dict | None:
+    """Read audio metadata from *path* and return a normalised dict.
+
+    Returns ``None`` if mutagen cannot open the file.
+    """
+    path = str(path)
+    try:
+        audio = MutagenFile(path, easy=True)
+    except mutagen.MutagenError:
+        return None
+    if audio is None:
+        return None
+
+    tags = dict(audio.tags) if audio.tags else {}
+    info = audio.info
+
+    # Determine format from mutagen type name
+    type_name = type(audio).__name__
+    fmt = FORMAT_MAP.get(type_name, Path(path).suffix.lstrip(".").lower())
+
+    track_raw = _first(tags, "tracknumber")
+    disc_raw = _first(tags, "discnumber")
+
+    stat = os.stat(path)
+
+    return {
+        "title": _first(tags, "title") or Path(path).stem,
+        "artist": _first(tags, "artist") or "Unknown Artist",
+        "album": _first(tags, "album") or "Unknown Album",
+        "album_artist": _first(tags, "albumartist") or _first(tags, "artist") or "Unknown Artist",
+        "track_number": _parse_number(track_raw),
+        "disc_number": _parse_number(disc_raw),
+        "total_tracks": _parse_total(track_raw),
+        "total_discs": _parse_total(disc_raw),
+        "genre": _first(tags, "genre"),
+        "year": _parse_year(_first(tags, "date")),
+        "duration": getattr(info, "length", None),
+        "bitrate": getattr(info, "bitrate", None),
+        "sample_rate": getattr(info, "sample_rate", None),
+        "channels": getattr(info, "channels", None),
+        "format": fmt,
+        "file_path": path,
+        "file_size": stat.st_size,
+        "file_mtime": stat.st_mtime,
+    }
