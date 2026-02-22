@@ -91,7 +91,7 @@ class AlbumAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["year"]
     search_fields = ["title", "artist__name"]
-    readonly_fields = ["cover_art"]
+    readonly_fields = ["cover_art", "track_list"]
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
@@ -118,6 +118,21 @@ class AlbumAdmin(admin.ModelAdmin):
     @admin.display(description="Artwork", boolean=True)
     def has_artwork(self, obj):
         return has_cover(obj)
+
+    @admin.display(description="Tracks")
+    def track_list(self, obj):
+        if not obj.pk:
+            return ""
+        tracks = obj.tracks.order_by("disc_number", "track_number", "title")
+        if not tracks.exists():
+            return "No tracks"
+        multi_disc = obj.total_discs and obj.total_discs > 1
+        items = []
+        for t in tracks:
+            prefix = f"{t.disc_number}-" if t.disc_number and multi_disc else ""
+            num = f"{prefix}{t.track_number}. " if t.track_number else ""
+            items.append(format_html("<li>{}{}</li>", num, t.title))
+        return format_html("<ol style='margin:0;padding-left:1.5em'>{}</ol>", format_html("".join(items)))
 
     @admin.display(description="Title")
     def display_title(self, obj):
