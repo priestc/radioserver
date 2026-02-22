@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
@@ -25,48 +27,56 @@ class Command(BaseCommand):
             raise CommandError("yt-dlp is not installed or not on PATH")
         self.stdout.write(f"yt-dlp {version.stdout.strip()}")
 
-        out_dir = Path(settings.MUSIC_LIBRARY_PATH) / "from youtube music"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        library_dir = Path(settings.MUSIC_LIBRARY_PATH) / "from youtube music"
+        library_dir.mkdir(parents=True, exist_ok=True)
 
-        # Snapshot existing album dirs so we can detect new ones
-        dirs_before = set(out_dir.iterdir())
+        # Download to a temp dir under ~ so snap yt-dlp has access
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
+        try:
+            output_template = str(tmp_dir / "%(album,playlist_title)s/%(track_number)02d %(title)s.%(ext)s")
 
-        output_template = str(out_dir / "%(album,playlist_title)s/%(track_number)02d %(title)s.%(ext)s")
+            cmd = [
+                "yt-dlp",
+                "-x", "--audio-format", "mp3",
+                "-f", "bestaudio[abr<=192]/bestaudio",
+                "--embed-thumbnail",
+                "--add-metadata",
+                "--parse-metadata", "playlist_index:%(track_number)s",
+                "--write-thumbnail",
+                "--convert-thumbnails", "jpg",
+                "--yes-playlist",
+                "-o", output_template,
+                url,
+            ]
 
-        cmd = [
-            "yt-dlp",
-            "-x", "--audio-format", "mp3",
-            "-f", "bestaudio[abr<=192]/bestaudio",
-            "--embed-thumbnail",
-            "--add-metadata",
-            "--parse-metadata", "playlist_index:%(track_number)s",
-            "--write-thumbnail",
-            "--convert-thumbnails", "jpg",
-            "--yes-playlist",
-            "-o", output_template,
-            url,
-        ]
+            self.stdout.write(f"Downloading to {tmp_dir} ...")
+            self.stdout.write(f"Running: {' '.join(cmd)}\n")
 
-        self.stdout.write(f"Downloading to {out_dir} ...")
-        self.stdout.write(f"Running: {' '.join(cmd)}\n")
+            result = subprocess.run(cmd)
+            if result.returncode != 0:
+                raise CommandError(f"yt-dlp exited with code {result.returncode}")
 
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            raise CommandError(f"yt-dlp exited with code {result.returncode}")
+            # Rename thumbnails to folder.jpg and move album dirs to the library
+            for item in tmp_dir.iterdir():
+                if not item.is_dir():
+                    continue
+                for thumb in item.glob("*.jpg"):
+                    if thumb.name != "folder.jpg":
+                        thumb.rename(item / "folder.jpg")
+                        self.stdout.write(f"  Renamed {thumb.name} -> folder.jpg in {item.name}/")
+                        break
 
-        # Find new album directories
-        dirs_after = set(out_dir.iterdir())
-        new_dirs = dirs_after - dirs_before
-
-        # Rename thumbnail files to folder.jpg in each album directory
-        for album_dir in (new_dirs or dirs_after):
-            if not album_dir.is_dir():
-                continue
-            for thumb in album_dir.glob("*.jpg"):
-                if thumb.name != "folder.jpg":
-                    thumb.rename(album_dir / "folder.jpg")
-                    self.stdout.write(f"  Renamed {thumb.name} -> folder.jpg in {album_dir.name}/")
-                    break
+                dest = library_dir / item.name
+                if dest.exists():
+                    # Merge files into existing album directory
+                    for f in item.iterdir():
+                        shutil.move(str(f), str(dest / f.name))
+                    self.stdout.write(f"  Merged into {dest}")
+                else:
+                    shutil.move(str(item), str(dest))
+                    self.stdout.write(f"  Moved to {dest}")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         # Scan the library to import new tracks
         self.stdout.write("\nScanning library...")
