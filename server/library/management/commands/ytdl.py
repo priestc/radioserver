@@ -43,6 +43,7 @@ class Command(BaseCommand):
         self.stdout.write(f"yt-dlp {version.stdout.strip()}")
 
         # Fetch metadata to check for duplicates before downloading
+        artist_name = ""
         meta_cmd = [
             "yt-dlp", "--flat-playlist", "--dump-json",
             "--playlist-items", "1", url,
@@ -61,7 +62,7 @@ class Command(BaseCommand):
                     )
                 self.stdout.write(f"Album not yet in library: {artist_name} — {album_title}")
 
-        library_dir = Path(settings.MUSIC_LIBRARY_PATH) / "from youtube music"
+        library_dir = Path(settings.MUSIC_LIBRARY_PATH) / (artist_name or "from youtube music")
         library_dir.mkdir(parents=True, exist_ok=True)
 
         # Download to a temp dir under ~ so snap yt-dlp has access
