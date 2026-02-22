@@ -10,9 +10,8 @@ struct NowPlayingView: View {
                 Spacer()
 
                 // Album art
-                if let albumId = player.currentSong?.albumId,
-                   let artURL = api.coverArtURL(albumId: albumId) {
-                    CoverArtView(url: artURL, apiKey: api.apiKey)
+                if let albumId = player.currentSong?.albumId {
+                    CoverArtView(albumId: albumId)
                         .frame(width: 280, height: 280)
                         .cornerRadius(12)
                         .shadow(radius: 8)
@@ -92,8 +91,9 @@ struct NowPlayingView: View {
 }
 
 struct CoverArtView: View {
-    let url: URL
-    let apiKey: String
+    let albumId: Int
+    @EnvironmentObject var player: AudioPlayer
+    @EnvironmentObject var api: APIService
     @State private var image: UIImage?
 
     var body: some View {
@@ -109,16 +109,19 @@ struct CoverArtView: View {
                     }
             }
         }
-        .task {
-            await loadImage()
+        .task(id: albumId) {
+            // Use cached artwork from AudioPlayer if available
+            if let cached = player.artworkCache[albumId] {
+                image = cached
+                return
+            }
+            guard let artURL = api.coverArtURL(albumId: albumId) else { return }
+            var request = URLRequest(url: artURL)
+            request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
+            guard let (data, _) = try? await URLSession.shared.data(for: request),
+                  let uiImage = UIImage(data: data) else { return }
+            player.artworkCache[albumId] = uiImage
+            image = uiImage
         }
-    }
-
-    private func loadImage() async {
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let uiImage = UIImage(data: data) else { return }
-        image = uiImage
     }
 }

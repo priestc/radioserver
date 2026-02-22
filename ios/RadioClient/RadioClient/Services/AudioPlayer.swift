@@ -16,6 +16,8 @@ class AudioPlayer: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var syncTimer: Timer?
     private var pendingPlayed: [PlayedSong] = []
+    var artworkCache: [Int: UIImage] = [:]  // albumId -> image
+    private var currentArtwork: MPMediaItemArtwork?
 
     var apiService: APIService?
 
@@ -83,10 +85,13 @@ class AudioPlayer: ObservableObject {
                 await MainActor.run { queue.append(contentsOf: toAdd) }
             }
 
-            // Download songs in background
+            // Download songs and artwork in background
             for item in newItems {
                 if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
                     _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                }
+                if let albumId = item.albumId {
+                    await prefetchArtwork(albumId: albumId, api: api)
                 }
             }
 
@@ -151,6 +156,7 @@ class AudioPlayer: ObservableObject {
 
         player?.play()
         isPlaying = true
+        loadArtworkForCurrentSong()
         updateNowPlaying()
     }
 
@@ -206,36 +212,41 @@ class AudioPlayer: ObservableObject {
             }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
             info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-
-            // Load artwork if available
-            if let albumId = song.albumId, let api = apiService, let artURL = api.coverArtURL(albumId: albumId) {
-                loadArtwork(from: artURL) { image in
-                    if let image {
-                        var updatedInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                        updatedInfo[MPMediaItemPropertyArtwork] = artwork
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
-                    }
-                }
+            if let artwork = currentArtwork {
+                info[MPMediaItemPropertyArtwork] = artwork
             }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    private func loadArtwork(from url: URL, completion: @escaping (UIImage?) -> Void) {
-        var request = URLRequest(url: url)
-        if let api = apiService {
-            request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
+    func loadArtworkForCurrentSong() {
+        guard let song = currentSong, let albumId = song.albumId else {
+            currentArtwork = nil
+            return
         }
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            DispatchQueue.main.async {
-                if let data, let image = UIImage(data: data) {
-                    completion(image)
-                } else {
-                    completion(nil)
-                }
-            }
-        }.resume()
+
+        if let cached = artworkCache[albumId] {
+            currentArtwork = MPMediaItemArtwork(boundsSize: cached.size) { _ in cached }
+        } else {
+            currentArtwork = nil
+        }
+        updateNowPlaying()
+    }
+
+    private func prefetchArtwork(albumId: Int, api: APIService) async {
+        let alreadyCached = await MainActor.run { self.artworkCache[albumId] != nil }
+        if alreadyCached { return }
+
+        guard let artURL = api.coverArtURL(albumId: albumId) else { return }
+        var request = URLRequest(url: artURL)
+        request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
+
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let image = UIImage(data: data) else { return }
+
+        await MainActor.run {
+            self.artworkCache[albumId] = image
+        }
     }
 
     private func removeObservers() {
