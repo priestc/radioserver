@@ -71,6 +71,12 @@ STATIC_URL = "static/"
 # Music library settings
 # ---------------------------------------------------------------------------
 
-MUSIC_LIBRARY_PATH = "/path/to/your/music"
-
 MUSIC_EXTENSIONS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "wma"}
+
+# Load user config from ~/.radioserver.conf
+import configparser as _configparser
+
+_config = _configparser.ConfigParser()
+_config.read(Path.home() / ".radioserver.conf")
+
+MUSIC_LIBRARY_PATH = _config.get("library", "path", fallback="/path/to/your/music")
