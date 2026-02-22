@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+import functools
 import json
 from io import BytesIO
 from pathlib import Path
 
 from django.http import FileResponse, Http404, JsonResponse
-from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from library.models import Album, PlaylistItem
+from library.models import Album, ApiKey, PlaylistItem
+
+
+def require_api_key(view_func):
+    @functools.wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return JsonResponse({"error": "Authentication required"}, status=401)
+        key = auth[7:]
+        if not ApiKey.objects.filter(key=key).exists():
+            return JsonResponse({"error": "Invalid API key"}, status=401)
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}
 COVER_KEYWORDS = ("cover", "front", "folder")
@@ -89,6 +102,7 @@ def has_cover(album):
 
 
 @csrf_exempt
+@require_api_key
 @require_POST
 def client_sync(request):
     try:
@@ -129,6 +143,7 @@ def client_sync(request):
     return JsonResponse({"download": download})
 
 
+@require_api_key
 @require_GET
 def download_song(request, playlist_item_id):
     try:
@@ -143,7 +158,7 @@ def download_song(request, playlist_item_id):
     return FileResponse(open(path, "rb"))
 
 
-@staff_member_required
+@require_api_key
 def cover_art(request, album_id):
     try:
         album = Album.objects.get(pk=album_id)

@@ -1,0 +1,76 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @EnvironmentObject var api: APIService
+    @State private var testResult: String?
+    @State private var isTesting = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Server") {
+                    TextField("Server address (e.g. 192.168.1.50:8000)", text: $api.serverURL)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+
+                    TextField("API Key", text: $api.apiKey)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .fontDesign(.monospaced)
+                }
+
+                Section {
+                    Button(action: testConnection) {
+                        HStack {
+                            Text("Test Connection")
+                            Spacer()
+                            if isTesting {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(!api.isConfigured || isTesting)
+
+                    if let result = testResult {
+                        Text(result)
+                            .font(.caption)
+                            .foregroundColor(result.hasPrefix("Connected") ? .green : .red)
+                    }
+                }
+
+                Section("Cache") {
+                    let size = CacheManager.shared.totalCacheSizeMB()
+                    HStack {
+                        Text("Cache Size")
+                        Spacer()
+                        Text(String(format: "%.1f MB", size))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Button("Clear Cache", role: .destructive) {
+                        CacheManager.shared.clearCache()
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+        }
+    }
+
+    private func testConnection() {
+        isTesting = true
+        testResult = nil
+        Task {
+            let result = await api.testConnection()
+            await MainActor.run {
+                switch result {
+                case .success(let count):
+                    testResult = "Connected — \(count) songs available"
+                case .failure(let error):
+                    testResult = "Failed: \(error.localizedDescription)"
+                }
+                isTesting = false
+            }
+        }
+    }
+}

@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
 
-from library.models import Album, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
+from library.models import Album, ApiKey, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
 from library.views import has_cover
 
 
@@ -213,6 +213,13 @@ class PlaylistItemAdmin(admin.ModelAdmin):
             return ""
         mins, secs = divmod(int(secs), 60)
         return f"{mins}:{secs:02d}"
+
+
+@admin.register(ApiKey)
+class ApiKeyAdmin(admin.ModelAdmin):
+    list_display = ["key", "label", "created_at"]
+    readonly_fields = ["key", "created_at"]
+    fields = ["key", "label", "created_at"]
 
 
 @admin.register(PlaylistSettings)
