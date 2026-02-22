@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from library.models import Album
 from library.scanner import scan
 
 
@@ -39,6 +41,25 @@ class Command(BaseCommand):
         if version.returncode != 0:
             raise CommandError("yt-dlp is not installed or not on PATH")
         self.stdout.write(f"yt-dlp {version.stdout.strip()}")
+
+        # Fetch metadata to check for duplicates before downloading
+        meta_cmd = [
+            "yt-dlp", "--flat-playlist", "--dump-json",
+            "--playlist-items", "1", url,
+        ]
+        meta_result = subprocess.run(meta_cmd, capture_output=True, text=True)
+        if meta_result.returncode == 0 and meta_result.stdout.strip():
+            meta = json.loads(meta_result.stdout.strip().split("\n")[0])
+            album_title = meta.get("album") or meta.get("playlist_title") or ""
+            artist_name = meta.get("artist") or meta.get("channel") or ""
+            if album_title and artist_name:
+                if Album.objects.filter(
+                    title__iexact=album_title, artist__name__iexact=artist_name,
+                ).exists():
+                    raise CommandError(
+                        f"Album already in library: {artist_name} — {album_title}"
+                    )
+                self.stdout.write(f"Album not yet in library: {artist_name} — {album_title}")
 
         library_dir = Path(settings.MUSIC_LIBRARY_PATH) / "from youtube music"
         library_dir.mkdir(parents=True, exist_ok=True)
