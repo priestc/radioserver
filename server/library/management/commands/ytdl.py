@@ -68,7 +68,8 @@ class Command(BaseCommand):
         # Download to a temp dir under ~ so snap yt-dlp has access
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
         try:
-            output_template = str(tmp_dir / "%(album,playlist_title)s/%(track_number)02d %(title)s.%(ext)s")
+            album_dir_template = "%(album,playlist_title)s"
+            output_template = str(tmp_dir / album_dir_template / "%(track_number)02d %(title)s.%(ext)s")
 
             cmd = [
                 "yt-dlp",
@@ -77,8 +78,6 @@ class Command(BaseCommand):
                 "--embed-thumbnail",
                 "--add-metadata",
                 "--parse-metadata", "playlist_index:%(track_number)s",
-                "--write-thumbnail",
-                "--convert-thumbnails", "jpg",
                 "--yes-playlist",
                 "-o", output_template,
                 url,
@@ -91,19 +90,32 @@ class Command(BaseCommand):
             if result.returncode != 0:
                 raise CommandError(f"yt-dlp exited with code {result.returncode}")
 
-            # Rename thumbnails to folder.jpg and move album dirs to the library
+            # Extract cover art from an mp3 and clean up, then move to library
             for item in tmp_dir.iterdir():
                 if not item.is_dir():
                     continue
-                for thumb in item.glob("*.jpg"):
-                    if thumb.name != "folder.jpg":
-                        thumb.rename(item / "folder.jpg")
-                        self.stdout.write(f"  Renamed {thumb.name} -> folder.jpg in {item.name}/")
-                        break
 
+                # Extract embedded thumbnail from the first mp3 as folder.jpg
                 cover = item / "folder.jpg"
+                if not cover.exists():
+                    for mp3 in item.glob("*.mp3"):
+                        extract = subprocess.run(
+                            ["ffmpeg", "-i", str(mp3), "-an", "-vcodec", "mjpeg",
+                             "-frames:v", "1", str(cover)],
+                            capture_output=True,
+                        )
+                        if extract.returncode == 0 and cover.exists():
+                            self.stdout.write(f"  Extracted cover art from {mp3.name}")
+                            break
+
                 if cover.exists():
                     self._crop_to_square(cover)
+
+                # Remove any stray image files (keep only folder.jpg and mp3s)
+                for f in item.iterdir():
+                    if f.suffix.lower() in (".jpg", ".png", ".webp") and f.name != "folder.jpg":
+                        f.unlink()
+                        self.stdout.write(f"  Removed {f.name}")
 
                 dest = library_dir / item.name
                 if dest.exists():
