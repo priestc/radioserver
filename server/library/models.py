@@ -72,3 +72,50 @@ class Track(models.Model):
 
     def __str__(self):
         return f"{self.artist} — {self.title}"
+
+
+class GenreGroup(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    genres = models.TextField(
+        help_text="Comma-separated list of genres belonging to this group.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def genre_list(self):
+        return [g.strip() for g in self.genres.split(",") if g.strip()]
+
+
+class PlaylistSettings(models.Model):
+    artist_skip = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Minimum number of songs by other artists that must play "
+            "before the same artist can appear again."
+        ),
+    )
+    genre_skip = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Minimum number of songs from other genre groups that must play "
+            "before the same genre group can appear again."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "playlist settings"
+        verbose_name_plural = "playlist settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass
+
+    def __str__(self):
+        return "Playlist Settings"
