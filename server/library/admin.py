@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from library.models import Album, Artist, GenreGroup, PlaylistSettings, Track
+from library.views import has_cover
 
 
 class GenreGroupForm(forms.ModelForm):
@@ -43,22 +44,6 @@ class GenreGroupForm(forms.ModelForm):
         return super().save(commit=commit)
 
 
-COVER_NAMES = ("cover.jpg", "cover.png", "folder.jpg", "folder.png")
-
-
-def _find_cover(album):
-    """Return the cover Path if found, else None."""
-    track = album.tracks.first()
-    if not track:
-        return None
-    album_dir = Path(track.file_path).parent
-    for name in COVER_NAMES:
-        cover = album_dir / name
-        if cover.exists():
-            return cover
-    return None
-
-
 class AlbumForm(forms.ModelForm):
     cover_upload = forms.ImageField(required=False, label="Upload cover art")
 
@@ -95,7 +80,7 @@ class AlbumAdmin(admin.ModelAdmin):
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
-        if obj and _find_cover(obj):
+        if obj and has_cover(obj):
             fields = [f for f in fields if f != "cover_upload"]
         return fields
 
@@ -103,7 +88,7 @@ class AlbumAdmin(admin.ModelAdmin):
     def cover_art(self, obj):
         if not obj.pk:
             return ""
-        if _find_cover(obj):
+        if has_cover(obj):
             from django.urls import reverse
             url = reverse("library:cover_art", args=[obj.pk])
             return format_html('<img src="{}" style="max-width:300px; max-height:300px;">', url)
