@@ -1,6 +1,43 @@
+from django import forms
 from django.contrib import admin
 
 from library.models import Album, Artist, GenreGroup, PlaylistSettings, Track
+
+
+class GenreGroupForm(forms.ModelForm):
+    genre_choices = forms.MultipleChoiceField(
+        choices=[],
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Genres",
+    )
+
+    class Meta:
+        model = GenreGroup
+        fields = ["name"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Collect genres already claimed by other genre groups
+        taken = set()
+        for gg in GenreGroup.objects.exclude(pk=self.instance.pk):
+            taken.update(gg.genre_list())
+
+        all_genres = (
+            Track.objects.exclude(genre="")
+            .values_list("genre", flat=True)
+            .distinct()
+            .order_by("genre")
+        )
+        own = set(self.instance.genre_list()) if self.instance.pk else set()
+        available = [g for g in all_genres if g not in taken or g in own]
+        self.fields["genre_choices"].choices = [(g, g) for g in available]
+        if self.instance.pk:
+            self.fields["genre_choices"].initial = list(own)
+
+    def save(self, commit=True):
+        self.instance.genres = ", ".join(self.cleaned_data["genre_choices"])
+        return super().save(commit=commit)
 
 
 @admin.register(Artist)
@@ -25,6 +62,7 @@ class TrackAdmin(admin.ModelAdmin):
 
 @admin.register(GenreGroup)
 class GenreGroupAdmin(admin.ModelAdmin):
+    form = GenreGroupForm
     list_display = ["name", "genres"]
     search_fields = ["name", "genres"]
 
