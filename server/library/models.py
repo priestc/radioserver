@@ -74,7 +74,8 @@ class Track(models.Model):
         ordering = ["album", "disc_number", "track_number", "title"]
 
     def __str__(self):
-        parts = [str(self.artist), str(self.year or ""), str(self.album or ""), self.title]
+        album_title = self.album.title if self.album else ""
+        parts = [str(self.artist), str(self.year or ""), album_title, self.title]
         return " - ".join(p for p in parts if p)
 
 
