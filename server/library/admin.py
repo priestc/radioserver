@@ -70,12 +70,28 @@ class ArtistAdmin(admin.ModelAdmin):
     list_display = ["display_name", "sort_name", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     search_fields = ["name"]
+    readonly_fields = ["album_list"]
 
     @admin.display(description="Name")
     def display_name(self, obj):
         if obj.exclude_from_playlist:
             return format_html('<span style="opacity:0.35">{}</span>', obj.name)
         return obj.name
+
+    @admin.display(description="Albums")
+    def album_list(self, obj):
+        if not obj.pk:
+            return ""
+        from django.urls import reverse
+        albums = obj.albums.order_by("year", "title")
+        if not albums.exists():
+            return "No albums"
+        items = []
+        for a in albums:
+            url = reverse("admin:library_album_change", args=[a.pk])
+            label = f"{a.title} ({a.year})" if a.year else a.title
+            items.append(format_html('<li><a href="{}">{}</a></li>', url, label))
+        return format_html("<ul style='margin:0;padding-left:1.5em'>{}</ul>", format_html("".join(items)))
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
