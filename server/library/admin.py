@@ -98,6 +98,11 @@ class AlbumAdmin(admin.ModelAdmin):
     def has_artwork(self, obj):
         return has_cover(obj)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from library.tags import write_album_tags
+        write_album_tags(obj)
+
 
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):

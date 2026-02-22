@@ -58,6 +58,47 @@ FORMAT_MAP = {
 }
 
 
+def write_album_tags(album) -> None:
+    """Write album-level metadata to the tags of all tracks in the album.
+
+    Updates: album title, album artist, year, total_tracks, total_discs.
+    """
+    for track in album.tracks.all():
+        try:
+            audio = MutagenFile(track.file_path, easy=True)
+        except mutagen.MutagenError:
+            continue
+        if audio is None:
+            continue
+        if audio.tags is None:
+            audio.add_tags()
+
+        audio.tags["album"] = [album.title]
+        audio.tags["albumartist"] = [album.artist.name]
+
+        if album.year is not None:
+            audio.tags["date"] = [str(album.year)]
+
+        # Write tracknumber as "N/total" if total_tracks is set
+        existing_track_num = _first(dict(audio.tags), "tracknumber")
+        track_num = _parse_number(existing_track_num)
+        if track_num is not None:
+            if album.total_tracks is not None:
+                audio.tags["tracknumber"] = [f"{track_num}/{album.total_tracks}"]
+
+        # Write discnumber as "N/total" if total_discs is set
+        existing_disc_num = _first(dict(audio.tags), "discnumber")
+        disc_num = _parse_number(existing_disc_num)
+        if disc_num is not None:
+            if album.total_discs is not None:
+                audio.tags["discnumber"] = [f"{disc_num}/{album.total_discs}"]
+
+        try:
+            audio.save()
+        except mutagen.MutagenError:
+            continue
+
+
 def read_tags(path: str | Path) -> dict | None:
     """Read audio metadata from *path* and return a normalised dict.
 
