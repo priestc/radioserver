@@ -105,6 +105,13 @@ class PlaylistSettings(models.Model):
             "before the same genre group can appear again."
         ),
     )
+    decade_skip = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Minimum number of songs from other decades that must play "
+            "before the same decade can appear again."
+        ),
+    )
 
     class Meta:
         verbose_name = "playlist settings"
