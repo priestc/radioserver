@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from pathlib import Path
 
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 
-from library.models import Album
+from library.models import Album, PlaylistItem
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"}
 COVER_KEYWORDS = ("cover", "front", "folder")
@@ -83,6 +86,61 @@ def has_cover(album):
         return True
     data, _ = _extract_embedded_art(album)
     return data is not None
+
+
+@csrf_exempt
+@require_POST
+def client_sync(request):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    # Mark played items
+    for entry in body.get("played", []):
+        PlaylistItem.objects.filter(pk=entry["id"]).update(played_at=entry["played_at"])
+
+    # Determine items to download
+    buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
+    unplayed = PlaylistItem.objects.filter(played_at__isnull=True).select_related("track").order_by("id")
+
+    unplayed = unplayed.select_related("track__artist", "track__album")
+
+    download = []
+    total = 0
+    for item in unplayed:
+        track = item.track
+        size = track.file_size or 0
+        if total + size > buffer_bytes and download:
+            break
+        download.append({
+            "id": item.id,
+            "title": track.title,
+            "artist": track.artist.name,
+            "album": track.album.title if track.album else None,
+            "album_id": track.album_id,
+            "year": track.year,
+            "duration": track.duration,
+        })
+        total += size
+        if total >= buffer_bytes:
+            break
+
+    return JsonResponse({"download": download})
+
+
+@require_GET
+def download_song(request, playlist_item_id):
+    try:
+        item = PlaylistItem.objects.select_related("track").get(pk=playlist_item_id)
+    except PlaylistItem.DoesNotExist:
+        raise Http404
+
+    path = Path(item.track.file_path)
+    if not path.is_file():
+        raise Http404
+
+    return FileResponse(open(path, "rb"))
 
 
 @staff_member_required

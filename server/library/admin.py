@@ -203,8 +203,16 @@ class GenreGroupAdmin(admin.ModelAdmin):
 
 @admin.register(PlaylistItem)
 class PlaylistItemAdmin(admin.ModelAdmin):
-    list_display = ["id", "track", "played_at"]
+    list_display = ["id", "track", "duration", "played_at"]
     ordering = ["-id"]
+
+    @admin.display(description="Duration")
+    def duration(self, obj):
+        secs = obj.track.duration
+        if secs is None:
+            return ""
+        mins, secs = divmod(int(secs), 60)
+        return f"{mins}:{secs:02d}"
 
 
 @admin.register(PlaylistSettings)
