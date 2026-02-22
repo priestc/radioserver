@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from django import forms
 from django.contrib import admin
@@ -106,7 +107,13 @@ class AlbumAdmin(admin.ModelAdmin):
             from django.urls import reverse
             url = reverse("library:cover_art", args=[obj.pk])
             return format_html('<img src="{}" style="max-width:300px; max-height:300px;">', url)
-        return "No cover found — use the upload field below."
+        query = quote_plus(f"{obj.artist.name} {obj.title} album cover")
+        search_url = f"https://www.google.com/search?tbm=isch&tbs=isz:l&q={query}"
+        return format_html(
+            '<a href="{}" target="_blank">Search Google Images</a>'
+            " — or use the upload field below.",
+            search_url,
+        )
 
     @admin.display(description="Artwork", boolean=True)
     def has_artwork(self, obj):
