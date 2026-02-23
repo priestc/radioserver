@@ -75,6 +75,8 @@ def scan(force: bool = False, clean: bool = False) -> dict:
 
     for dirpath, _dirnames, filenames in os.walk(library_path):
         for filename in filenames:
+            if filename.startswith("._"):
+                continue
             ext = Path(filename).suffix.lstrip(".").lower()
             if ext not in extensions:
                 continue
