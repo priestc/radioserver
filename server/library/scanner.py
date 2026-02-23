@@ -80,17 +80,32 @@ def _upsert_track(tag_data: dict, source: str = "") -> tuple[bool, list[str]]:
     return created, changed_fields
 
 
-def scan(force: bool = False, clean: bool = False) -> dict:
+def _count_files(library_path: str, extensions: set[str]) -> int:
+    """Count total audio files in the library."""
+    count = 0
+    for dirpath, _dirnames, filenames in os.walk(library_path):
+        for filename in filenames:
+            if filename.startswith("._"):
+                continue
+            ext = Path(filename).suffix.lstrip(".").lower()
+            if ext in extensions:
+                count += 1
+    return count
+
+
+def scan(force: bool = False, clean: bool = False, progress_callback=None) -> dict:
     """Scan the music library and return stats.
 
     Args:
         force: Re-read tags even if mtime hasn't changed.
         clean: Remove DB entries whose files no longer exist on disk.
+        progress_callback: Optional callable(scanned, total) called after each file.
     """
     library_path = settings.MUSIC_LIBRARY_PATH
     extensions = settings.MUSIC_EXTENSIONS
 
-    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0, "error_files": [], "updated_files": []}
+    total_files = _count_files(library_path, extensions)
+    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0, "error_files": [], "updated_files": [], "total": total_files}
 
     seen_paths: set[str] = set()
 
@@ -105,6 +120,9 @@ def scan(force: bool = False, clean: bool = False) -> dict:
             filepath = os.path.join(dirpath, filename)
             seen_paths.add(filepath)
             stats["scanned"] += 1
+
+            if progress_callback:
+                progress_callback(stats["scanned"], total_files)
 
             # Check if we can skip
             if not force:

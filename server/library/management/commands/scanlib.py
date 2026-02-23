@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from django.core.management.base import BaseCommand
 
 from library.scanner import scan
@@ -20,9 +22,15 @@ class Command(BaseCommand):
             help="Remove database entries for files that no longer exist on disk.",
         )
 
+    def _progress(self, scanned, total):
+        pct = (scanned / total * 100) if total else 0
+        sys.stdout.write(f"\r  Scanning: {scanned}/{total} ({pct:.1f}%)")
+        sys.stdout.flush()
+
     def handle(self, **options):
         self.stdout.write("Scanning music library...")
-        stats = scan(force=options["force"], clean=options["clean"])
+        stats = scan(force=options["force"], clean=options["clean"], progress_callback=self._progress)
+        sys.stdout.write("\n")
 
         self.stdout.write(f"  Scanned:  {stats['scanned']}")
         self.stdout.write(f"  Created:  {stats['created']}")
