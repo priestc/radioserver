@@ -125,14 +125,23 @@ def read_tags(path: str | Path) -> dict | None:
 
     stat = os.stat(path)
 
-    # Split all artist tag values on commas, slashes, or "Ft."/"Feat." to get individual artists
+    # Split all artist tag values on commas, slashes, or "Ft."/"Feat."/"Featuring"
+    # The & delimiter is only recognised after a feat/ft/featuring split has occurred
     raw_artists = tags.get("artist", [])
     artists = []
     for val in raw_artists:
-        for name in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b", str(val), flags=re.IGNORECASE):
-            name = name.strip()
-            if name:
-                artists.append(name)
+        for part in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b|\bFeaturing\b", str(val), flags=re.IGNORECASE):
+            part = part.strip()
+            if not part:
+                continue
+            # If this part came after a feat delimiter, split on & too
+            if artists:
+                for name in part.split("&"):
+                    name = name.strip()
+                    if name:
+                        artists.append(name)
+            else:
+                artists.append(part)
     if not artists:
         artists = ["Unknown Artist"]
 
