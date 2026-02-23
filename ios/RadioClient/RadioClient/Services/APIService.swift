@@ -33,7 +33,7 @@ class APIService: ObservableObject {
         return request
     }
 
-    func sync(played: [PlayedSong], bufferCacheMB: Int = 100) async throws -> [SongItem] {
+    func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil) async throws -> [SongItem] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/client_sync/")
 
@@ -46,7 +46,10 @@ class APIService: ObservableObject {
         let playedData = played.map { entry in
             ["id": entry.song.id, "played_at": formatter.string(from: entry.playedAt), "skipped": entry.skipped] as [String: Any]
         }
-        let body: [String: Any] = ["played": playedData, "buffer_cache_mb": bufferCacheMB]
+        var body: [String: Any] = ["played": playedData, "buffer_cache_mb": bufferCacheMB]
+        if let np = nowPlaying {
+            body["now_playing"] = ["id": np.id, "started_at": formatter.string(from: np.startedAt)]
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)

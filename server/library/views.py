@@ -211,6 +211,13 @@ def client_sync(request):
             skipped=entry.get("skipped", False),
         )
 
+    # Record now-playing start time
+    now_playing = body.get("now_playing")
+    if now_playing:
+        PlaylistItem.objects.filter(pk=now_playing["id"]).update(
+            started_at=now_playing["started_at"],
+        )
+
     # Auto-generate playlist if unplayed duration is under 1 hour
     from django.db.models import Sum
     unplayed_duration = (
@@ -264,6 +271,54 @@ def download_song(request, playlist_item_id):
         raise Http404
 
     return FileResponse(open(path, "rb"))
+
+
+@require_api_key
+@require_GET
+def download_song_lowbitrate(request, playlist_item_id):
+    try:
+        item = PlaylistItem.objects.select_related("track").get(pk=playlist_item_id)
+    except PlaylistItem.DoesNotExist:
+        raise Http404
+
+    track = item.track
+    path = Path(track.file_path)
+    if not path.is_file():
+        raise Http404
+
+    # If already 128kbps or lower, serve the original file
+    if track.bitrate and track.bitrate <= 128000:
+        return FileResponse(open(path, "rb"))
+
+    # Transcode to 128kbps MP3 via ffmpeg
+    import subprocess
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp.close()
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(path), "-b:a", "128k", "-map", "a", tmp.name],
+            check=True,
+            capture_output=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # ffmpeg failed or not installed — fall back to original
+        Path(tmp.name).unlink(missing_ok=True)
+        return FileResponse(open(path, "rb"))
+
+    tmp_path = Path(tmp.name)
+    fh = open(tmp_path, "rb")
+    response = FileResponse(fh, content_type="audio/mpeg")
+    response["Content-Disposition"] = f'attachment; filename="{path.stem}.mp3"'
+    # Remove temp file once the file handle is closed
+    original_close = fh.close
+    def _cleanup():
+        original_close()
+        tmp_path.unlink(missing_ok=True)
+    fh.close = _cleanup
+
+    return response
 
 
 MAX_COVER_SIZE = 600

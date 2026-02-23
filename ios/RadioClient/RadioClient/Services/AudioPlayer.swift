@@ -14,11 +14,16 @@ class AudioPlayer: ObservableObject {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
-    private var syncTimer: Timer?
     private var pendingPlayed: [PlayedSong] = []
     var artworkCache: [Int: UIImage] = [:]  // albumId -> image
     private var artworkFailed: Set<Int> = []  // albumIds with no artwork
     private var currentArtwork: MPMediaItemArtwork?
+
+    // Sync state
+    private var hasSyncedCurrentSong = false
+    private var currentSongStartedAt: Date?
+    private var syncRetryTask: Task<Void, Never>?
+    private var syncBackoffSeconds: Double = 2
 
     var apiService: APIService?
 
@@ -58,24 +63,47 @@ class AudioPlayer: ObservableObject {
     }
 
     func startSyncTimer() {
-        syncTimer?.invalidate()
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { await self?.performSync() }
-        }
+        // Perform an initial sync to populate the queue
         Task { await performSync() }
     }
 
     func stopSyncTimer() {
-        syncTimer?.invalidate()
-        syncTimer = nil
+        syncRetryTask?.cancel()
+        syncRetryTask = nil
     }
 
-    private func performSync() async {
-        guard let api = apiService, api.isConfigured else { return }
+    private func triggerSync() {
+        syncRetryTask?.cancel()
+        syncBackoffSeconds = 2
+        syncRetryTask = Task { await performSyncWithRetry() }
+    }
+
+    private func performSyncWithRetry() async {
+        while !Task.isCancelled {
+            let success = await performSync()
+            if success { return }
+
+            // Backoff and retry
+            let delay = syncBackoffSeconds
+            syncBackoffSeconds = min(syncBackoffSeconds * 2, 60)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+    }
+
+    private func performSync() async -> Bool {
+        guard let api = apiService, api.isConfigured else { return false }
 
         do {
             let played = pendingPlayed
-            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB)
+
+            // Build now_playing info for the current song
+            var nowPlaying: (id: Int, startedAt: Date)?
+            if let song = await MainActor.run(body: { self.currentSong }),
+               let startedAt = await MainActor.run(body: { self.currentSongStartedAt }) {
+                nowPlaying = (id: song.id, startedAt: startedAt)
+            }
+
+            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB, nowPlaying: nowPlaying)
             await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
 
             // Add new items to queue (skip already queued)
@@ -101,8 +129,11 @@ class AudioPlayer: ObservableObject {
             if shouldStart {
                 await MainActor.run { self.playNext() }
             }
+
+            return true
         } catch {
             print("Sync failed: \(error)")
+            return false
         }
     }
 
@@ -122,6 +153,8 @@ class AudioPlayer: ObservableObject {
         removeObservers()
 
         currentSong = song
+        hasSyncedCurrentSong = false
+        currentSongStartedAt = Date()
         let fileURL = CacheManager.shared.fileURL(for: song.id, ext: song.fileExtension)
 
         guard CacheManager.shared.hasCached(playlistItemId: song.id, ext: song.fileExtension) else {
@@ -142,6 +175,16 @@ class AudioPlayer: ObservableObject {
             self.currentTime = time.seconds
             if let dur = self.player?.currentItem?.duration.seconds, dur.isFinite {
                 self.duration = dur
+
+                // Trigger sync at 50%
+                if !self.hasSyncedCurrentSong && time.seconds >= dur / 2 {
+                    self.hasSyncedCurrentSong = true
+                    if let song = self.currentSong {
+                        let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
+                        self.pendingPlayed.append(played)
+                    }
+                    self.triggerSync()
+                }
             }
             self.updateNowPlaying()
         }
@@ -163,11 +206,16 @@ class AudioPlayer: ObservableObject {
 
     private func songDidFinish() {
         guard let song = currentSong else { return }
-        let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
-        playHistory.insert(played, at: 0)
-        pendingPlayed.append(played)
+        // If we haven't synced yet (song was shorter than expected), add to pending
+        if !hasSyncedCurrentSong {
+            let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
+            pendingPlayed.append(played)
+        }
+        playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
         CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
         playNext()
+        // Sync to report the new song's start time
+        triggerSync()
     }
 
     func play() {
@@ -189,11 +237,15 @@ class AudioPlayer: ObservableObject {
     func skipToNext() {
         if let song = currentSong {
             let played = PlayedSong(song: song, playedAt: Date(), skipped: true)
+            if !hasSyncedCurrentSong {
+                pendingPlayed.append(played)
+            }
             playHistory.insert(played, at: 0)
-            pendingPlayed.append(played)
             CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
         }
         playNext()
+        // Sync to report skip and the new song's start time
+        triggerSync()
     }
 
     func seek(to fraction: Double) {
@@ -279,6 +331,6 @@ class AudioPlayer: ObservableObject {
 
     deinit {
         removeObservers()
-        syncTimer?.invalidate()
+        syncRetryTask?.cancel()
     }
 }
