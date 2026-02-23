@@ -131,22 +131,32 @@ class AudioPlayer: ObservableObject {
 
             // Download songs and artwork in background
             let onCellular = await MainActor.run { self.isCellular }
-            let cachedCount = newItems.filter {
-                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: onCellular ? "mp3" : $0.fileExtension)
-            }.count
 
-            for item in newItems {
-                let ext = onCellular ? "mp3" : item.fileExtension
-                if CacheManager.shared.hasCached(playlistItemId: item.id, ext: ext) {
-                    continue
+            if onCellular {
+                // On cellular: only keep at most 2 low-bitrate songs cached
+                // (the currently playing one + the next one)
+                let cachedCount = newItems.filter {
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                }.count
+                if cachedCount < 2 {
+                    // Find the first uncached song and download just that one
+                    if let next = newItems.first(where: {
+                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                    }) {
+                        _ = try? await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
+                        if let albumId = next.albumId {
+                            await prefetchArtwork(albumId: albumId, api: api)
+                        }
+                    }
                 }
-                // On cellular, only download when 1 or fewer songs are cached
-                if onCellular && cachedCount > 1 {
-                    continue
-                }
-                _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension, lowBitrate: onCellular)
-                if let albumId = item.albumId {
-                    await prefetchArtwork(albumId: albumId, api: api)
+            } else {
+                for item in newItems {
+                    if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
+                        _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                    }
+                    if let albumId = item.albumId {
+                        await prefetchArtwork(albumId: albumId, api: api)
+                    }
                 }
             }
 
