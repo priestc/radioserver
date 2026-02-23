@@ -101,9 +101,64 @@ def has_cover(album):
     return data is not None
 
 
+def _nuke_cover_art(album):
+    """Delete all cover art files on disk and embedded art in audio files."""
+    from mutagen import File as MutagenFile
+
+    # Delete cover image files on disk
+    track = album.tracks.first()
+    if track:
+        album_dir = Path(track.file_path).parent
+        if album_dir.is_dir():
+            for path in album_dir.iterdir():
+                if path.suffix.lower() in IMAGE_EXTENSIONS:
+                    path.unlink()
+
+    # Strip embedded art from all tracks
+    for track in album.tracks.all():
+        try:
+            audio = MutagenFile(track.file_path)
+        except Exception:
+            continue
+        if audio is None:
+            continue
+
+        modified = False
+
+        # ID3 (MP3) — remove APIC frames
+        if hasattr(audio, "tags") and audio.tags:
+            apic_keys = [k for k in audio.tags if k.startswith("APIC")]
+            for key in apic_keys:
+                del audio.tags[key]
+                modified = True
+
+        # FLAC — clear pictures
+        if hasattr(audio, "pictures") and audio.pictures:
+            audio.clear_pictures()
+            modified = True
+
+        # MP4/M4A — remove covr
+        if hasattr(audio, "tags") and audio.tags and "covr" in audio.tags:
+            del audio.tags["covr"]
+            modified = True
+
+        # OGG — remove metadata_block_picture
+        if hasattr(audio, "tags") and audio.tags:
+            if "metadata_block_picture" in audio.tags:
+                del audio.tags["metadata_block_picture"]
+                modified = True
+
+        if modified:
+            try:
+                audio.save()
+            except Exception:
+                pass
+
+
 def check_cover_status(album):
     """Check album cover art and return status: 'valid', 'invalid', or ''.
 
+    If invalid art is found, all cover art (files and embedded) is deleted.
     Also updates album.cover_status in the database.
     """
     from PIL import Image, UnidentifiedImageError
@@ -114,7 +169,8 @@ def check_cover_status(album):
             Image.open(cover_path).verify()
             album.cover_status = Album.COVER_VALID
         except (UnidentifiedImageError, Exception):
-            album.cover_status = Album.COVER_INVALID
+            _nuke_cover_art(album)
+            album.cover_status = Album.COVER_NONE
         album.save(update_fields=["cover_status"])
         return album.cover_status
 
@@ -124,7 +180,8 @@ def check_cover_status(album):
             Image.open(BytesIO(data)).verify()
             album.cover_status = Album.COVER_VALID
         except (UnidentifiedImageError, Exception):
-            album.cover_status = Album.COVER_INVALID
+            _nuke_cover_art(album)
+            album.cover_status = Album.COVER_NONE
         album.save(update_fields=["cover_status"])
         return album.cover_status
 

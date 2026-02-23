@@ -38,7 +38,9 @@ class Command(BaseCommand):
 
         if stats.get("cover_invalid_albums"):
             self.stdout.write("")
-            self.stdout.write(self.style.WARNING(f"Albums with invalid cover art: {stats['cover_invalid']}"))
+            self.stdout.write(self.style.WARNING(
+                f"Removed invalid cover art from {stats['cover_invalid']} albums:"
+            ))
             for album_name in stats["cover_invalid_albums"]:
                 self.stdout.write(f"  {album_name}")
 
