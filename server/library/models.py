@@ -166,6 +166,7 @@ class PlaylistSettings(models.Model):
 class PlaylistItem(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="playlist_items")
     played_at = models.DateTimeField(null=True, blank=True)
+    skipped = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["id"]

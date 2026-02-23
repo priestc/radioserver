@@ -26,6 +26,7 @@ struct PlayedSong: Identifiable {
     let id = UUID()
     let song: SongItem
     let playedAt: Date
+    let skipped: Bool
 }
 
 struct SyncResponse: Codable {

@@ -44,7 +44,7 @@ class APIService: ObservableObject {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let playedData = played.map { entry in
-            ["id": entry.song.id, "played_at": formatter.string(from: entry.playedAt)] as [String: Any]
+            ["id": entry.song.id, "played_at": formatter.string(from: entry.playedAt), "skipped": entry.skipped] as [String: Any]
         }
         let body: [String: Any] = ["played": playedData, "buffer_cache_mb": bufferCacheMB]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

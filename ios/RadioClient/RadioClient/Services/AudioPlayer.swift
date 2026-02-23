@@ -163,7 +163,7 @@ class AudioPlayer: ObservableObject {
 
     private func songDidFinish() {
         guard let song = currentSong else { return }
-        let played = PlayedSong(song: song, playedAt: Date())
+        let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
         playHistory.insert(played, at: 0)
         pendingPlayed.append(played)
         CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
@@ -188,7 +188,7 @@ class AudioPlayer: ObservableObject {
 
     func skipToNext() {
         if let song = currentSong {
-            let played = PlayedSong(song: song, playedAt: Date())
+            let played = PlayedSong(song: song, playedAt: Date(), skipped: true)
             playHistory.insert(played, at: 0)
             pendingPlayed.append(played)
             CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)

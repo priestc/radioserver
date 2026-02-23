@@ -206,7 +206,10 @@ def client_sync(request):
 
     # Mark played items
     for entry in body.get("played", []):
-        PlaylistItem.objects.filter(pk=entry["id"]).update(played_at=entry["played_at"])
+        PlaylistItem.objects.filter(pk=entry["id"]).update(
+            played_at=entry["played_at"],
+            skipped=entry.get("skipped", False),
+        )
 
     # Auto-generate playlist if unplayed duration is under 1 hour
     from django.db.models import Sum
