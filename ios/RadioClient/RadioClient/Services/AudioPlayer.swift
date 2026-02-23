@@ -166,6 +166,7 @@ class AudioPlayer: ObservableObject {
         let played = PlayedSong(song: song, playedAt: Date())
         playHistory.insert(played, at: 0)
         pendingPlayed.append(played)
+        CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
         playNext()
     }
 
@@ -190,6 +191,7 @@ class AudioPlayer: ObservableObject {
             let played = PlayedSong(song: song, playedAt: Date())
             playHistory.insert(played, at: 0)
             pendingPlayed.append(played)
+            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
         }
         playNext()
     }
@@ -238,6 +240,12 @@ class AudioPlayer: ObservableObject {
         let skip = await MainActor.run { self.artworkCache[albumId] != nil || self.artworkFailed.contains(albumId) }
         if skip { return }
 
+        // Check disk cache
+        if let diskImage = CacheManager.shared.cachedArtwork(for: albumId) {
+            await MainActor.run { self.artworkCache[albumId] = diskImage }
+            return
+        }
+
         guard let artURL = api.coverArtURL(albumId: albumId) else { return }
         var request = URLRequest(url: artURL)
         request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
@@ -250,6 +258,7 @@ class AudioPlayer: ObservableObject {
                 return
             }
             if let image = UIImage(data: data) {
+                CacheManager.shared.saveArtwork(image, for: albumId)
                 await MainActor.run { self.artworkCache[albumId] = image }
             } else {
                 await MainActor.run { self.artworkFailed.insert(albumId) }

@@ -1,4 +1,4 @@
-import Foundation
+import UIKit
 
 class CacheManager {
     static let shared = CacheManager()
@@ -8,6 +8,30 @@ class CacheManager {
             .appendingPathComponent("SongCache", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    private var artworkDir: URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ArtworkCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: - Artwork cache (by album ID)
+
+    func artworkURL(for albumId: Int) -> URL {
+        artworkDir.appendingPathComponent("\(albumId).jpg")
+    }
+
+    func cachedArtwork(for albumId: Int) -> UIImage? {
+        let path = artworkURL(for: albumId).path
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
+    func saveArtwork(_ image: UIImage, for albumId: Int) {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+        try? data.write(to: artworkURL(for: albumId))
     }
 
     func fileURL(for playlistItemId: Int, ext: String = "mp3") -> URL {
@@ -39,5 +63,7 @@ class CacheManager {
     func clearCache() {
         try? FileManager.default.removeItem(at: cacheDir)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: artworkDir)
+        try? FileManager.default.createDirectory(at: artworkDir, withIntermediateDirectories: true)
     }
 }
