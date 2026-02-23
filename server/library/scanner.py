@@ -45,11 +45,13 @@ def _upsert_track(tag_data: dict, album_artist_name: str, source: str = "") -> t
     album_artist = _get_or_create_artist(album_artist_name)
     album = _get_or_create_album(tag_data["album"], album_artist, tag_data)
 
-    # Use the tag year if available; fall back to title-extracted year only
-    # when the album itself has no year (avoids redundant per-track years).
+    # Use the tag year if available; fall back to title-extracted year
+    # unless it matches the album year (no point being redundant).
     year = tag_data["year"]
-    if year is None and album.year is None:
-        year = tag_data.get("year_from_title")
+    if year is None:
+        year_from_title = tag_data.get("year_from_title")
+        if year_from_title is not None and year_from_title != album.year:
+            year = year_from_title
 
     defaults = {
         "title": tag_data["title"],
