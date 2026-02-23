@@ -174,7 +174,7 @@ class TrackAdmin(admin.ModelAdmin):
     list_display = ["display_title", "artist", "album", "track_number", "genre", "format", "duration", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre"]
-    search_fields = ["title", "artist__name", "album__title"]
+    search_fields = ["title", "artist__name", "album__title", "source_url"]
 
     @admin.display(description="Title")
     def display_title(self, obj):
