@@ -43,8 +43,16 @@ class CacheManager {
     }
 
     func totalCacheSizeMB() -> Double {
+        dirSizeMB(cacheDir)
+    }
+
+    func totalArtworkSizeMB() -> Double {
+        dirSizeMB(artworkDir)
+    }
+
+    private func dirSizeMB(_ dir: URL) -> Double {
         let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: [.fileSizeKey]) else {
+        guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else {
             return 0
         }
         var total: Int64 = 0

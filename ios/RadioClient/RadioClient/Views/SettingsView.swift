@@ -49,11 +49,19 @@ struct SettingsView: View {
                             .frame(width: 80)
                     }
 
-                    let size = CacheManager.shared.totalCacheSizeMB()
+                    let audioSize = CacheManager.shared.totalCacheSizeMB()
                     HStack {
-                        Text("Current Usage")
+                        Text("Audio Cache")
                         Spacer()
-                        Text(String(format: "%.1f MB", size))
+                        Text(String(format: "%.1f MB", audioSize))
+                            .foregroundColor(.secondary)
+                    }
+
+                    let artworkSize = CacheManager.shared.totalArtworkSizeMB()
+                    HStack {
+                        Text("Artwork Cache")
+                        Spacer()
+                        Text(String(format: "%.1f MB", artworkSize))
                             .foregroundColor(.secondary)
                     }
 
