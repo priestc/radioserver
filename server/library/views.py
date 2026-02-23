@@ -156,10 +156,11 @@ def _nuke_cover_art(album):
 
 
 def check_cover_status(album):
-    """Check album cover art and return status: 'valid', 'invalid', or ''.
+    """Check album cover art and return what was found: 'valid', 'invalid', or ''.
 
-    If invalid art is found, all cover art (files and embedded) is deleted.
-    Also updates album.cover_status in the database.
+    If invalid art is found, all cover art (files and embedded) is deleted
+    and cover_status is set to '' in the database. The return value still
+    reflects 'invalid' so callers can report what happened.
     """
     from PIL import Image, UnidentifiedImageError
 
@@ -168,26 +169,30 @@ def check_cover_status(album):
         try:
             Image.open(cover_path).verify()
             album.cover_status = Album.COVER_VALID
+            album.save(update_fields=["cover_status"])
+            return Album.COVER_VALID
         except (UnidentifiedImageError, Exception):
             _nuke_cover_art(album)
             album.cover_status = Album.COVER_NONE
-        album.save(update_fields=["cover_status"])
-        return album.cover_status
+            album.save(update_fields=["cover_status"])
+            return Album.COVER_INVALID
 
     data, _ = _extract_embedded_art(album)
     if data:
         try:
             Image.open(BytesIO(data)).verify()
             album.cover_status = Album.COVER_VALID
+            album.save(update_fields=["cover_status"])
+            return Album.COVER_VALID
         except (UnidentifiedImageError, Exception):
             _nuke_cover_art(album)
             album.cover_status = Album.COVER_NONE
-        album.save(update_fields=["cover_status"])
-        return album.cover_status
+            album.save(update_fields=["cover_status"])
+            return Album.COVER_INVALID
 
     album.cover_status = Album.COVER_NONE
     album.save(update_fields=["cover_status"])
-    return album.cover_status
+    return Album.COVER_NONE
 
 
 @csrf_exempt
