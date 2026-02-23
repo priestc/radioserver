@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import mutagen
@@ -124,11 +125,11 @@ def read_tags(path: str | Path) -> dict | None:
 
     stat = os.stat(path)
 
-    # Split all artist tag values on commas to get individual artists
+    # Split all artist tag values on commas or slashes to get individual artists
     raw_artists = tags.get("artist", [])
     artists = []
     for val in raw_artists:
-        for name in str(val).split(","):
+        for name in re.split(r"[,/]", str(val)):
             name = name.strip()
             if name:
                 artists.append(name)
