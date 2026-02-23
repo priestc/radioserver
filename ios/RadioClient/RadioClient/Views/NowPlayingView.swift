@@ -16,14 +16,8 @@ struct NowPlayingView: View {
                         .cornerRadius(12)
                         .shadow(radius: 8)
                 } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.secondary.opacity(0.2))
+                    GenericAlbumArt()
                         .frame(width: 280, height: 280)
-                        .overlay {
-                            Image(systemName: "music.note")
-                                .font(.system(size: 60))
-                                .foregroundColor(.secondary)
-                        }
                 }
 
                 // Song info
@@ -93,35 +87,28 @@ struct NowPlayingView: View {
 struct CoverArtView: View {
     let albumId: Int
     @EnvironmentObject var player: AudioPlayer
-    @EnvironmentObject var api: APIService
-    @State private var image: UIImage?
 
     var body: some View {
         Group {
-            if let image {
-                Image(uiImage: image)
+            if let cached = player.artworkCache[albumId] {
+                Image(uiImage: cached)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                Color.secondary.opacity(0.2)
-                    .overlay {
-                        ProgressView()
-                    }
+                GenericAlbumArt()
             }
         }
-        .task(id: albumId) {
-            // Use cached artwork from AudioPlayer if available
-            if let cached = player.artworkCache[albumId] {
-                image = cached
-                return
+    }
+}
+
+struct GenericAlbumArt: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.secondary.opacity(0.2))
+            .overlay {
+                Image(systemName: "music.note")
+                    .font(.system(size: 60))
+                    .foregroundColor(.secondary)
             }
-            guard let artURL = api.coverArtURL(albumId: albumId) else { return }
-            var request = URLRequest(url: artURL)
-            request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
-            guard let (data, _) = try? await URLSession.shared.data(for: request),
-                  let uiImage = UIImage(data: data) else { return }
-            player.artworkCache[albumId] = uiImage
-            image = uiImage
-        }
     }
 }

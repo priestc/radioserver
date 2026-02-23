@@ -17,6 +17,7 @@ class AudioPlayer: ObservableObject {
     private var syncTimer: Timer?
     private var pendingPlayed: [PlayedSong] = []
     var artworkCache: [Int: UIImage] = [:]  // albumId -> image
+    private var artworkFailed: Set<Int> = []  // albumIds with no artwork
     private var currentArtwork: MPMediaItemArtwork?
 
     var apiService: APIService?
@@ -234,18 +235,27 @@ class AudioPlayer: ObservableObject {
     }
 
     private func prefetchArtwork(albumId: Int, api: APIService) async {
-        let alreadyCached = await MainActor.run { self.artworkCache[albumId] != nil }
-        if alreadyCached { return }
+        let skip = await MainActor.run { self.artworkCache[albumId] != nil || self.artworkFailed.contains(albumId) }
+        if skip { return }
 
         guard let artURL = api.coverArtURL(albumId: albumId) else { return }
         var request = URLRequest(url: artURL)
         request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
 
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let image = UIImage(data: data) else { return }
-
-        await MainActor.run {
-            self.artworkCache[albumId] = image
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 404 {
+                await MainActor.run { self.artworkFailed.insert(albumId) }
+                return
+            }
+            if let image = UIImage(data: data) {
+                await MainActor.run { self.artworkCache[albumId] = image }
+            } else {
+                await MainActor.run { self.artworkFailed.insert(albumId) }
+            }
+        } catch {
+            // Network error — don't mark as failed so it can retry next sync
         }
     }
 
