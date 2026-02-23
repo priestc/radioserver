@@ -62,6 +62,8 @@ class AlbumForm(forms.ModelForm):
                 with open(dest, "wb") as f:
                     for chunk in uploaded.chunks():
                         f.write(chunk)
+            instance.cover_status = Album.COVER_VALID
+            instance.save(update_fields=["cover_status"])
         return instance
 
 
