@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var api: APIService
     @State private var testResult: String?
     @State private var isTesting = false
+    @State private var showScanner = false
 
     var body: some View {
         NavigationStack {
@@ -14,10 +15,19 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
-                    TextField("API Key", text: $api.apiKey)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .fontDesign(.monospaced)
+                    HStack {
+                        TextField("API Key", text: $api.apiKey)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .fontDesign(.monospaced)
+
+                        Button {
+                            showScanner = true
+                        } label: {
+                            Image(systemName: "qrcode.viewfinder")
+                                .font(.title2)
+                        }
+                    }
                 }
 
                 Section {
@@ -71,6 +81,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showScanner) {
+                QRScannerView { code in
+                    api.apiKey = code
+                }
+            }
         }
     }
 

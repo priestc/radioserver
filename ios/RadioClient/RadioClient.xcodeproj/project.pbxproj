@@ -16,6 +16,7 @@
 		A10007 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
 		A10008 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
 		A10009 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
+		A10010 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		B10009 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		B10010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10011 /* RadioClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RadioClient.entitlements; sourceTree = "<group>"; };
+		B10012 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		C10001 /* RadioClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -90,6 +92,7 @@
 				B10006 /* NowPlayingView.swift */,
 				B10007 /* HistoryView.swift */,
 				B10008 /* SettingsView.swift */,
+				B10012 /* QRScannerView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -182,6 +185,7 @@
 				A10007 /* HistoryView.swift in Sources */,
 				A10008 /* SettingsView.swift in Sources */,
 				A10009 /* CarPlaySceneDelegate.swift in Sources */,
+				A10010 /* QRScannerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
