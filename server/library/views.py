@@ -163,10 +163,16 @@ MAX_COVER_SIZE = 600
 
 
 def _resize_cover(image_data):
-    """Resize cover art to fit within MAX_COVER_SIZE pixels, return JPEG bytes."""
-    from PIL import Image
+    """Resize cover art to fit within MAX_COVER_SIZE pixels, return JPEG bytes.
 
-    img = Image.open(BytesIO(image_data))
+    Returns None if the image data is not a valid image.
+    """
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        img = Image.open(BytesIO(image_data))
+    except (UnidentifiedImageError, Exception):
+        return None
     if img.width > MAX_COVER_SIZE or img.height > MAX_COVER_SIZE:
         img.thumbnail((MAX_COVER_SIZE, MAX_COVER_SIZE), Image.LANCZOS)
     if img.mode != "RGB":
@@ -187,12 +193,15 @@ def cover_art(request, album_id):
     # Try file on disk first
     cover_path = _find_cover_file(album)
     if cover_path:
-        image_data = cover_path.read_bytes()
-        return FileResponse(_resize_cover(image_data), content_type="image/jpeg")
+        resized = _resize_cover(cover_path.read_bytes())
+        if resized:
+            return FileResponse(resized, content_type="image/jpeg")
 
     # Fall back to embedded art
     data, mime = _extract_embedded_art(album)
     if data:
-        return FileResponse(_resize_cover(data), content_type="image/jpeg")
+        resized = _resize_cover(data)
+        if resized:
+            return FileResponse(resized, content_type="image/jpeg")
 
     raise Http404
