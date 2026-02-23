@@ -114,13 +114,14 @@ struct SettingsView: View {
         isTesting = true
         testResult = nil
         Task {
+            let which = api.isOnLocalNetwork ? "local" : "remote"
             let result = await api.testConnection()
             await MainActor.run {
                 switch result {
                 case .success(let count):
-                    testResult = "Connected — \(count) songs available"
+                    testResult = "Connected via \(which) — \(count) songs available"
                 case .failure(let error):
-                    testResult = "Failed: \(error.localizedDescription)"
+                    testResult = "Failed via \(which): \(error.localizedDescription)"
                 }
                 isTesting = false
             }
