@@ -30,6 +30,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  Skipped:  {stats['skipped']}")
         self.stdout.write(f"  Errors:   {stats['errors']}")
 
+        if stats.get("updated_files"):
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING("Updated files:"))
+            for path, fields in stats["updated_files"]:
+                self.stdout.write(f"  {path}")
+                self.stdout.write(f"    Changed: {', '.join(fields)}")
+
         if stats.get("error_files"):
             self.stdout.write("")
             self.stdout.write(self.style.WARNING("Files with errors:"))

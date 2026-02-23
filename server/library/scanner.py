@@ -28,8 +28,12 @@ def _get_or_create_album(title: str, artist: Artist, tag_data: dict) -> Album:
     return album
 
 
-def _upsert_track(tag_data: dict) -> bool:
-    """Create or update a Track from tag_data. Returns True if created/updated."""
+def _upsert_track(tag_data: dict) -> tuple[bool, list[str]]:
+    """Create or update a Track from tag_data.
+
+    Returns (created, changed_fields) where changed_fields lists field names
+    that differ from the existing record. Empty list if created.
+    """
     artist = _get_or_create_artist(tag_data["artist"])
     album_artist = _get_or_create_artist(tag_data["album_artist"])
     album = _get_or_create_album(tag_data["album"], album_artist, tag_data)
@@ -52,11 +56,25 @@ def _upsert_track(tag_data: dict) -> bool:
         "file_mtime": tag_data["file_mtime"],
     }
 
+    # Check what changed before upserting
+    changed_fields = []
+    try:
+        existing = Track.objects.get(file_path=tag_data["file_path"])
+        for field, new_val in defaults.items():
+            old_val = getattr(existing, field)
+            if field in ("artist", "album", "album_artist"):
+                old_val = getattr(existing, f"{field}_id")
+                new_val = new_val.pk if new_val else None
+            if old_val != new_val:
+                changed_fields.append(field)
+    except Track.DoesNotExist:
+        pass
+
     _, created = Track.objects.update_or_create(
         file_path=tag_data["file_path"],
         defaults=defaults,
     )
-    return created
+    return created, changed_fields
 
 
 def scan(force: bool = False, clean: bool = False) -> dict:
@@ -69,7 +87,7 @@ def scan(force: bool = False, clean: bool = False) -> dict:
     library_path = settings.MUSIC_LIBRARY_PATH
     extensions = settings.MUSIC_EXTENSIONS
 
-    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0, "error_files": []}
+    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0, "error_files": [], "updated_files": []}
 
     seen_paths: set[str] = set()
 
@@ -102,11 +120,14 @@ def scan(force: bool = False, clean: bool = False) -> dict:
                 stats["error_files"].append(filepath)
                 continue
 
-            created = _upsert_track(tag_data)
+            created, changed_fields = _upsert_track(tag_data)
             if created:
                 stats["created"] += 1
-            else:
+            elif changed_fields:
                 stats["updated"] += 1
+                stats["updated_files"].append((filepath, changed_fields))
+            else:
+                stats["skipped"] += 1
 
     # Check cover art status for all albums
     stats["cover_invalid"] = 0
