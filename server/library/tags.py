@@ -46,6 +46,36 @@ def _parse_year(value: str) -> int | None:
         return None
 
 
+def _extract_year_from_title(title: str) -> int | None:
+    """Extract a year from a song title as a fallback when no date tag exists.
+
+    Checks for (in order):
+    - Dates with 4-digit years: "10-4-2001", "5/12/1999"
+    - Standalone 4-digit years: "Summer of 2001"
+    - Apostrophe + 2-digit years: "Spirit of '71" → 1971
+    """
+    if not title:
+        return None
+
+    # Dates containing a 4-digit year (most specific)
+    m = re.search(r"\b\d{1,2}[-/.]\d{1,2}[-/.](19\d{2}|20\d{2})\b", title)
+    if m:
+        return int(m.group(1))
+
+    # Standalone 4-digit year (1900–2099)
+    m = re.search(r"\b(19\d{2}|20\d{2})\b", title)
+    if m:
+        return int(m.group(1))
+
+    # Apostrophe + 2-digit year: '00–'29 → 2000s, '30–'99 → 1900s
+    m = re.search(r"'(\d{2})\b", title)
+    if m:
+        two_digit = int(m.group(1))
+        return 2000 + two_digit if two_digit <= 29 else 1900 + two_digit
+
+    return None
+
+
 FORMAT_MAP = {
     "MP3": "mp3",
     "FLAC": "flac",
@@ -154,7 +184,7 @@ def read_tags(path: str | Path) -> dict | None:
         "total_tracks": _parse_total(track_raw),
         "total_discs": _parse_total(disc_raw),
         "genre": _first(tags, "genre"),
-        "year": _parse_year(_first(tags, "date")),
+        "year": _parse_year(_first(tags, "date")) or _extract_year_from_title(_first(tags, "title")),
         "duration": getattr(info, "length", None),
         "bitrate": getattr(info, "bitrate", None),
         "sample_rate": getattr(info, "sample_rate", None),
