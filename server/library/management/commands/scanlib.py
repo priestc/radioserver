@@ -22,6 +22,13 @@ class Command(BaseCommand):
             help="Remove database entries for files that no longer exist on disk.",
         )
 
+    @staticmethod
+    def _fmt_duration(seconds):
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        mins, secs = divmod(int(seconds), 60)
+        return f"{mins}m {secs}s"
+
     def _progress(self, current, total, label):
         pct = (current / total * 100) if total else 0
         sys.stdout.write(f"\r  {label}: {current}/{total} ({pct:.1f}%)   ")
@@ -32,11 +39,12 @@ class Command(BaseCommand):
         stats = scan(force=options["force"], clean=options["clean"], progress_callback=self._progress)
         sys.stdout.write("\n")
 
-        self.stdout.write(f"  Scanned:  {stats['scanned']}")
+        self.stdout.write(f"  Scanned:  {stats['scanned']}  ({self._fmt_duration(stats['scan_duration'])})")
         self.stdout.write(f"  Created:  {stats['created']}")
         self.stdout.write(f"  Updated:  {stats['updated']}")
         self.stdout.write(f"  Skipped:  {stats['skipped']}")
         self.stdout.write(f"  Errors:   {stats['errors']}")
+        self.stdout.write(f"  Cover art check: {self._fmt_duration(stats['cover_duration'])}")
 
         if stats.get("updated_files"):
             self.stdout.write("")

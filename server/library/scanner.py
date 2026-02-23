@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -109,6 +110,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
 
     seen_paths: set[str] = set()
 
+    scan_start = time.monotonic()
     for dirpath, _dirnames, filenames in os.walk(library_path):
         for filename in filenames:
             if filename.startswith("._"):
@@ -150,11 +152,14 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
             else:
                 stats["skipped"] += 1
 
+    stats["scan_duration"] = time.monotonic() - scan_start
+
     # Check cover art status for all albums
     stats["cover_invalid"] = 0
     stats["cover_invalid_albums"] = []
     all_albums = list(Album.objects.all())
     total_albums = len(all_albums)
+    cover_start = time.monotonic()
     for i, album in enumerate(all_albums, 1):
         if progress_callback:
             progress_callback(i, total_albums, "Checking cover art")
@@ -162,6 +167,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
         if status == Album.COVER_INVALID:
             stats["cover_invalid"] += 1
             stats["cover_invalid_albums"].append(str(album))
+    stats["cover_duration"] = time.monotonic() - cover_start
 
     if clean:
         stale = Track.objects.exclude(file_path__in=seen_paths)
