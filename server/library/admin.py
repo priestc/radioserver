@@ -4,6 +4,7 @@ from urllib.parse import quote_plus
 from django import forms
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from library.models import Album, ApiKey, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
 from library.views import has_cover, _nuke_cover_art
@@ -258,8 +259,16 @@ class PlaylistItemAdmin(admin.ModelAdmin):
 @admin.register(ApiKey)
 class ApiKeyAdmin(admin.ModelAdmin):
     list_display = ["key", "label", "created_at"]
-    readonly_fields = ["key", "created_at"]
-    fields = ["key", "label", "created_at"]
+    readonly_fields = ["key", "created_at", "qr_code"]
+    fields = ["key", "qr_code", "label", "created_at"]
+
+    @admin.display(description="QR Code")
+    def qr_code(self, obj):
+        if not obj.pk:
+            return ""
+        from library.qr import make_qr_svg
+        svg = make_qr_svg(obj.key)
+        return mark_safe(f'<div style="max-width:200px">{svg}</div>')
 
 
 @admin.register(PlaylistSettings)

@@ -10,6 +10,7 @@ dependencies = [
     "Django>=4.2,<4.3",
     "mutagen",
     "Pillow",
+    "qrcode",
 ]
 
 [project.scripts]
