@@ -80,7 +80,7 @@ class Track(models.Model):
     file_path = models.CharField(max_length=1000, unique=True)
     file_size = models.PositiveBigIntegerField(null=True, blank=True)
     file_mtime = models.FloatField(null=True, blank=True)
-    source_url = models.URLField(max_length=500, blank=True, default="")
+    source = models.CharField(max_length=500, blank=True, default="")
     format = models.CharField(max_length=20, blank=True, default="")
     date_added = models.DateTimeField(auto_now_add=True)
     date_modified = models.DateTimeField(auto_now=True)

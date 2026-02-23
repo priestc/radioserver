@@ -128,9 +128,9 @@ class Command(BaseCommand):
 
         # Tag newly created tracks with the source URL
         if stats["created"] > 0:
-            tagged = Track.objects.filter(source_url="").filter(
+            tagged = Track.objects.filter(source="").filter(
                 file_path__startswith=str(library_dir),
-            ).update(source_url=url)
+            ).update(source=url)
             self.stdout.write(f"  Tagged {tagged} tracks with source URL")
 
         self.stdout.write(self.style.SUCCESS("Done."))

@@ -28,7 +28,7 @@ def _get_or_create_album(title: str, artist: Artist, tag_data: dict) -> Album:
     return album
 
 
-def _upsert_track(tag_data: dict) -> tuple[bool, list[str]]:
+def _upsert_track(tag_data: dict, source: str = "") -> tuple[bool, list[str]]:
     """Create or update a Track from tag_data.
 
     Returns (created, changed_fields) where changed_fields lists field names
@@ -70,10 +70,13 @@ def _upsert_track(tag_data: dict) -> tuple[bool, list[str]]:
     except Track.DoesNotExist:
         pass
 
-    _, created = Track.objects.update_or_create(
+    track, created = Track.objects.update_or_create(
         file_path=tag_data["file_path"],
         defaults=defaults,
     )
+    if created and source:
+        track.source = source
+        track.save(update_fields=["source"])
     return created, changed_fields
 
 
@@ -120,7 +123,7 @@ def scan(force: bool = False, clean: bool = False) -> dict:
                 stats["error_files"].append(filepath)
                 continue
 
-            created, changed_fields = _upsert_track(tag_data)
+            created, changed_fields = _upsert_track(tag_data, source="local filesystem")
             if created:
                 stats["created"] += 1
             elif changed_fields:
