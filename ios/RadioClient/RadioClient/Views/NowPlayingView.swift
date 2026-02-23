@@ -65,7 +65,7 @@ struct NowPlayingView: View {
                 .foregroundColor(.primary)
 
                 // Queue info
-                Text("\(player.queue.count) songs in queue")
+                Text("\(formatQueueDuration()) in queue")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -81,6 +81,16 @@ struct NowPlayingView: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return "\(mins):\(String(format: "%02d", secs))"
+    }
+
+    private func formatQueueDuration() -> String {
+        let total = player.queue.compactMap(\.duration).reduce(0, +)
+        let hours = Int(total) / 3600
+        let mins = (Int(total) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(mins)m"
+        }
+        return "\(mins)m"
     }
 }
 
