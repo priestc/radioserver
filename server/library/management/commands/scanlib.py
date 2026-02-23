@@ -36,9 +36,11 @@ class Command(BaseCommand):
             for path in stats["error_files"]:
                 self.stdout.write(f"  {path}")
 
-        if stats.get("cover_invalid"):
+        if stats.get("cover_invalid_albums"):
             self.stdout.write("")
             self.stdout.write(self.style.WARNING(f"Albums with invalid cover art: {stats['cover_invalid']}"))
+            for album_name in stats["cover_invalid_albums"]:
+                self.stdout.write(f"  {album_name}")
 
         if options["clean"]:
             self.stdout.write(f"  Cleaned tracks:  {stats.get('cleaned_tracks', 0)}")

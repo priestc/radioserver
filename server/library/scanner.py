@@ -110,10 +110,12 @@ def scan(force: bool = False, clean: bool = False) -> dict:
 
     # Check cover art status for all albums
     stats["cover_invalid"] = 0
+    stats["cover_invalid_albums"] = []
     for album in Album.objects.all():
         status = check_cover_status(album)
         if status == Album.COVER_INVALID:
             stats["cover_invalid"] += 1
+            stats["cover_invalid_albums"].append(str(album))
 
     if clean:
         stale = Track.objects.exclude(file_path__in=seen_paths)
