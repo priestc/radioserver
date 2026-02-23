@@ -72,7 +72,7 @@ class ArtistAdmin(admin.ModelAdmin):
     list_display = ["display_name", "sort_name", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     search_fields = ["name"]
-    readonly_fields = ["album_list"]
+    readonly_fields = ["album_list", "track_list"]
 
     @admin.display(description="Name")
     def display_name(self, obj):
@@ -93,6 +93,21 @@ class ArtistAdmin(admin.ModelAdmin):
             url = reverse("admin:library_album_change", args=[a.pk])
             label = f"{a.title} ({a.year})" if a.year else a.title
             items.append(format_html('<li><a href="{}">{}</a></li>', url, label))
+        return format_html("<ul style='margin:0;padding-left:1.5em'>{}</ul>", format_html("".join(items)))
+
+    @admin.display(description="Tracks")
+    def track_list(self, obj):
+        if not obj.pk:
+            return ""
+        from django.urls import reverse
+        tracks = obj.tracks.order_by("album__title", "track_number", "title")
+        if not tracks.exists():
+            return "No tracks"
+        items = []
+        for t in tracks:
+            url = reverse("admin:library_track_change", args=[t.pk])
+            album_label = f" ({t.album.title})" if t.album else ""
+            items.append(format_html('<li><a href="{}">{}</a>{}</li>', url, t.title, album_label))
         return format_html("<ul style='margin:0;padding-left:1.5em'>{}</ul>", format_html("".join(items)))
 
     def save_model(self, request, obj, form, change):
