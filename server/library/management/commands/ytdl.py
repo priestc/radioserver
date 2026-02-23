@@ -18,6 +18,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("url", help="YouTube Music album/playlist URL")
+        parser.add_argument(
+            "--yes", "-y", action="store_true",
+            help="Skip confirmation prompt",
+        )
 
     def handle(self, **options):
         url = options["url"]
@@ -29,7 +33,7 @@ class Command(BaseCommand):
             raise CommandError("yt-dlp is not installed or not on PATH")
         self.stdout.write(f"yt-dlp {version.stdout.strip()}")
 
-        # Fetch metadata to check for duplicates before downloading
+        # Fetch metadata before doing anything
         self.stdout.write("Fetching metadata...")
         try:
             metadata = get_metadata_from_ytdl(url)
@@ -46,16 +50,41 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"Album already in library: {artist_name} — {album_title}"
                 )
-            self.stdout.write(f"Album not yet in library: {artist_name} — {album_title}")
-            self.stdout.write(f"  {len(metadata['tracks'])} tracks found")
 
+        # Display all metadata for review
         library_dir = Path(settings.MUSIC_LIBRARY_PATH) / (artist_name or "from youtube music")
+
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("=== Album Metadata ==="))
+        self.stdout.write(f"  Artist:    {artist_name or '(unknown)'}")
+        self.stdout.write(f"  Album:     {album_title or '(unknown)'}")
+        self.stdout.write(f"  Tracks:    {len(metadata['tracks'])}")
+        self.stdout.write(f"  Source:    {url}")
+        self.stdout.write(f"  Dest:      {library_dir}")
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("=== Track List ==="))
+        for t in metadata["tracks"]:
+            num = f"{t['track_number']:>2}." if t.get("track_number") else "  -"
+            dur = ""
+            if t.get("duration"):
+                mins, secs = divmod(int(t["duration"]), 60)
+                dur = f" ({mins}:{secs:02d})"
+            self.stdout.write(f"  {num} {t['title']}{dur}")
+        self.stdout.write("")
+
+        # Confirm before proceeding
+        if not options["yes"]:
+            confirm = input("Proceed with download? [y/N] ").strip().lower()
+            if confirm not in ("y", "yes"):
+                self.stdout.write(self.style.WARNING("Aborted."))
+                return
+
         library_dir.mkdir(parents=True, exist_ok=True)
 
         # Download audio to a temp dir under ~ so snap yt-dlp has access
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
         try:
-            self.stdout.write(f"Downloading audio to {tmp_dir} ...")
+            self.stdout.write(f"\nDownloading audio to {tmp_dir} ...")
             try:
                 get_audio_files_from_ytdl(url, tmp_dir)
             except RuntimeError as e:
