@@ -125,11 +125,11 @@ def read_tags(path: str | Path) -> dict | None:
 
     stat = os.stat(path)
 
-    # Split all artist tag values on commas or slashes to get individual artists
+    # Split all artist tag values on commas, slashes, or "Ft."/"Feat." to get individual artists
     raw_artists = tags.get("artist", [])
     artists = []
     for val in raw_artists:
-        for name in re.split(r"[,/]", str(val)):
+        for name in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b", str(val), flags=re.IGNORECASE):
             name = name.strip()
             if name:
                 artists.append(name)
