@@ -247,11 +247,9 @@ class AudioPlayer: ObservableObject {
         }
 
         guard let artURL = api.coverArtURL(albumId: albumId) else { return }
-        var request = URLRequest(url: artURL)
-        request.setValue("Bearer \(api.apiKey)", forHTTPHeaderField: "Authorization")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(from: artURL)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if status == 404 {
                 await MainActor.run { self.artworkFailed.insert(albumId) }

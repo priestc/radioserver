@@ -215,7 +215,6 @@ def _resize_cover(image_data):
     return buf
 
 
-@require_api_key
 def cover_art(request, album_id):
     try:
         album = Album.objects.get(pk=album_id)
