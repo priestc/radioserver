@@ -268,6 +268,10 @@ class AudioPlayer: ObservableObject {
     }
 
     func play() {
+        if currentSong == nil && queue.isEmpty {
+            triggerSync()
+            return
+        }
         player?.play()
         isPlaying = true
         updateNowPlaying()
