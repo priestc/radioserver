@@ -30,6 +30,16 @@ class Command(BaseCommand):
         self.stdout.write(f"  Skipped:  {stats['skipped']}")
         self.stdout.write(f"  Errors:   {stats['errors']}")
 
+        if stats.get("error_files"):
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING("Files with errors:"))
+            for path in stats["error_files"]:
+                self.stdout.write(f"  {path}")
+
+        if stats.get("cover_invalid"):
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING(f"Albums with invalid cover art: {stats['cover_invalid']}"))
+
         if options["clean"]:
             self.stdout.write(f"  Cleaned tracks:  {stats.get('cleaned_tracks', 0)}")
             self.stdout.write(f"  Cleaned albums:  {stats.get('cleaned_albums', 0)}")

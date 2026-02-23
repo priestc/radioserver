@@ -69,7 +69,7 @@ def scan(force: bool = False, clean: bool = False) -> dict:
     library_path = settings.MUSIC_LIBRARY_PATH
     extensions = settings.MUSIC_EXTENSIONS
 
-    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0}
+    stats = {"scanned": 0, "created": 0, "updated": 0, "skipped": 0, "errors": 0, "error_files": []}
 
     seen_paths: set[str] = set()
 
@@ -97,6 +97,7 @@ def scan(force: bool = False, clean: bool = False) -> dict:
             tag_data = read_tags(filepath)
             if tag_data is None:
                 stats["errors"] += 1
+                stats["error_files"].append(filepath)
                 continue
 
             created = _upsert_track(tag_data)
