@@ -124,11 +124,21 @@ def read_tags(path: str | Path) -> dict | None:
 
     stat = os.stat(path)
 
+    # Split all artist tag values on commas to get individual artists
+    raw_artists = tags.get("artist", [])
+    artists = []
+    for val in raw_artists:
+        for name in str(val).split(","):
+            name = name.strip()
+            if name:
+                artists.append(name)
+    if not artists:
+        artists = ["Unknown Artist"]
+
     return {
         "title": _first(tags, "title") or Path(path).stem,
-        "artist": _first(tags, "artist") or "Unknown Artist",
+        "artists": artists,
         "album": _first(tags, "album") or "Unknown Album",
-        "album_artist": _first(tags, "albumartist") or _first(tags, "artist") or "Unknown Artist",
         "track_number": _parse_number(track_raw),
         "disc_number": _parse_number(disc_raw),
         "total_tracks": _parse_total(track_raw),

@@ -99,7 +99,7 @@ class ArtistAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         if change and "exclude_from_playlist" in form.changed_data:
             obj.albums.update(exclude_from_playlist=obj.exclude_from_playlist)
-            obj.tracks.update(exclude_from_playlist=obj.exclude_from_playlist)
+            Track.objects.filter(artists=obj).update(exclude_from_playlist=obj.exclude_from_playlist)
 
 
 @admin.register(Album)
@@ -175,16 +175,20 @@ class AlbumAdmin(admin.ModelAdmin):
 
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
-    list_display = ["display_title", "artist", "album", "track_number", "genre", "format", "duration", "exclude_from_playlist"]
+    list_display = ["display_title", "display_artist_name", "album", "track_number", "genre", "format", "duration", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
-    search_fields = ["title", "artist__name", "album__title", "source"]
+    search_fields = ["title", "artists__name", "album__title", "source"]
+
+    @admin.display(description="Artist")
+    def display_artist_name(self, obj):
+        return obj.display_artist
 
     @admin.display(description="Title")
     def display_title(self, obj):
         greyed = (
             obj.exclude_from_playlist
-            or obj.artist.exclude_from_playlist
+            or obj.artists.filter(exclude_from_playlist=True).exists()
             or (obj.album and obj.album.exclude_from_playlist)
         )
         if greyed:

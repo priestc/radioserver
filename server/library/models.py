@@ -49,22 +49,15 @@ class Album(models.Model):
 
 class Track(models.Model):
     title = models.CharField(max_length=500)
-    artist = models.ForeignKey(
+    artists = models.ManyToManyField(
         Artist,
-        on_delete=models.CASCADE,
+        through="TrackArtist",
         related_name="tracks",
     )
     album = models.ForeignKey(
         Album,
         on_delete=models.CASCADE,
         related_name="tracks",
-        null=True,
-        blank=True,
-    )
-    album_artist = models.ForeignKey(
-        Artist,
-        on_delete=models.SET_NULL,
-        related_name="album_artist_tracks",
         null=True,
         blank=True,
     )
@@ -88,10 +81,32 @@ class Track(models.Model):
     class Meta:
         ordering = ["album", "disc_number", "track_number", "title"]
 
+    @property
+    def display_artist(self) -> str:
+        names = list(self.artists.order_by("trackartist__position").values_list("name", flat=True))
+        if names:
+            return ", ".join(names)
+        if self.album and self.album.artist:
+            return self.album.artist.name
+        return "Unknown Artist"
+
     def __str__(self):
         album_title = self.album.title if self.album else ""
-        parts = [str(self.artist), str(self.year or ""), album_title, self.title]
+        parts = [self.display_artist, str(self.year or ""), album_title, self.title]
         return " - ".join(p for p in parts if p)
+
+
+class TrackArtist(models.Model):
+    track = models.ForeignKey(Track, on_delete=models.CASCADE)
+    artist = models.ForeignKey(Artist, on_delete=models.CASCADE)
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ["position"]
+        unique_together = [("track", "position")]
+
+    def __str__(self):
+        return f"{self.track.title} — {self.artist.name} (#{self.position})"
 
 
 class GenreGroup(models.Model):

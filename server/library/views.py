@@ -212,7 +212,7 @@ def client_sync(request):
     buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
     unplayed = PlaylistItem.objects.filter(played_at__isnull=True).select_related("track").order_by("id")
 
-    unplayed = unplayed.select_related("track__artist", "track__album")
+    unplayed = unplayed.select_related("track__album", "track__album__artist").prefetch_related("track__artists")
 
     download = []
     total = 0
@@ -224,7 +224,7 @@ def client_sync(request):
         download.append({
             "id": item.id,
             "title": track.title,
-            "artist": track.artist.name,
+            "artist": track.display_artist,
             "album": track.album.title if track.album else None,
             "album_id": track.album_id,
             "year": track.year,

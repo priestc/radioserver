@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from library.models import Album, Artist, Track
+from library.models import Album, Artist, Track, TrackArtist
 from library.tags import read_tags
 from library.views import check_cover_status
 
@@ -29,21 +29,25 @@ def _get_or_create_album(title: str, artist: Artist, tag_data: dict) -> Album:
     return album
 
 
-def _upsert_track(tag_data: dict, source: str = "") -> tuple[bool, list[str]]:
+def _upsert_track(tag_data: dict, album_artist_name: str, source: str = "") -> tuple[bool, list[str]]:
     """Create or update a Track from tag_data.
+
+    Args:
+        tag_data: Normalised tag dict from read_tags().
+        album_artist_name: Artist name derived from the folder structure.
+        source: Source label for newly created tracks.
 
     Returns (created, changed_fields) where changed_fields lists field names
     that differ from the existing record. Empty list if created.
     """
-    artist = _get_or_create_artist(tag_data["artist"])
-    album_artist = _get_or_create_artist(tag_data["album_artist"])
+    artist_names: list[str] = tag_data["artists"]
+    artist_objects = [_get_or_create_artist(name) for name in artist_names]
+    album_artist = _get_or_create_artist(album_artist_name)
     album = _get_or_create_album(tag_data["album"], album_artist, tag_data)
 
     defaults = {
         "title": tag_data["title"],
-        "artist": artist,
         "album": album,
-        "album_artist": album_artist,
         "track_number": tag_data["track_number"],
         "disc_number": tag_data["disc_number"],
         "genre": tag_data["genre"],
@@ -63,11 +67,17 @@ def _upsert_track(tag_data: dict, source: str = "") -> tuple[bool, list[str]]:
         existing = Track.objects.get(file_path=tag_data["file_path"])
         for field, new_val in defaults.items():
             old_val = getattr(existing, field)
-            if field in ("artist", "album", "album_artist"):
-                old_val = getattr(existing, f"{field}_id")
+            if field == "album":
+                old_val = getattr(existing, "album_id")
                 new_val = new_val.pk if new_val else None
             if old_val != new_val:
                 changed_fields.append(field)
+        # Check if artists changed
+        existing_artist_names = list(
+            existing.artists.order_by("trackartist__position").values_list("name", flat=True)
+        )
+        if existing_artist_names != artist_names:
+            changed_fields.append("artists")
     except Track.DoesNotExist:
         pass
 
@@ -78,6 +88,14 @@ def _upsert_track(tag_data: dict, source: str = "") -> tuple[bool, list[str]]:
     if created and source:
         track.source = source
         track.save(update_fields=["source"])
+
+    # Sync M2M artists
+    TrackArtist.objects.filter(track=track).delete()
+    TrackArtist.objects.bulk_create([
+        TrackArtist(track=track, artist=artist, position=i)
+        for i, artist in enumerate(artist_objects)
+    ])
+
     return created, changed_fields
 
 
@@ -143,7 +161,11 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
                 stats["error_files"].append(filepath)
                 continue
 
-            created, changed_fields = _upsert_track(tag_data, source="local filesystem")
+            # Album artist = first directory component under the library root
+            rel = Path(filepath).relative_to(library_path)
+            album_artist_name = rel.parts[0] if len(rel.parts) > 1 else "Unknown Artist"
+
+            created, changed_fields = _upsert_track(tag_data, album_artist_name, source="local filesystem")
             if created:
                 stats["created"] += 1
             elif changed_fields:
@@ -181,7 +203,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
         orphan_albums.delete()
 
         orphan_artists = Artist.objects.filter(
-            albums__isnull=True, tracks__isnull=True, album_artist_tracks__isnull=True
+            albums__isnull=True, trackartist__isnull=True
         )
         stats["cleaned_artists"] = orphan_artists.count()
         orphan_artists.delete()

@@ -26,11 +26,15 @@ class Command(BaseCommand):
         tracks = list(
             Track.objects.filter(exclude_from_playlist=False)
             .exclude(duration__isnull=True)
-            .select_related("artist")
+            .prefetch_related("artists")
         )
         if not tracks:
             self.stderr.write("No eligible tracks found.")
             return
+
+        # Cache artist IDs on each track to avoid repeated queries
+        for t in tracks:
+            t._artist_ids = set(a.id for a in t.artists.all())
 
         # Build genre -> genre-group lookup
         genre_to_group: dict[str, str] = {}
@@ -44,7 +48,7 @@ class Command(BaseCommand):
         def get_genre_group(track):
             return genre_to_group.get(track.genre)
 
-        recent_artists: deque[int] = deque(maxlen=settings.artist_skip)
+        recent_artists: deque[set[int]] = deque(maxlen=settings.artist_skip)
         recent_genres: deque[str | None] = deque(maxlen=settings.genre_skip)
         recent_decades: deque[int | None] = deque(maxlen=settings.decade_skip)
 
@@ -71,7 +75,7 @@ class Command(BaseCommand):
             items_created += 1
             total_duration += pick.duration
 
-            recent_artists.append(pick.artist_id)
+            recent_artists.append(pick._artist_ids)
             recent_genres.append(get_genre_group(pick))
             recent_decades.append(get_decade(pick))
 
@@ -97,8 +101,10 @@ class Command(BaseCommand):
         relaxation 2: drop decade + genre rules
         relaxation 3: drop all rules
         """
-        if relaxation < 3 and track.artist_id in recent_artists:
-            return False
+        if relaxation < 3:
+            track_artist_ids = track._artist_ids
+            if any(track_artist_ids & s for s in recent_artists):
+                return False
         if relaxation < 2:
             group = get_genre_group(track)
             if group is not None and group in recent_genres:
