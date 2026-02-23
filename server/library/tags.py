@@ -51,6 +51,7 @@ def _extract_year_from_title(title: str) -> int | None:
 
     Checks for (in order):
     - Dates with 4-digit years: "10-4-2001", "5/12/1999"
+    - Dates with 2-digit years: "6-21-89", "10/4/01"
     - Standalone 4-digit years: "Summer of 2001"
     - Apostrophe + 2-digit years: "Spirit of '71" → 1971
     """
@@ -61,6 +62,12 @@ def _extract_year_from_title(title: str) -> int | None:
     m = re.search(r"\b\d{1,2}[-/.]\d{1,2}[-/.](19\d{2}|20\d{2})\b", title)
     if m:
         return int(m.group(1))
+
+    # Dates containing a 2-digit year: "6-21-89", "10/4/01"
+    m = re.search(r"\b\d{1,2}[-/.]\d{1,2}[-/.](\d{2})\b", title)
+    if m:
+        two_digit = int(m.group(1))
+        return 2000 + two_digit if two_digit <= 29 else 1900 + two_digit
 
     # Standalone 4-digit year (1900–2099)
     m = re.search(r"\b(19\d{2}|20\d{2})\b", title)
