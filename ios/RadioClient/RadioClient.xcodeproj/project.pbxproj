@@ -251,6 +251,7 @@
 				CODE_SIGN_ENTITLEMENTS = RadioClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6V798W6LMZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadioClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RadioClient;
@@ -279,6 +280,7 @@
 				CODE_SIGN_ENTITLEMENTS = RadioClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6V798W6LMZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadioClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RadioClient;
