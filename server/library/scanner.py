@@ -7,6 +7,7 @@ from django.conf import settings
 
 from library.models import Album, Artist, Track
 from library.tags import read_tags
+from library.views import check_cover_status
 
 
 def _get_or_create_artist(name: str) -> Artist:
@@ -103,6 +104,13 @@ def scan(force: bool = False, clean: bool = False) -> dict:
                 stats["created"] += 1
             else:
                 stats["updated"] += 1
+
+    # Check cover art status for all albums
+    stats["cover_invalid"] = 0
+    for album in Album.objects.all():
+        status = check_cover_status(album)
+        if status == Album.COVER_INVALID:
+            stats["cover_invalid"] += 1
 
     if clean:
         stale = Track.objects.exclude(file_path__in=seen_paths)

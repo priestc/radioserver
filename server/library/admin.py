@@ -105,7 +105,7 @@ class AlbumAdmin(admin.ModelAdmin):
     form = AlbumForm
     list_display = ["display_title", "artist", "year", "total_tracks", "has_artwork", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
-    list_filter = ["year"]
+    list_filter = ["year", "cover_status"]
     search_fields = ["title", "artist__name"]
     readonly_fields = ["cover_art", "track_list"]
 
@@ -133,7 +133,11 @@ class AlbumAdmin(admin.ModelAdmin):
 
     @admin.display(description="Artwork", boolean=True)
     def has_artwork(self, obj):
-        return has_cover(obj)
+        if obj.cover_status == "invalid":
+            return False
+        if obj.cover_status == "valid":
+            return True
+        return None
 
     @admin.display(description="Tracks")
     def track_list(self, obj):

@@ -101,6 +101,38 @@ def has_cover(album):
     return data is not None
 
 
+def check_cover_status(album):
+    """Check album cover art and return status: 'valid', 'invalid', or ''.
+
+    Also updates album.cover_status in the database.
+    """
+    from PIL import Image, UnidentifiedImageError
+
+    cover_path = _find_cover_file(album)
+    if cover_path:
+        try:
+            Image.open(cover_path).verify()
+            album.cover_status = Album.COVER_VALID
+        except (UnidentifiedImageError, Exception):
+            album.cover_status = Album.COVER_INVALID
+        album.save(update_fields=["cover_status"])
+        return album.cover_status
+
+    data, _ = _extract_embedded_art(album)
+    if data:
+        try:
+            Image.open(BytesIO(data)).verify()
+            album.cover_status = Album.COVER_VALID
+        except (UnidentifiedImageError, Exception):
+            album.cover_status = Album.COVER_INVALID
+        album.save(update_fields=["cover_status"])
+        return album.cover_status
+
+    album.cover_status = Album.COVER_NONE
+    album.save(update_fields=["cover_status"])
+    return album.cover_status
+
+
 @csrf_exempt
 @require_api_key
 @require_POST

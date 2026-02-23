@@ -18,6 +18,15 @@ class Artist(models.Model):
 
 
 class Album(models.Model):
+    COVER_NONE = ""
+    COVER_VALID = "valid"
+    COVER_INVALID = "invalid"
+    COVER_STATUS_CHOICES = [
+        (COVER_NONE, "None"),
+        (COVER_VALID, "Valid"),
+        (COVER_INVALID, "Invalid"),
+    ]
+
     title = models.CharField(max_length=500)
     artist = models.ForeignKey(
         Artist, on_delete=models.CASCADE, related_name="albums"
@@ -26,6 +35,9 @@ class Album(models.Model):
     total_tracks = models.PositiveSmallIntegerField(null=True, blank=True)
     total_discs = models.PositiveSmallIntegerField(null=True, blank=True)
     exclude_from_playlist = models.BooleanField(default=False)
+    cover_status = models.CharField(
+        max_length=10, choices=COVER_STATUS_CHOICES, default="", blank=True,
+    )
 
     class Meta:
         unique_together = [("title", "artist")]
