@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from library.models import Album, ApiKey, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
-from library.views import has_cover
+from library.views import has_cover, _nuke_cover_art
 
 
 class GenreGroupForm(forms.ModelForm):
@@ -179,6 +179,19 @@ class AlbumAdmin(admin.ModelAdmin):
         if greyed:
             return format_html('<span style="opacity:0.35">{}</span>', obj.title)
         return obj.title
+
+    actions = ["delete_cover_art"]
+
+    @admin.action(description="Delete cover art")
+    def delete_cover_art(self, request, queryset):
+        count = 0
+        for album in queryset:
+            if has_cover(album):
+                _nuke_cover_art(album)
+                album.cover_status = Album.COVER_NONE
+                album.save(update_fields=["cover_status"])
+                count += 1
+        self.message_user(request, f"Deleted cover art from {count} album(s).")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
