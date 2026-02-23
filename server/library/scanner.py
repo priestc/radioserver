@@ -99,7 +99,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
     Args:
         force: Re-read tags even if mtime hasn't changed.
         clean: Remove DB entries whose files no longer exist on disk.
-        progress_callback: Optional callable(scanned, total) called after each file.
+        progress_callback: Optional callable(current, total, label) called for progress.
     """
     library_path = settings.MUSIC_LIBRARY_PATH
     extensions = settings.MUSIC_EXTENSIONS
@@ -122,7 +122,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
             stats["scanned"] += 1
 
             if progress_callback:
-                progress_callback(stats["scanned"], total_files)
+                progress_callback(stats["scanned"], total_files, "Scanning files")
 
             # Check if we can skip
             if not force:
@@ -153,7 +153,11 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
     # Check cover art status for all albums
     stats["cover_invalid"] = 0
     stats["cover_invalid_albums"] = []
-    for album in Album.objects.all():
+    all_albums = list(Album.objects.all())
+    total_albums = len(all_albums)
+    for i, album in enumerate(all_albums, 1):
+        if progress_callback:
+            progress_callback(i, total_albums, "Checking cover art")
         status = check_cover_status(album)
         if status == Album.COVER_INVALID:
             stats["cover_invalid"] += 1

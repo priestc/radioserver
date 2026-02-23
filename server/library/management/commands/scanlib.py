@@ -22,9 +22,9 @@ class Command(BaseCommand):
             help="Remove database entries for files that no longer exist on disk.",
         )
 
-    def _progress(self, scanned, total):
-        pct = (scanned / total * 100) if total else 0
-        sys.stdout.write(f"\r  Scanning: {scanned}/{total} ({pct:.1f}%)")
+    def _progress(self, current, total, label):
+        pct = (current / total * 100) if total else 0
+        sys.stdout.write(f"\r  {label}: {current}/{total} ({pct:.1f}%)   ")
         sys.stdout.flush()
 
     def handle(self, **options):
