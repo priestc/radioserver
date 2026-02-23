@@ -130,7 +130,7 @@ def read_tags(path: str | Path) -> dict | None:
     raw_artists = tags.get("artist", [])
     artists = []
     for val in raw_artists:
-        for part in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b|\bFeaturing\b", str(val), flags=re.IGNORECASE):
+        for part in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b|\bFeaturing\b|\bDuet\s+with\b|\bwith\b", str(val), flags=re.IGNORECASE):
             part = part.strip()
             if not part:
                 continue
