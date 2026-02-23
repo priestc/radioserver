@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import MediaPlayer
+import Network
 import UIKit
 
 class AudioPlayer: ObservableObject {
@@ -25,11 +26,25 @@ class AudioPlayer: ObservableObject {
     private var syncRetryTask: Task<Void, Never>?
     private var syncBackoffSeconds: Double = 2
 
+    // Network monitoring
+    private let networkMonitor = NWPathMonitor()
+    private(set) var isCellular = false
+
     var apiService: APIService?
 
     init() {
         setupAudioSession()
         setupRemoteCommands()
+        startNetworkMonitor()
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isCellular = path.usesInterfaceType(.cellular)
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
     }
 
     private func setupAudioSession() {
@@ -115,10 +130,21 @@ class AudioPlayer: ObservableObject {
             }
 
             // Download songs and artwork in background
+            let onCellular = await MainActor.run { self.isCellular }
+            let cachedCount = newItems.filter {
+                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: onCellular ? "mp3" : $0.fileExtension)
+            }.count
+
             for item in newItems {
-                if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
-                    _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                let ext = onCellular ? "mp3" : item.fileExtension
+                if CacheManager.shared.hasCached(playlistItemId: item.id, ext: ext) {
+                    continue
                 }
+                // On cellular, only download when 1 or fewer songs are cached
+                if onCellular && cachedCount > 1 {
+                    continue
+                }
+                _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension, lowBitrate: onCellular)
                 if let albumId = item.albumId {
                     await prefetchArtwork(albumId: albumId, api: api)
                 }
@@ -155,13 +181,19 @@ class AudioPlayer: ObservableObject {
         currentSong = song
         hasSyncedCurrentSong = false
         currentSongStartedAt = Date()
-        let fileURL = CacheManager.shared.fileURL(for: song.id, ext: song.fileExtension)
 
-        guard CacheManager.shared.hasCached(playlistItemId: song.id, ext: song.fileExtension) else {
+        // Check for both original and low-bitrate cached versions
+        let ext: String
+        if CacheManager.shared.hasCached(playlistItemId: song.id, ext: song.fileExtension) {
+            ext = song.fileExtension
+        } else if CacheManager.shared.hasCached(playlistItemId: song.id, ext: "mp3") {
+            ext = "mp3"
+        } else {
             // Not downloaded yet, skip to next
             skipToNext()
             return
         }
+        let fileURL = CacheManager.shared.fileURL(for: song.id, ext: ext)
 
         let playerItem = AVPlayerItem(url: fileURL)
         player = AVPlayer(playerItem: playerItem)
@@ -212,10 +244,17 @@ class AudioPlayer: ObservableObject {
             pendingPlayed.append(played)
         }
         playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
-        CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
+        removeCachedFiles(for: song)
         playNext()
         // Sync to report the new song's start time
         triggerSync()
+    }
+
+    private func removeCachedFiles(for song: SongItem) {
+        CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
+        if song.fileExtension != "mp3" {
+            CacheManager.shared.removeFile(for: song.id, ext: "mp3")
+        }
     }
 
     func play() {
@@ -241,7 +280,7 @@ class AudioPlayer: ObservableObject {
                 pendingPlayed.append(played)
             }
             playHistory.insert(played, at: 0)
-            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
+            removeCachedFiles(for: song)
         }
         playNext()
         // Sync to report skip and the new song's start time
@@ -332,5 +371,6 @@ class AudioPlayer: ObservableObject {
     deinit {
         removeObservers()
         syncRetryTask?.cancel()
+        networkMonitor.cancel()
     }
 }

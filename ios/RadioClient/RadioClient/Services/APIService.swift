@@ -61,14 +61,16 @@ class APIService: ObservableObject {
         return syncResponse.download
     }
 
-    func downloadSong(playlistItemId: Int, fileExtension: String = "mp3") async throws -> URL {
+    func downloadSong(playlistItemId: Int, fileExtension: String = "mp3", lowBitrate: Bool = false) async throws -> URL {
         let cache = CacheManager.shared
-        if cache.hasCached(playlistItemId: playlistItemId, ext: fileExtension) {
-            return cache.fileURL(for: playlistItemId, ext: fileExtension)
+        let ext = lowBitrate ? "mp3" : fileExtension
+        if cache.hasCached(playlistItemId: playlistItemId, ext: ext) {
+            return cache.fileURL(for: playlistItemId, ext: ext)
         }
 
         guard let base = baseURL else { throw APIError.invalidURL }
-        let url = base.appendingPathComponent("/library/api/download_song/\(playlistItemId)/")
+        let endpoint = lowBitrate ? "download_song_lowbitrate" : "download_song"
+        let url = base.appendingPathComponent("/library/api/\(endpoint)/\(playlistItemId)/")
         let request = authorizedRequest(url: url)
 
         let (tempURL, response) = try await URLSession.shared.download(for: request)
@@ -77,7 +79,7 @@ class APIService: ObservableObject {
             throw APIError.serverError(code)
         }
 
-        let dest = cache.fileURL(for: playlistItemId, ext: fileExtension)
+        let dest = cache.fileURL(for: playlistItemId, ext: ext)
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: tempURL, to: dest)
         return dest
