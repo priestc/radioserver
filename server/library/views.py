@@ -208,6 +208,16 @@ def client_sync(request):
     for entry in body.get("played", []):
         PlaylistItem.objects.filter(pk=entry["id"]).update(played_at=entry["played_at"])
 
+    # Auto-generate playlist if unplayed duration is under 1 hour
+    from django.db.models import Sum
+    unplayed_duration = (
+        PlaylistItem.objects.filter(played_at__isnull=True)
+        .aggregate(total=Sum("track__duration"))["total"]
+    ) or 0
+    if unplayed_duration < 3600:
+        from library.playlist import generate_playlist
+        generate_playlist(3600)
+
     # Determine items to download
     buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
     unplayed = PlaylistItem.objects.filter(played_at__isnull=True).select_related("track").order_by("id")
