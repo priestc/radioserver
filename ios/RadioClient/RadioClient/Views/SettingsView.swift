@@ -10,10 +10,22 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Server") {
-                    TextField("Server address (e.g. 192.168.1.50:8000)", text: $api.serverURL)
+                    TextField("Local IP (e.g. 192.168.1.50:8000)", text: $api.localURL)
                         .textContentType(.URL)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+
+                    TextField("Remote IP (e.g. 100.64.0.1:8000)", text: $api.remoteURL)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+
+                    HStack {
+                        Text("Using")
+                        Spacer()
+                        Text(api.isOnLocalNetwork ? "Local" : "Remote")
+                            .foregroundColor(.secondary)
+                    }
 
                     HStack {
                         TextField("API Key", text: $api.apiKey)

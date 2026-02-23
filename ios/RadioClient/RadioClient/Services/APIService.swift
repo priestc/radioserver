@@ -1,8 +1,12 @@
 import Foundation
+import Network
 
 class APIService: ObservableObject {
-    @Published var serverURL: String {
-        didSet { UserDefaults.standard.set(serverURL, forKey: "serverURL") }
+    @Published var localURL: String {
+        didSet { UserDefaults.standard.set(localURL, forKey: "localURL") }
+    }
+    @Published var remoteURL: String {
+        didSet { UserDefaults.standard.set(remoteURL, forKey: "remoteURL") }
     }
     @Published var apiKey: String {
         didSet { UserDefaults.standard.set(apiKey, forKey: "apiKey") }
@@ -10,21 +14,50 @@ class APIService: ObservableObject {
     @Published var bufferCacheMB: Int {
         didSet { UserDefaults.standard.set(bufferCacheMB, forKey: "bufferCacheMB") }
     }
+    @Published var isOnLocalNetwork = false
+
+    private let networkMonitor = NWPathMonitor()
 
     init() {
-        self.serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+        // Migrate old serverURL to localURL
+        if let old = UserDefaults.standard.string(forKey: "serverURL"), !old.isEmpty {
+            self.localURL = old
+            UserDefaults.standard.removeObject(forKey: "serverURL")
+            UserDefaults.standard.set(old, forKey: "localURL")
+        } else {
+            self.localURL = UserDefaults.standard.string(forKey: "localURL") ?? ""
+        }
+        self.remoteURL = UserDefaults.standard.string(forKey: "remoteURL") ?? ""
         self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
         let saved = UserDefaults.standard.integer(forKey: "bufferCacheMB")
         self.bufferCacheMB = saved > 0 ? saved : 100
+
+        startNetworkMonitor()
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let onWifi = path.usesInterfaceType(.wifi)
+            DispatchQueue.main.async {
+                self?.isOnLocalNetwork = onWifi
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
     }
 
     var isConfigured: Bool {
-        !serverURL.isEmpty && !apiKey.isEmpty
+        !activeServerURL.isEmpty && !apiKey.isEmpty
+    }
+
+    var activeServerURL: String {
+        isOnLocalNetwork ? localURL : remoteURL
     }
 
     private var baseURL: URL? {
-        let host = serverURL.hasPrefix("http") ? serverURL : "http://\(serverURL)"
-        return URL(string: host)
+        let host = activeServerURL
+        guard !host.isEmpty else { return nil }
+        let urlString = host.hasPrefix("http") ? host : "http://\(host)"
+        return URL(string: urlString)
     }
 
     private func authorizedRequest(url: URL) -> URLRequest {
@@ -97,6 +130,10 @@ class APIService: ObservableObject {
         } catch {
             return .failure(error)
         }
+    }
+
+    deinit {
+        networkMonitor.cancel()
     }
 }
 
