@@ -52,7 +52,7 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
     cmd = [
         "yt-dlp",
         "-x", "--audio-format", "mp3",
-        "-f", "bestaudio[abr<=192]/bestaudio",
+        "-f", "bestaudio",
         "--add-metadata",
         "--parse-metadata", "playlist_index:%(track_number)s",
         "--yes-playlist",
