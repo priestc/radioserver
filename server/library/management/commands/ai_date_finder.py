@@ -33,6 +33,30 @@ def _ask_claude(prompt: str) -> str:
     return response.content[0].text.strip()
 
 
+def _ask_deepseek(prompt: str) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    response = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=20,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def _ask_groq(prompt: str) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=20,
+    )
+    return response.choices[0].message.content.strip()
+
+
 def _ask_google(prompt: str) -> str:
     from google import genai
 
@@ -56,7 +80,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--backend",
-            choices=["openai", "claude", "google"],
+            choices=["openai", "claude", "google", "deepseek", "groq"],
             default="claude",
             help="AI backend to use (default: claude).",
         )
@@ -76,6 +100,18 @@ class Command(BaseCommand):
                     "GOOGLE_AI_API_KEY not set. Add google_ai_key under [api] in ~/.radioserver.conf"
                 )
             ask = _ask_google
+        elif backend == "deepseek":
+            if not settings.DEEPSEEK_API_KEY:
+                raise CommandError(
+                    "DEEPSEEK_API_KEY not set. Add deepseek_key under [api] in ~/.radioserver.conf"
+                )
+            ask = _ask_deepseek
+        elif backend == "groq":
+            if not settings.GROQ_API_KEY:
+                raise CommandError(
+                    "GROQ_API_KEY not set. Add groq_key under [api] in ~/.radioserver.conf"
+                )
+            ask = _ask_groq
         else:
             if not settings.ANTHROPIC_API_KEY:
                 raise CommandError(
