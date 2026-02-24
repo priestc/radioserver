@@ -1,71 +1,9 @@
 from __future__ import annotations
 
-import re
-import time
-
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from library.ai import get_backend, lookup_year
 from library.models import Album
-
-
-def _ask_openai(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_claude(prompt: str) -> str:
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=20,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
-
-
-def _ask_deepseek(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_groq(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_google(prompt: str) -> str:
-    from google import genai
-
-    client = genai.Client(api_key=settings.GOOGLE_AI_API_KEY)
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-    )
-    return response.text.strip()
 
 
 class Command(BaseCommand):
@@ -88,36 +26,10 @@ class Command(BaseCommand):
     def handle(self, **options):
         backend = options["backend"]
 
-        if backend == "openai":
-            if not settings.OPENAI_API_KEY:
-                raise CommandError(
-                    "OPENAI_API_KEY not set. Add openai_key under [api] in ~/.radioserver.conf"
-                )
-            ask = _ask_openai
-        elif backend == "google":
-            if not settings.GOOGLE_AI_API_KEY:
-                raise CommandError(
-                    "GOOGLE_AI_API_KEY not set. Add google_ai_key under [api] in ~/.radioserver.conf"
-                )
-            ask = _ask_google
-        elif backend == "deepseek":
-            if not settings.DEEPSEEK_API_KEY:
-                raise CommandError(
-                    "DEEPSEEK_API_KEY not set. Add deepseek_key under [api] in ~/.radioserver.conf"
-                )
-            ask = _ask_deepseek
-        elif backend == "groq":
-            if not settings.GROQ_API_KEY:
-                raise CommandError(
-                    "GROQ_API_KEY not set. Add groq_key under [api] in ~/.radioserver.conf"
-                )
-            ask = _ask_groq
-        else:
-            if not settings.ANTHROPIC_API_KEY:
-                raise CommandError(
-                    "ANTHROPIC_API_KEY not set. Add anthropic_key under [api] in ~/.radioserver.conf"
-                )
-            ask = _ask_claude
+        try:
+            ask = get_backend(backend)
+        except ValueError as e:
+            raise CommandError(str(e))
 
         album_id = options["album_id"]
         dry_run = options["dry_run"]
@@ -141,60 +53,26 @@ class Command(BaseCommand):
             artist = track.artists.first()
             artist_name = artist.name if artist else "Unknown Artist"
 
-            prompt = (
-                f"What year was the song '{track.title}' by {artist_name} "
-                f"originally released? Reply with just the 4-digit year."
-            )
-
-            answer = None
-            for attempt in range(5):
-                try:
-                    answer = ask(prompt)
-                    break
-                except Exception as e:
-                    error_str = str(e)
-                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                        wait = 10 * (attempt + 1)
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"  Rate limited, waiting {wait}s..."
-                            )
-                        )
-                        time.sleep(wait)
-                    else:
-                        self.stdout.write(
-                            self.style.ERROR(
-                                f"  FAIL: \"{track.title}\" by {artist_name} — {e}"
-                            )
-                        )
-                        failed += 1
-                        break
-            else:
+            try:
+                year = lookup_year(ask, track.title, artist_name)
+            except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(
-                        f"  FAIL: \"{track.title}\" by {artist_name} — "
-                        f"still rate limited after 5 retries"
+                        f"  FAIL: \"{track.title}\" by {artist_name} — {e}"
                     )
                 )
                 failed += 1
                 continue
 
-            if answer is None:
-                continue
-
-            match = re.search(r"\b(19\d{2}|20\d{2})\b", answer)
-
-            if not match:
+            if year is None:
                 self.stdout.write(
                     self.style.ERROR(
                         f"  FAIL: \"{track.title}\" by {artist_name} — "
-                        f"could not parse year from: {answer!r}"
+                        f"could not parse year from response"
                     )
                 )
                 failed += 1
                 continue
-
-            year = int(match.group(1))
 
             if dry_run:
                 self.stdout.write(f"  \"{track.title}\" by {artist_name} → {year}")

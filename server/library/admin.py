@@ -3,6 +3,9 @@ from urllib.parse import quote_plus
 
 from django import forms
 from django.contrib import admin
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
@@ -182,7 +185,97 @@ class AlbumAdmin(admin.ModelAdmin):
             return format_html('<span style="opacity:0.35">{}</span>', obj.title)
         return obj.title
 
-    actions = ["delete_cover_art"]
+    actions = ["delete_cover_art", "ai_date_finder"]
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<int:album_id>/ai-date-finder/",
+                self.admin_site.admin_view(self.ai_date_finder_view),
+                name="library_album_ai_date_finder",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    @admin.action(description="AI Date Finder — look up track years")
+    def ai_date_finder(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one album.", level="error")
+            return
+        album = queryset.first()
+        return redirect("admin:library_album_ai_date_finder", album_id=album.pk)
+
+    def ai_date_finder_view(self, request, album_id):
+        from library.ai import get_available_backends, get_backend, lookup_year
+
+        album = Album.objects.get(id=album_id)
+        available = get_available_backends()
+
+        if not available:
+            return TemplateResponse(request, "admin/library/ai_date_finder.html", {
+                "album": album,
+                "backend": "none",
+                "error": "No AI backends configured. Add an API key via radioserver install_* commands.",
+                "tracks": [],
+            })
+
+        backend_name = request.GET.get("backend") or request.POST.get("backend") or available[0]
+        if backend_name not in available:
+            backend_name = available[0]
+
+        if request.method == "POST" and request.POST.get("confirm"):
+            tracks = album.tracks.all()
+            updated = 0
+            for track in tracks:
+                raw = request.POST.get(f"year_{track.pk}", "").strip()
+                if raw:
+                    try:
+                        track.year = int(raw)
+                        track.save(update_fields=["year"])
+                        updated += 1
+                    except (ValueError, TypeError):
+                        pass
+            self.message_user(request, f"Updated {updated} track(s).")
+            return redirect("admin:library_album_change", album_id)
+
+        # Query AI for each track
+        try:
+            ask = get_backend(backend_name)
+        except ValueError as e:
+            return TemplateResponse(request, "admin/library/ai_date_finder.html", {
+                "album": album,
+                "backend": backend_name,
+                "error": str(e),
+                "tracks": [],
+            })
+
+        track_data = []
+        for track in album.tracks.order_by("disc_number", "track_number", "title"):
+            artist = track.artists.first()
+            artist_name = artist.name if artist else "Unknown Artist"
+            error = ""
+            suggested = None
+            try:
+                suggested = lookup_year(ask, track.title, artist_name)
+                if suggested is None:
+                    error = "Could not parse year"
+            except Exception as e:
+                error = str(e)
+
+            track_data.append({
+                "track_id": track.pk,
+                "title": track.title,
+                "artist": artist_name,
+                "current_year": track.year,
+                "suggested_year": suggested,
+                "error": error,
+            })
+
+        return TemplateResponse(request, "admin/library/ai_date_finder.html", {
+            "album": album,
+            "backend": backend_name,
+            "tracks": track_data,
+        })
 
     @admin.action(description="Delete cover art")
     def delete_cover_art(self, request, queryset):

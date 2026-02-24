@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}AI Date Finder — {{ album.title }}{% endblock %}
+
+{% block content %}
+<h2>AI Date Finder — {{ album.title }} by {{ album.artist.name }}</h2>
+<p>Backend: <strong>{{ backend }}</strong></p>
+
+{% if error %}
+<p class="errornote">{{ error }}</p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="confirm" value="1">
+    <table>
+        <thead>
+            <tr>
+                <th>Track</th>
+                <th>Artist</th>
+                <th>Current Year</th>
+                <th>AI Suggested Year</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in tracks %}
+            <tr>
+                <td>{{ item.title }}</td>
+                <td>{{ item.artist }}</td>
+                <td>{{ item.current_year|default:"—" }}</td>
+                <td>
+                    <input type="text" name="year_{{ item.track_id }}"
+                           value="{{ item.suggested_year|default:'' }}"
+                           size="6" style="width:5em">
+                    {% if item.error %}
+                    <span style="color:red; margin-left:0.5em">{{ item.error }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+    <input type="submit" value="Save Years" class="default">
+    <a href="{% url 'admin:library_album_change' album.pk %}" style="margin-left:1em">Cancel</a>
+</form>
+{% endblock %}
