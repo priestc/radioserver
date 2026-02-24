@@ -316,6 +316,74 @@ class TrackAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
     search_fields = ["title", "artists__name", "album__title", "source"]
+    readonly_fields = ["ai_year_lookup"]
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<int:track_id>/ai-year-lookup/",
+                self.admin_site.admin_view(self.ai_year_lookup_view),
+                name="library_track_ai_year_lookup",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def ai_year_lookup_view(self, request, track_id):
+        from library.ai import lookup_year_with_fallback
+
+        track = Track.objects.get(pk=track_id)
+        artist = track.artists.first()
+        artist_name = artist.name if artist else "Unknown Artist"
+
+        year, used_backend, errors = lookup_year_with_fallback(
+            track.title, artist_name,
+        )
+        if year is not None:
+            result = {"year": year, "backend": used_backend}
+            if errors:
+                result["warnings"] = errors
+            return JsonResponse(result)
+        return JsonResponse({"error": "; ".join(errors) or "Could not parse year"})
+
+    @admin.display(description="AI Year Lookup")
+    def ai_year_lookup(self, obj):
+        if not obj.pk:
+            return ""
+        return format_html(
+            '<button type="button" class="button" onclick="aiYearLookup({pk})">'
+            'Look up year</button>'
+            ' <span id="ai-year-spinner" style="display:none">Looking up...</span>'
+            ' <span id="ai-year-result"></span>'
+            '<script>'
+            'function aiYearLookup(pk) {{'
+            '  var spinner = document.getElementById("ai-year-spinner");'
+            '  var result = document.getElementById("ai-year-result");'
+            '  spinner.style.display = "inline";'
+            '  result.textContent = "";'
+            '  result.style.color = "";'
+            '  fetch("/admin/library/track/" + pk + "/ai-year-lookup/")'
+            '    .then(function(r) {{ return r.json(); }})'
+            '    .then(function(data) {{'
+            '      spinner.style.display = "none";'
+            '      if (data.error) {{'
+            '        result.textContent = data.error;'
+            '        result.style.color = "red";'
+            '      }} else {{'
+            '        var msg = data.year;'
+            '        if (data.backend) msg += " (via " + data.backend + ")";'
+            '        result.textContent = msg;'
+            '        result.style.color = "#2e7d32";'
+            '      }}'
+            '    }})'
+            '    .catch(function(err) {{'
+            '      spinner.style.display = "none";'
+            '      result.textContent = "Request failed: " + err;'
+            '      result.style.color = "red";'
+            '    }});'
+            '}}'
+            '</script>',
+            pk=obj.pk,
+        )
 
     @admin.display(description="Artist")
     def display_artist_name(self, obj):
