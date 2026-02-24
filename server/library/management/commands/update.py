@@ -1,23 +1,33 @@
 from __future__ import annotations
 
-import subprocess
-import sys
+import os
+from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
+ALIAS_LINE = (
+    'alias radioserver-update='
+    "'pipx install --force git+https://github.com/priestc/radioserver.git"
+    " && sudo systemctl restart radioserver'"
+)
+
 
 class Command(BaseCommand):
-    help = "Update radioserver from GitHub and restart the service."
+    help = "Install a 'radioserver-update' alias into ~/.bashrc."
 
     def handle(self, **options):
-        self.stdout.write("Updating radioserver via pipx...")
-        subprocess.run(
-            [sys.executable, "-m", "pipx", "install", "--force",
-             "git+https://github.com/priestc/radioserver.git"],
-            check=True,
-        )
+        bashrc = Path.home() / ".bashrc"
 
-        self.stdout.write("Restarting radioserver service...")
-        subprocess.run(["sudo", "systemctl", "restart", "radioserver"], check=True)
+        if bashrc.exists() and ALIAS_LINE in bashrc.read_text():
+            self.stdout.write("Alias already installed in ~/.bashrc")
+        else:
+            with open(bashrc, "a") as f:
+                f.write(f"\n{ALIAS_LINE}\n")
+            self.stdout.write(self.style.SUCCESS(f"Added alias to {bashrc}"))
 
-        self.stdout.write(self.style.SUCCESS("Done."))
+        self.stdout.write("")
+        self.stdout.write("Run the following to activate it now:")
+        self.stdout.write("  source ~/.bashrc")
+        self.stdout.write("")
+        self.stdout.write("Then update anytime with:")
+        self.stdout.write("  radioserver-update")
