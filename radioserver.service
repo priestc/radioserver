@@ -1,0 +1,13 @@
+[Unit]
+Description=RadioServer
+After=network.target
+
+[Service]
+User=chris
+WorkingDirectory=/home/chris/radioserver/server
+ExecStart=/usr/bin/python3 -m gunicorn radioserver.wsgi:application --bind 0.0.0.0:8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
