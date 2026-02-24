@@ -24,5 +24,8 @@ radioserver = "manage:main"
 [tool.setuptools]
 py-modules = ["manage"]
 
+[tool.setuptools.package-data]
+library = ["templates/**/*.html"]
+
 [tool.setuptools.packages.find]
 where = ["server"]
