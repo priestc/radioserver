@@ -292,7 +292,11 @@ class AlbumAdmin(admin.ModelAdmin):
                 return JsonResponse({"error": "Could not parse year"})
             return JsonResponse({"year": year})
         except Exception as e:
-            return JsonResponse({"error": str(e)})
+            from library.ai import _log_rate_limit_error
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                _log_rate_limit_error(backend_name, error_str)
+            return JsonResponse({"error": error_str})
 
     @admin.action(description="Delete cover art")
     def delete_cover_art(self, request, queryset):

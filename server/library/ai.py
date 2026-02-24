@@ -173,10 +173,15 @@ def _log_rate_limit_error(backend_name: str, error_str: str) -> None:
     """Log a 429/rate-limit error to AIServiceError."""
     from library.models import AIServiceError, AIServiceManager
 
+    if not backend_name:
+        return
     try:
-        service = AIServiceManager.objects.get(name=backend_name)
+        service, _ = AIServiceManager.objects.get_or_create(
+            name=backend_name,
+            defaults={"display_name": DISPLAY_NAMES.get(backend_name, backend_name)},
+        )
         AIServiceError.objects.create(service=service, error_message=error_str)
-    except AIServiceManager.DoesNotExist:
+    except Exception:
         pass
 
 
