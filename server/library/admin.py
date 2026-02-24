@@ -2,6 +2,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 from django.http import JsonResponse
 from django.shortcuts import redirect
