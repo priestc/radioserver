@@ -169,18 +169,10 @@ def ensure_services() -> None:
         )
 
 
-def _log_rate_limit_error(ask_fn, error_str: str) -> None:
+def _log_rate_limit_error(backend_name: str, error_str: str) -> None:
     """Log a 429/rate-limit error to AIServiceError."""
     from library.models import AIServiceError, AIServiceManager
 
-    # Find which backend this ask_fn belongs to
-    backend_name = None
-    for name, (_, fn) in BACKENDS.items():
-        if fn is ask_fn:
-            backend_name = name
-            break
-    if backend_name is None:
-        return
     try:
         service = AIServiceManager.objects.get(name=backend_name)
         AIServiceError.objects.create(service=service, error_message=error_str)
@@ -188,7 +180,7 @@ def _log_rate_limit_error(ask_fn, error_str: str) -> None:
         pass
 
 
-def lookup_year(ask, title: str, artist: str) -> int | None:
+def lookup_year(ask, title: str, artist: str, backend_name: str = "") -> int | None:
     """Query an AI backend for a track's release year with retry logic."""
     prompt = (
         f"What year was the song '{title}' by {artist} "
@@ -207,7 +199,7 @@ def lookup_year(ask, title: str, artist: str) -> int | None:
             if "insufficient_quota" in error_str:
                 raise
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                _log_rate_limit_error(ask, error_str)
+                _log_rate_limit_error(backend_name, error_str)
                 time.sleep(10 * (attempt + 1))
             else:
                 raise

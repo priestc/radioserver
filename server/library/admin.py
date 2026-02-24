@@ -287,7 +287,7 @@ class AlbumAdmin(admin.ModelAdmin):
         artist_name = artist.name if artist else "Unknown Artist"
 
         try:
-            year = lookup_year(ask, track.title, artist_name)
+            year = lookup_year(ask, track.title, artist_name, backend_name=backend_name)
             if year is None:
                 return JsonResponse({"error": "Could not parse year"})
             return JsonResponse({"year": year})
