@@ -85,3 +85,4 @@ MUSIC_LIBRARY_PATH = _config.get("library", "path", fallback="/path/to/your/musi
 
 OPENAI_API_KEY = _config.get("api", "openai_key", fallback="")
 ANTHROPIC_API_KEY = _config.get("api", "anthropic_key", fallback="")
+GOOGLE_AI_API_KEY = _config.get("api", "google_ai_key", fallback="")

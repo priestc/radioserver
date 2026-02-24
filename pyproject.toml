@@ -15,6 +15,7 @@ dependencies = [
     "whitenoise",
     "openai",
     "anthropic",
+    "google-genai",
 ]
 
 [project.scripts]

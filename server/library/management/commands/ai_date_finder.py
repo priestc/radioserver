@@ -32,6 +32,17 @@ def _ask_claude(prompt: str) -> str:
     return response.content[0].text.strip()
 
 
+def _ask_google(prompt: str) -> str:
+    from google import genai
+
+    client = genai.Client(api_key=settings.GOOGLE_AI_API_KEY)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+    )
+    return response.text.strip()
+
+
 class Command(BaseCommand):
     help = "Use AI to look up release years for tracks in an album."
 
@@ -44,7 +55,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--backend",
-            choices=["openai", "claude"],
+            choices=["openai", "claude", "google"],
             default="claude",
             help="AI backend to use (default: claude).",
         )
@@ -58,6 +69,12 @@ class Command(BaseCommand):
                     "OPENAI_API_KEY not set. Add openai_key under [api] in ~/.radioserver.conf"
                 )
             ask = _ask_openai
+        elif backend == "google":
+            if not settings.GOOGLE_AI_API_KEY:
+                raise CommandError(
+                    "GOOGLE_AI_API_KEY not set. Add google_ai_key under [api] in ~/.radioserver.conf"
+                )
+            ask = _ask_google
         else:
             if not settings.ANTHROPIC_API_KEY:
                 raise CommandError(
