@@ -136,6 +136,16 @@ All API endpoints require a Bearer token in the `Authorization` header.
 - `GET /library/api/download_song_lowbitrate/<id>/` - Download a song transcoded to 128kbps MP3
 - `GET /library/cover/<album_id>/` - Get album cover art
 
+## AI Date Finder
+
+Look up release years for tracks using AI:
+
+```
+radioserver ai_date_finder 6297 --backend groq --dry-run
+```
+
+Supports multiple AI backends (Claude, Groq, DeepSeek, OpenAI, Google). See [AI_BACKENDS.md](AI_BACKENDS.md) for setup instructions, API key links, and free tier details.
+
 ## Admin
 
 The Django admin at `/admin/` lets you manage:
