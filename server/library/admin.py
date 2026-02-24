@@ -171,7 +171,8 @@ class AlbumAdmin(admin.ModelAdmin):
             prefix = f"{t.disc_number}-" if t.disc_number and multi_disc else ""
             num = f"{prefix}{t.track_number}. " if t.track_number else ""
             url = reverse("admin:library_track_change", args=[t.pk])
-            items.append(format_html('<li>{}<a href="{}">{}</a></li>', num, url, t.title))
+            year_str = f" ({t.year})" if t.year else ""
+            items.append(format_html('<li>{}<a href="{}">{}</a>{}</li>', num, url, t.title, year_str))
         return format_html("<ol style='margin:0;padding-left:1.5em'>{}</ol>", format_html("".join(items)))
 
     @admin.display(description="Title")
