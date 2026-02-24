@@ -43,19 +43,11 @@ class Command(BaseCommand):
         tracks = album.tracks.all()
 
         updated = 0
-        skipped = 0
         failed = 0
 
         for track in tracks:
             artist = track.artists.first()
             artist_name = artist.name if artist else "Unknown Artist"
-
-            if track.year:
-                self.stdout.write(
-                    f"  SKIP: \"{track.title}\" by {artist_name} — already has year {track.year}"
-                )
-                skipped += 1
-                continue
 
             prompt = (
                 f"What year was the song '{track.title}' by {artist_name} "
@@ -104,4 +96,4 @@ class Command(BaseCommand):
                 failed += 1
 
         self.stdout.write("")
-        self.stdout.write(f"Done. Updated: {updated}, Skipped: {skipped}, Failed: {failed}")
+        self.stdout.write(f"Done. Updated: {updated}, Failed: {failed}")
