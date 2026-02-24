@@ -47,6 +47,7 @@ def generate_playlist(target_seconds: float) -> tuple[int, float]:
     tracks = list(
         Track.objects.filter(exclude_from_playlist=False)
         .exclude(duration__isnull=True)
+        .select_related("album")
         .prefetch_related("artists")
     )
     if not tracks:
@@ -63,7 +64,8 @@ def generate_playlist(target_seconds: float) -> tuple[int, float]:
             genre_to_group[genre] = gg.name
 
     def get_decade(track):
-        return (track.year // 10 * 10) if track.year else None
+        year = track.year or (track.album.year if track.album else None)
+        return (year // 10 * 10) if year else None
 
     def get_genre_group(track):
         return genre_to_group.get(track.genre)
