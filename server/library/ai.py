@@ -111,6 +111,8 @@ def lookup_year(ask, title: str, artist: str) -> int | None:
             return None
         except Exception as e:
             error_str = str(e)
+            if "insufficient_quota" in error_str:
+                raise
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 time.sleep(10 * (attempt + 1))
             else:
