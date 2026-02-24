@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 ALIAS_LINE = (
     'alias radioserver-update='
     "'pipx install --force git+https://github.com/priestc/radioserver.git"
+    " && radioserver migrate"
     " && sudo systemctl restart radioserver'"
 )
 
