@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -109,41 +110,67 @@ class Command(BaseCommand):
                 f"originally released? Reply with just the 4-digit year."
             )
 
-            try:
-                answer = ask(prompt)
-                match = re.search(r"\b(19\d{2}|20\d{2})\b", answer)
-
-                if not match:
-                    self.stdout.write(
-                        self.style.ERROR(
-                            f"  FAIL: \"{track.title}\" by {artist_name} — "
-                            f"could not parse year from: {answer!r}"
+            answer = None
+            for attempt in range(5):
+                try:
+                    answer = ask(prompt)
+                    break
+                except Exception as e:
+                    error_str = str(e)
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        wait = 10 * (attempt + 1)
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"  Rate limited, waiting {wait}s..."
+                            )
                         )
-                    )
-                    failed += 1
-                    continue
-
-                year = int(match.group(1))
-
-                if dry_run:
-                    self.stdout.write(f"  \"{track.title}\" by {artist_name} → {year}")
-                else:
-                    track.year = year
-                    track.save(update_fields=["year"])
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"  \"{track.title}\" by {artist_name} → {year}"
+                        time.sleep(wait)
+                    else:
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"  FAIL: \"{track.title}\" by {artist_name} — {e}"
+                            )
                         )
-                    )
-                updated += 1
-
-            except Exception as e:
+                        failed += 1
+                        break
+            else:
                 self.stdout.write(
                     self.style.ERROR(
-                        f"  FAIL: \"{track.title}\" by {artist_name} — {e}"
+                        f"  FAIL: \"{track.title}\" by {artist_name} — "
+                        f"still rate limited after 5 retries"
                     )
                 )
                 failed += 1
+                continue
+
+            if answer is None:
+                continue
+
+            match = re.search(r"\b(19\d{2}|20\d{2})\b", answer)
+
+            if not match:
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"  FAIL: \"{track.title}\" by {artist_name} — "
+                        f"could not parse year from: {answer!r}"
+                    )
+                )
+                failed += 1
+                continue
+
+            year = int(match.group(1))
+
+            if dry_run:
+                self.stdout.write(f"  \"{track.title}\" by {artist_name} → {year}")
+            else:
+                track.year = year
+                track.save(update_fields=["year"])
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"  \"{track.title}\" by {artist_name} → {year}"
+                    )
+                )
+            updated += 1
 
         self.stdout.write("")
         self.stdout.write(f"Done. Updated: {updated}, Failed: {failed}")
