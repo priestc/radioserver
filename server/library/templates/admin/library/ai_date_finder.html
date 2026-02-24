@@ -92,8 +92,11 @@
             progress.textContent = "Looking up track " + (i + 1) + " of " + total + "...";
 
             try {
-                var url = albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
+                var url = "/admin/library/album/" + albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
                 var resp = await fetch(url);
+                if (!resp.ok) {
+                    throw new Error("HTTP " + resp.status + ": " + resp.statusText);
+                }
                 var data = await resp.json();
 
                 spinner.style.display = "none";
@@ -107,7 +110,7 @@
                 }
             } catch (e) {
                 spinner.style.display = "none";
-                errorSpan.textContent = "Request failed";
+                errorSpan.textContent = e.message || "Request failed";
                 errorSpan.style.display = "inline";
                 input.style.display = "inline";
             }
