@@ -18,7 +18,7 @@ After=network.target
 [Service]
 User={user}
 WorkingDirectory={working_dir}
-ExecStart={python} -m gunicorn radioserver.wsgi:application --bind 0.0.0.0:9437
+ExecStart={python} -m gunicorn radioserver.wsgi:application --bind 0.0.0.0:9437 --workers 2 --timeout 120 --access-logfile -
 Restart=always
 RestartSec=5
 
