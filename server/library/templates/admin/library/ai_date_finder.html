@@ -3,6 +3,29 @@
 
 {% block title %}AI Date Finder — {{ album.title }}{% endblock %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ccc;
+    border-top-color: #417690;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.error-text {
+    color: red;
+    margin-left: 0.5em;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <h2>AI Date Finder — {{ album.title }} by {{ album.artist.name }}</h2>
 <p>Backend: <strong>{{ backend }}</strong></p>
@@ -11,9 +34,13 @@
 <p class="errornote">{{ error }}</p>
 {% endif %}
 
+{% if tracks %}
+<p id="progress">Preparing lookups...</p>
+
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="confirm" value="1">
+    <input type="hidden" name="backend" value="{{ backend }}">
     <table>
         <thead>
             <tr>
@@ -25,24 +52,73 @@
         </thead>
         <tbody>
             {% for item in tracks %}
-            <tr>
+            <tr data-track-id="{{ item.track_id }}">
                 <td>{{ item.title }}</td>
                 <td>{{ item.artist }}</td>
                 <td>{{ item.current_year|default:"—" }}</td>
                 <td>
                     <input type="text" name="year_{{ item.track_id }}"
-                           value="{{ item.suggested_year|default:'' }}"
-                           size="6" style="width:5em">
-                    {% if item.error %}
-                    <span style="color:red; margin-left:0.5em">{{ item.error }}</span>
-                    {% endif %}
+                           value="" size="6" style="width:5em; display:none"
+                           class="year-input">
+                    <span class="spinner"></span>
+                    <span class="error-text" style="display:none"></span>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     <br>
-    <input type="submit" value="Save Years" class="default">
+    <input type="submit" value="Save Years" class="default" id="save-btn" disabled>
     <a href="{% url 'admin:library_album_change' album.pk %}" style="margin-left:1em">Cancel</a>
 </form>
+
+<script>
+(function() {
+    var albumId = {{ album.pk }};
+    var backend = "{{ backend }}";
+    var rows = document.querySelectorAll("tr[data-track-id]");
+    var total = rows.length;
+    var progress = document.getElementById("progress");
+    var saveBtn = document.getElementById("save-btn");
+
+    async function lookupAll() {
+        for (var i = 0; i < total; i++) {
+            var row = rows[i];
+            var trackId = row.getAttribute("data-track-id");
+            var spinner = row.querySelector(".spinner");
+            var input = row.querySelector(".year-input");
+            var errorSpan = row.querySelector(".error-text");
+
+            progress.textContent = "Looking up track " + (i + 1) + " of " + total + "...";
+
+            try {
+                var url = albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
+                var resp = await fetch(url);
+                var data = await resp.json();
+
+                spinner.style.display = "none";
+                if (data.error) {
+                    errorSpan.textContent = data.error;
+                    errorSpan.style.display = "inline";
+                    input.style.display = "inline";
+                } else {
+                    input.value = data.year;
+                    input.style.display = "inline";
+                }
+            } catch (e) {
+                spinner.style.display = "none";
+                errorSpan.textContent = "Request failed";
+                errorSpan.style.display = "inline";
+                input.style.display = "inline";
+            }
+        }
+
+        progress.textContent = "All " + total + " tracks looked up.";
+        saveBtn.disabled = false;
+    }
+
+    lookupAll();
+})();
+</script>
+{% endif %}
 {% endblock %}
