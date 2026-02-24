@@ -192,7 +192,7 @@ def lookup_year(ask, title: str, artist: str, backend_name: str = "") -> int | N
         f"originally released? Reply with just the 4-digit year."
     )
 
-    for attempt in range(5):
+    for attempt in range(2):
         try:
             answer = ask(prompt)
             match = re.search(r"\b(19\d{2}|20\d{2})\b", answer)
@@ -205,7 +205,48 @@ def lookup_year(ask, title: str, artist: str, backend_name: str = "") -> int | N
                 raise
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 _log_rate_limit_error(backend_name, error_str)
-                time.sleep(10 * (attempt + 1))
+                if attempt == 0:
+                    time.sleep(5)
+                else:
+                    raise
             else:
                 raise
     return None
+
+
+def lookup_year_with_fallback(
+    title: str, artist: str, preferred_backend: str = "",
+) -> tuple[int | None, str, list[str]]:
+    """Try lookup_year across backends, falling back on failure.
+
+    Returns (year_or_none, backend_used, errors).
+    Tries preferred_backend first, then remaining available backends.
+    """
+    available = get_available_backends()
+    if not available:
+        return None, "", ["No AI backends configured"]
+
+    # Put preferred backend first if it's available
+    if preferred_backend in available:
+        available.remove(preferred_backend)
+        available.insert(0, preferred_backend)
+
+    errors = []
+    for name in available:
+        try:
+            ask = get_backend(name)
+        except ValueError as e:
+            errors.append(f"{name}: {e}")
+            continue
+        try:
+            year = lookup_year(ask, title, artist, backend_name=name)
+            if year is not None:
+                return year, name, errors
+            # Got None (couldn't parse) — not a failure, just no result
+            errors.append(f"{name}: could not parse year from response")
+        except Exception as e:
+            error_str = str(e)
+            _log_rate_limit_error(name, error_str)
+            errors.append(f"{name}: {error_str}")
+
+    return None, "", errors

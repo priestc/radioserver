@@ -274,29 +274,22 @@ class AlbumAdmin(admin.ModelAdmin):
         })
 
     def ai_date_finder_lookup(self, request, album_id, track_id):
-        from library.ai import get_backend, lookup_year
+        from library.ai import lookup_year_with_fallback
 
         backend_name = request.GET.get("backend", "")
-        try:
-            ask = get_backend(backend_name)
-        except ValueError as e:
-            return JsonResponse({"error": str(e)})
-
         track = Track.objects.get(pk=track_id, album_id=album_id)
         artist = track.artists.first()
         artist_name = artist.name if artist else "Unknown Artist"
 
-        try:
-            year = lookup_year(ask, track.title, artist_name, backend_name=backend_name)
-            if year is None:
-                return JsonResponse({"error": "Could not parse year"})
-            return JsonResponse({"year": year})
-        except Exception as e:
-            from library.ai import _log_rate_limit_error
-            error_str = str(e)
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                _log_rate_limit_error(backend_name, error_str)
-            return JsonResponse({"error": error_str})
+        year, used_backend, errors = lookup_year_with_fallback(
+            track.title, artist_name, preferred_backend=backend_name,
+        )
+        if year is not None:
+            result = {"year": year, "backend": used_backend}
+            if errors:
+                result["warnings"] = errors
+            return JsonResponse(result)
+        return JsonResponse({"error": "; ".join(errors) or "Could not parse year"})
 
     @admin.action(description="Delete cover art")
     def delete_cover_art(self, request, queryset):
