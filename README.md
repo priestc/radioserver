@@ -81,13 +81,10 @@ radioserver gunicorn radioserver.wsgi:application --bind 0.0.0.0:9437
 
 ## Running as a systemd service
 
-Copy the included service file to start RadioServer on boot:
+Install, enable, and start the service automatically:
 
 ```
-sudo cp radioserver.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable radioserver
-sudo systemctl start radioserver
+sudo radioserver install_service
 ```
 
 Check status:
