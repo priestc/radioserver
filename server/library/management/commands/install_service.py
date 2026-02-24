@@ -58,6 +58,10 @@ class Command(BaseCommand):
             )
             return
 
+        # Collect static files
+        from django.core.management import call_command
+        call_command("collectstatic", "--noinput")
+
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", SERVICE_NAME], check=True)
         subprocess.run(["systemctl", "start", SERVICE_NAME], check=True)

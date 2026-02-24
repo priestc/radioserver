@@ -12,6 +12,7 @@ dependencies = [
     "Pillow",
     "qrcode",
     "gunicorn",
+    "whitenoise",
 ]
 
 [project.scripts]
