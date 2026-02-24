@@ -471,6 +471,7 @@ class GenreGroupAdmin(admin.ModelAdmin):
 class PlaylistItemAdmin(admin.ModelAdmin):
     list_display = ["id", "track", "duration", "played_at"]
     ordering = ["-id"]
+    raw_id_fields = ["track"]
 
     @admin.display(description="Duration")
     def duration(self, obj):
