@@ -49,9 +49,13 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
     album_dir_template = "%(album,playlist_title)s"
     output_template = str(dest_dir / album_dir_template / "%(track_number)02d %(title)s.%(ext)s")
 
+    # Prefer m4a/opus containers that don't need re-encoding.
+    # --audio-format best keeps the native format when it's already a
+    # common audio container (m4a, opus, ogg, mp3), avoiding lossy
+    # re-encoding.
     cmd = [
         "yt-dlp",
-        "-x", "--audio-format", "mp3",
+        "-x", "--audio-format", "best",
         "-f", "bestaudio",
         "--add-metadata",
         "--parse-metadata", "playlist_index:%(track_number)s",
@@ -64,9 +68,11 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
     if result.returncode != 0:
         raise RuntimeError(f"yt-dlp exited with code {result.returncode}")
 
+    SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     files = []
-    for item in dest_dir.rglob("*.mp3"):
-        files.append(item)
+    for item in dest_dir.rglob("*"):
+        if item.suffix.lstrip(".").lower() in SUPPORTED_EXTS:
+            files.append(item)
     return sorted(files)
 
 
@@ -82,7 +88,7 @@ def get_albumart_from_ytdl(url: str, dest_dir: Path) -> Path | None:
         output_template = str(tmp_dir / "art.%(ext)s")
         cmd = [
             "yt-dlp",
-            "-x", "--audio-format", "mp3",
+            "-x", "--audio-format", "best",
             "--embed-thumbnail",
             "--playlist-items", "1",
             "-o", output_template,
@@ -92,19 +98,21 @@ def get_albumart_from_ytdl(url: str, dest_dir: Path) -> Path | None:
         if result.returncode != 0:
             return None
 
-        # Find the downloaded mp3 and extract cover
-        mp3 = tmp_dir / "art.mp3"
-        if not mp3.exists():
-            for f in tmp_dir.glob("*.mp3"):
-                mp3 = f
+        # Find the downloaded audio file and extract cover
+        audio_file = None
+        for f in tmp_dir.iterdir():
+            if f.is_file() and f.suffix.lower() in {
+                ".mp3", ".m4a", ".opus", ".ogg", ".webm", ".flac",
+            }:
+                audio_file = f
                 break
 
-        if not mp3.exists():
+        if audio_file is None:
             return None
 
         cover = dest_dir / "folder.jpg"
         extract = subprocess.run(
-            ["ffmpeg", "-i", str(mp3), "-an", "-vcodec", "mjpeg",
+            ["ffmpeg", "-i", str(audio_file), "-an", "-vcodec", "mjpeg",
              "-frames:v", "1", str(cover)],
             capture_output=True,
         )
