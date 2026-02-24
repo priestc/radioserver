@@ -21,15 +21,6 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
 
                     HStack {
-                        Text("Port")
-                        Spacer()
-                        TextField("9437", text: $api.port)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                    }
-
-                    HStack {
                         Text("Using")
                         Spacer()
                         Text(api.isOnLocalNetwork ? "Local" : "Remote")

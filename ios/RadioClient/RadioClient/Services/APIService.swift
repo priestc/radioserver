@@ -11,9 +11,6 @@ class APIService: ObservableObject {
     @Published var apiKey: String {
         didSet { UserDefaults.standard.set(apiKey, forKey: "apiKey") }
     }
-    @Published var port: String {
-        didSet { UserDefaults.standard.set(port, forKey: "port") }
-    }
     @Published var bufferCacheMB: Int {
         didSet { UserDefaults.standard.set(bufferCacheMB, forKey: "bufferCacheMB") }
     }
@@ -32,7 +29,6 @@ class APIService: ObservableObject {
         }
         self.remoteURL = UserDefaults.standard.string(forKey: "remoteURL") ?? ""
         self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
-        self.port = UserDefaults.standard.string(forKey: "port") ?? "9437"
         let saved = UserDefaults.standard.integer(forKey: "bufferCacheMB")
         self.bufferCacheMB = saved > 0 ? saved : 100
 
@@ -62,8 +58,8 @@ class APIService: ObservableObject {
         guard !host.isEmpty else { return nil }
         let urlString = host.hasPrefix("http") ? host : "http://\(host)"
         guard var components = URLComponents(string: urlString) else { return nil }
-        if let p = Int(port), components.port == nil {
-            components.port = p
+        if components.port == nil {
+            components.port = 9437
         }
         return components.url
     }
