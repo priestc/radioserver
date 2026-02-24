@@ -140,7 +140,7 @@ class AlbumAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["year", "cover_status"]
     search_fields = ["title", "artist__name"]
-    readonly_fields = ["cover_art", "track_list"]
+    readonly_fields = ["cover_art", "track_list", "strip_track_years_btn"]
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
@@ -197,6 +197,43 @@ class AlbumAdmin(admin.ModelAdmin):
             return format_html('<span style="opacity:0.35">{}</span>', obj.title)
         return obj.title
 
+    @admin.display(description="Strip Track Years")
+    def strip_track_years_btn(self, obj):
+        if not obj.pk:
+            return ""
+        return format_html(
+            '<button type="button" class="button" onclick="stripTrackYears({pk})">'
+            'Strip track years</button>'
+            ' <span id="strip-years-result"></span>'
+            '<script>'
+            'function stripTrackYears(pk) {{'
+            '  if (!confirm("Remove the year from all tracks in this album?")) return;'
+            '  var result = document.getElementById("strip-years-result");'
+            '  result.textContent = "Stripping...";'
+            '  result.style.color = "";'
+            '  fetch("/admin/library/album/" + pk + "/strip-track-years/", {{'
+            '    method: "POST",'
+            '    headers: {{"X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value}}'
+            '  }})'
+            '  .then(function(r) {{ return r.json(); }})'
+            '  .then(function(data) {{'
+            '    if (data.ok) {{'
+            '      result.textContent = "Cleared year from " + data.count + " track(s).";'
+            '      result.style.color = "#2e7d32";'
+            '    }} else {{'
+            '      result.textContent = "Error: " + data.error;'
+            '      result.style.color = "red";'
+            '    }}'
+            '  }})'
+            '  .catch(function(err) {{'
+            '    result.textContent = "Request failed: " + err;'
+            '    result.style.color = "red";'
+            '  }});'
+            '}}'
+            '</script>',
+            pk=obj.pk,
+        )
+
     actions = ["delete_cover_art", "ai_date_finder"]
 
     def get_urls(self):
@@ -210,6 +247,11 @@ class AlbumAdmin(admin.ModelAdmin):
                 "<int:album_id>/ai-date-finder/lookup/<int:track_id>/",
                 self.admin_site.admin_view(self.ai_date_finder_lookup),
                 name="library_album_ai_date_finder_lookup",
+            ),
+            path(
+                "<int:album_id>/strip-track-years/",
+                self.admin_site.admin_view(self.strip_track_years_view),
+                name="library_album_strip_track_years",
             ),
         ]
         return custom_urls + super().get_urls()
@@ -290,6 +332,13 @@ class AlbumAdmin(admin.ModelAdmin):
                 result["warnings"] = errors
             return JsonResponse(result)
         return JsonResponse({"error": "; ".join(errors) or "Could not parse year"})
+
+    def strip_track_years_view(self, request, album_id):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        album = Album.objects.get(pk=album_id)
+        count = album.tracks.exclude(year=None).update(year=None)
+        return JsonResponse({"ok": True, "count": count})
 
     @admin.action(description="Delete cover art")
     def delete_cover_art(self, request, queryset):
