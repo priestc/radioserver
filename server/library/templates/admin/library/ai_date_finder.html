@@ -23,6 +23,11 @@
     color: red;
     margin-left: 0.5em;
 }
+.backend-tag {
+    color: #666;
+    font-size: 0.85em;
+    margin-left: 0.5em;
+}
 </style>
 {% endblock %}
 
@@ -61,6 +66,7 @@
                            value="" size="6" style="width:5em; display:none"
                            class="year-input">
                     <span class="spinner"></span>
+                    <span class="backend-tag" style="display:none"></span>
                     <span class="error-text" style="display:none"></span>
                 </td>
             </tr>
@@ -107,6 +113,11 @@
                 } else {
                     input.value = data.year;
                     input.style.display = "inline";
+                    if (data.backend) {
+                        var tag = row.querySelector(".backend-tag");
+                        tag.textContent = "via " + data.backend;
+                        tag.style.display = "inline";
+                    }
                 }
             } catch (e) {
                 spinner.style.display = "none";
