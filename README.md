@@ -63,20 +63,20 @@ This generates 8 hours of playlist. The server also auto-generates playlist duri
 
 ### Create an API key
 
-Log into the admin at `http://your-server:8000/admin/`, go to **Api keys**, and add a new key. A QR code is displayed for easy scanning from the iOS app.
+Log into the admin at `http://your-server:9437/admin/`, go to **Api keys**, and add a new key. A QR code is displayed for easy scanning from the iOS app.
 
 ### Run the server
 
 For quick testing:
 
 ```
-radioserver runserver 0.0.0.0:8000
+radioserver runserver 0.0.0.0:9437
 ```
 
 For production, use gunicorn:
 
 ```
-radioserver gunicorn radioserver.wsgi:application --bind 0.0.0.0:8000
+radioserver gunicorn radioserver.wsgi:application --bind 0.0.0.0:9437
 ```
 
 ## Running as a systemd service
@@ -116,8 +116,8 @@ The Xcode project is in `ios/RadioClient/`. Open it in Xcode and build to your d
 
 The app has two server address fields:
 
-- **Local IP** - Used when connected to WiFi (e.g. `192.168.1.50:8000`)
-- **Remote IP** - Used when on cellular data (e.g. `100.64.0.1:8000` for Tailscale)
+- **Local IP** - Used when connected to WiFi (e.g. `192.168.1.50:9437`)
+- **Remote IP** - Used when on cellular data (e.g. `100.64.0.1:9437` for Tailscale)
 
 The app automatically switches between them based on your network connection.
 
