@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,36 +10,51 @@ from django.core.management.base import BaseCommand
 SERVICE_NAME = "radioserver.service"
 SYSTEMD_DIR = Path("/etc/systemd/system")
 
+SERVICE_TEMPLATE = """\
+[Unit]
+Description=RadioServer
+After=network.target
+
+[Service]
+User={user}
+WorkingDirectory={working_dir}
+ExecStart={python} -m gunicorn radioserver.wsgi:application --bind 0.0.0.0:9437
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+
 
 class Command(BaseCommand):
     help = "Install the radioserver systemd service for automatic startup."
 
     def handle(self, *args, **options):
-        # Find the .service file bundled with the package
-        source = Path(__file__).resolve().parents[4] / SERVICE_NAME
-        if not source.is_file():
-            self.stderr.write(f"Service file not found at {source}")
-            return
+        import radioserver.settings as settings_mod
+        working_dir = Path(settings_mod.__file__).resolve().parent.parent
+        python = sys.executable
+
+        # Determine the user who owns the working directory
+        import os
+        import pwd
+        stat = os.stat(working_dir)
+        user = pwd.getpwuid(stat.st_uid).pw_name
+
+        service_content = SERVICE_TEMPLATE.format(
+            user=user,
+            working_dir=working_dir,
+            python=python,
+        )
 
         dest = SYSTEMD_DIR / SERVICE_NAME
 
-        # Update the service file with the current Python and working directory
-        python_path = shutil.which("python3") or sys.executable
-        working_dir = source.parent / "server"
-        service_content = source.read_text()
-        service_content = service_content.replace(
-            "/usr/bin/python3", python_path
-        ).replace(
-            "/home/chris/radioserver/server", str(working_dir)
-        )
-
-        # Write to systemd directory (requires root)
         try:
             dest.write_text(service_content)
         except PermissionError:
             self.stderr.write(
                 "Permission denied. Run with sudo:\n"
-                f"  sudo radioserver install_service"
+                "  sudo ~/.local/bin/radioserver install_service"
             )
             return
 
@@ -50,7 +64,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"Installed and started {SERVICE_NAME}.\n"
-            f"  Python: {python_path}\n"
+            f"  Python: {python}\n"
             f"  Working dir: {working_dir}\n"
+            f"  User: {user}\n"
             f"  Check status: systemctl status radioserver"
         )
