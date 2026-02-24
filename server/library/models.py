@@ -180,6 +180,33 @@ def _generate_api_key():
     return secrets.token_hex(32)
 
 
+class AIServiceManager(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    display_name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["display_name"]
+        verbose_name = "AI service"
+        verbose_name_plural = "AI services"
+
+    def __str__(self):
+        return self.display_name
+
+
+class AIServiceError(models.Model):
+    service = models.ForeignKey(
+        AIServiceManager, on_delete=models.CASCADE, related_name="errors"
+    )
+    error_message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.service} — {self.created_at:%Y-%m-%d %H:%M}"
+
+
 class ApiKey(models.Model):
     key = models.CharField(max_length=64, unique=True, default=_generate_api_key)
     label = models.CharField(max_length=200, blank=True, default="")

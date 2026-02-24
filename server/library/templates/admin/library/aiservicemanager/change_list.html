@@ -1,0 +1,138 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}AI Services{% endblock %}
+
+{% block content_title %}<h1>AI Services</h1>{% endblock %}
+
+{% block content %}
+<style>
+  .ai-services-table { width: 100%; border-collapse: collapse; }
+  .ai-services-table th,
+  .ai-services-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #ddd; }
+  .ai-services-table th { background: #f8f8f8; }
+  .status-configured { color: #2e7d32; font-weight: bold; }
+  .status-not-configured { color: #c62828; font-weight: bold; }
+  .key-form { display: flex; gap: 6px; align-items: center; }
+  .key-form input[type="password"] { width: 280px; padding: 4px 8px; }
+  .btn { padding: 4px 12px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; background: #fff; }
+  .btn:hover { background: #f0f0f0; }
+  .btn-test { margin-left: 4px; }
+  .test-result { margin-left: 8px; font-size: 0.9em; }
+  .test-success { color: #2e7d32; }
+  .test-failure { color: #c62828; }
+  .spinner { display: none; margin-left: 8px; }
+</style>
+
+<table class="ai-services-table">
+  <thead>
+    <tr>
+      <th>Service</th>
+      <th>Status</th>
+      <th>Recent Errors</th>
+      <th>Set API Key</th>
+      <th>Test</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for svc in services %}
+    <tr data-pk="{{ svc.pk }}" data-name="{{ svc.name }}">
+      <td>{{ svc.display_name }}</td>
+      <td>
+        {% if svc.key_configured %}
+          <span class="status-configured">Configured</span>
+        {% else %}
+          <span class="status-not-configured">Not configured</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if svc.recent_errors > 0 %}
+          <a href="{% url 'admin:library_aiserviceerror_changelist' %}?service__id__exact={{ svc.pk }}">
+            {{ svc.recent_errors }}
+          </a>
+        {% else %}
+          0
+        {% endif %}
+      </td>
+      <td>
+        <form class="key-form" data-pk="{{ svc.pk }}" onsubmit="return saveKey(event, {{ svc.pk }})">
+          <input type="password" name="api_key" placeholder="Enter API key..." autocomplete="off">
+          <button type="submit" class="btn">Save Key</button>
+        </form>
+      </td>
+      <td>
+        <button class="btn btn-test" onclick="testBackend({{ svc.pk }})">Test</button>
+        <span class="spinner" id="spinner-{{ svc.pk }}">Testing...</span>
+        <span class="test-result" id="result-{{ svc.pk }}"></span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function getCookie(name) {
+  const cookies = document.cookie.split(';');
+  for (let c of cookies) {
+    c = c.trim();
+    if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
+  }
+  return '';
+}
+
+function saveKey(event, pk) {
+  event.preventDefault();
+  const form = event.target;
+  const input = form.querySelector('input[name="api_key"]');
+  const key = input.value.trim();
+  if (!key) { alert('Please enter an API key.'); return false; }
+
+  const formData = new FormData();
+  formData.append('api_key', key);
+  formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+
+  fetch(pk + '/set-key/', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(err => alert('Request failed: ' + err));
+
+  return false;
+}
+
+function testBackend(pk) {
+  const spinner = document.getElementById('spinner-' + pk);
+  const result = document.getElementById('result-' + pk);
+  spinner.style.display = 'inline';
+  result.textContent = '';
+  result.className = 'test-result';
+
+  fetch(pk + '/test/')
+    .then(r => r.json())
+    .then(data => {
+      spinner.style.display = 'none';
+      if (data.success) {
+        result.textContent = 'OK: ' + data.message;
+        result.className = 'test-result test-success';
+      } else {
+        result.textContent = 'Error: ' + data.message;
+        result.className = 'test-result test-failure';
+      }
+    })
+    .catch(err => {
+      spinner.style.display = 'none';
+      result.textContent = 'Request failed: ' + err;
+      result.className = 'test-result test-failure';
+    });
+}
+</script>
+{% endblock %}

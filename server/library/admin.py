@@ -10,7 +10,17 @@ from django.urls import path
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from library.models import Album, ApiKey, Artist, GenreGroup, PlaylistItem, PlaylistSettings, Track
+from library.models import (
+    AIServiceError,
+    AIServiceManager,
+    Album,
+    ApiKey,
+    Artist,
+    GenreGroup,
+    PlaylistItem,
+    PlaylistSettings,
+    Track,
+)
 from library.views import has_cover, _nuke_cover_art
 
 
@@ -383,3 +393,101 @@ class PlaylistSettingsAdmin(admin.ModelAdmin):
         obj, _ = PlaylistSettings.objects.get_or_create(pk=1)
         from django.shortcuts import redirect
         return redirect(f"../playlistsettings/{obj.pk}/change/")
+
+
+@admin.register(AIServiceManager)
+class AIServiceManagerAdmin(admin.ModelAdmin):
+    list_display = ["display_name"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<int:pk>/set-key/",
+                self.admin_site.admin_view(self.set_key_view),
+                name="library_aiservicemanager_set_key",
+            ),
+            path(
+                "<int:pk>/test/",
+                self.admin_site.admin_view(self.test_view),
+                name="library_aiservicemanager_test",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        from library.ai import CONF_KEYS, ensure_services
+
+        ensure_services()
+
+        services = []
+        for svc in AIServiceManager.objects.all():
+            conf_key, settings_attr = CONF_KEYS.get(svc.name, (None, None))
+            key_configured = bool(settings_attr and getattr(settings, settings_attr, ""))
+            recent_errors = svc.errors.count()
+            services.append({
+                "pk": svc.pk,
+                "name": svc.name,
+                "display_name": svc.display_name,
+                "key_configured": key_configured,
+                "recent_errors": recent_errors,
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "AI Services",
+            "services": services,
+            "opts": self.model._meta,
+            "has_add_permission": False,
+        }
+        return TemplateResponse(
+            request,
+            "admin/library/aiservicemanager/change_list.html",
+            context,
+        )
+
+    def set_key_view(self, request, pk):
+        from library.ai import save_api_key
+
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        svc = AIServiceManager.objects.get(pk=pk)
+        key = request.POST.get("api_key", "").strip()
+        if not key:
+            return JsonResponse({"error": "No key provided"}, status=400)
+        try:
+            save_api_key(svc.name, key)
+            return JsonResponse({"ok": True})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def test_view(self, request, pk):
+        from library.ai import test_backend
+
+        svc = AIServiceManager.objects.get(pk=pk)
+        success, message = test_backend(svc.name)
+        return JsonResponse({"success": success, "message": message})
+
+
+@admin.register(AIServiceError)
+class AIServiceErrorAdmin(admin.ModelAdmin):
+    list_display = ["service", "short_message", "created_at"]
+    list_filter = ["service"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Error message")
+    def short_message(self, obj):
+        msg = obj.error_message
+        if len(msg) > 120:
+            return msg[:120] + "..."
+        return msg

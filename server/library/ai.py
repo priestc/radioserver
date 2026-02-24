@@ -1,9 +1,28 @@
 from __future__ import annotations
 
+import configparser
 import re
 import time
+from pathlib import Path
 
 from django.conf import settings
+
+
+CONF_KEYS = {
+    "openai": ("openai_key", "OPENAI_API_KEY"),
+    "claude": ("anthropic_key", "ANTHROPIC_API_KEY"),
+    "google": ("google_ai_key", "GOOGLE_AI_API_KEY"),
+    "deepseek": ("deepseek_key", "DEEPSEEK_API_KEY"),
+    "groq": ("groq_key", "GROQ_API_KEY"),
+}
+
+DISPLAY_NAMES = {
+    "openai": "OpenAI",
+    "claude": "Claude",
+    "google": "Google Gemini",
+    "deepseek": "DeepSeek",
+    "groq": "Groq",
+}
 
 
 def _ask_openai(prompt: str) -> str:
@@ -95,6 +114,61 @@ def get_available_backends() -> list[str]:
     return available
 
 
+def save_api_key(name: str, key: str) -> None:
+    """Write an API key to ~/.radioserver.conf and update settings in-memory."""
+    if name not in CONF_KEYS:
+        raise ValueError(f"Unknown backend: {name}")
+    conf_key, settings_attr = CONF_KEYS[name]
+    conf_path = Path.home() / ".radioserver.conf"
+    config = configparser.ConfigParser()
+    config.read(conf_path)
+    if not config.has_section("api"):
+        config.add_section("api")
+    config.set("api", conf_key, key)
+    with open(conf_path, "w") as f:
+        config.write(f)
+    setattr(settings, settings_attr, key)
+
+
+def test_backend(name: str) -> tuple[bool, str]:
+    """Test a backend with a simple prompt. Returns (success, message)."""
+    try:
+        ask = get_backend(name)
+        answer = ask("What is 2+2? Reply with just the number.")
+        return True, answer
+    except Exception as e:
+        return False, str(e)
+
+
+def ensure_services() -> None:
+    """Create AIServiceManager rows for any missing backends."""
+    from library.models import AIServiceManager
+
+    for name, display in DISPLAY_NAMES.items():
+        AIServiceManager.objects.get_or_create(
+            name=name, defaults={"display_name": display}
+        )
+
+
+def _log_rate_limit_error(ask_fn, error_str: str) -> None:
+    """Log a 429/rate-limit error to AIServiceError."""
+    from library.models import AIServiceError, AIServiceManager
+
+    # Find which backend this ask_fn belongs to
+    backend_name = None
+    for name, (_, fn) in BACKENDS.items():
+        if fn is ask_fn:
+            backend_name = name
+            break
+    if backend_name is None:
+        return
+    try:
+        service = AIServiceManager.objects.get(name=backend_name)
+        AIServiceError.objects.create(service=service, error_message=error_str)
+    except AIServiceManager.DoesNotExist:
+        pass
+
+
 def lookup_year(ask, title: str, artist: str) -> int | None:
     """Query an AI backend for a track's release year with retry logic."""
     prompt = (
@@ -114,6 +188,7 @@ def lookup_year(ask, title: str, artist: str) -> int | None:
             if "insufficient_quota" in error_str:
                 raise
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                _log_rate_limit_error(ask, error_str)
                 time.sleep(10 * (attempt + 1))
             else:
                 raise
