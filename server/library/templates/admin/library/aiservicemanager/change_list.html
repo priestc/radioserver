@@ -13,6 +13,8 @@
   .ai-services-table th { background: #f8f8f8; }
   .status-configured { color: #2e7d32; font-weight: bold; }
   .status-not-configured { color: #c62828; font-weight: bold; }
+  .status-cooloff { color: #e65100; font-weight: bold; }
+  .status-disabled { color: #9e9e9e; font-weight: bold; }
   .key-form { display: flex; gap: 6px; align-items: center; }
   .key-form input[type="password"] { width: 280px; padding: 4px 8px; }
   .btn { padding: 4px 12px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; background: #fff; }
@@ -22,11 +24,14 @@
   .test-success { color: #2e7d32; }
   .test-failure { color: #c62828; }
   .spinner { display: none; margin-left: 8px; }
+  .row-disabled td { opacity: 0.5; }
+  .row-disabled td:first-child { opacity: 1; }
 </style>
 
 <table class="ai-services-table">
   <thead>
     <tr>
+      <th>Enabled</th>
       <th>Service</th>
       <th>Status</th>
       <th>Recent Errors</th>
@@ -36,10 +41,19 @@
   </thead>
   <tbody>
     {% for svc in services %}
-    <tr data-pk="{{ svc.pk }}" data-name="{{ svc.name }}">
+    <tr data-pk="{{ svc.pk }}" data-name="{{ svc.name }}"{% if not svc.enabled %} class="row-disabled"{% endif %}>
+      <td>
+        <input type="checkbox"
+               {% if svc.enabled %}checked{% endif %}
+               onchange="toggleEnabled({{ svc.pk }}, this)">
+      </td>
       <td>{{ svc.display_name }}</td>
       <td>
-        {% if svc.key_configured %}
+        {% if not svc.enabled %}
+          <span class="status-disabled">Disabled</span>
+        {% elif svc.cooloff %}
+          <span class="status-cooloff">429 Cool-off</span>
+        {% elif svc.key_configured %}
           <span class="status-configured">Configured</span>
         {% else %}
           <span class="status-not-configured">Not configured</span>
@@ -78,6 +92,26 @@ function getCookie(name) {
     if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
   }
   return '';
+}
+
+function toggleEnabled(pk, checkbox) {
+  fetch(pk + '/toggle-enabled/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown error'));
+      checkbox.checked = !checkbox.checked;
+    }
+  })
+  .catch(err => {
+    alert('Request failed: ' + err);
+    checkbox.checked = !checkbox.checked;
+  });
 }
 
 function saveKey(event, pk) {

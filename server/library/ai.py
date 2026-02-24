@@ -125,10 +125,15 @@ def get_backend(name: str):
 
 
 def get_available_backends() -> list[str]:
-    """Return list of backend names that have API keys configured."""
+    """Return list of backend names that have API keys configured and are enabled."""
+    from library.models import AIServiceManager
+
+    disabled = set(
+        AIServiceManager.objects.filter(enabled=False).values_list("name", flat=True)
+    )
     available = []
     for name, (setting_name, _) in BACKENDS.items():
-        if getattr(settings, setting_name, ""):
+        if getattr(settings, setting_name, "") and name not in disabled:
             available.append(name)
     return available
 

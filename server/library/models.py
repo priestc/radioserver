@@ -183,6 +183,7 @@ def _generate_api_key():
 class AIServiceManager(models.Model):
     name = models.CharField(max_length=50, unique=True)
     display_name = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["display_name"]

@@ -483,25 +483,38 @@ class AIServiceManagerAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.test_view),
                 name="library_aiservicemanager_test",
             ),
+            path(
+                "<int:pk>/toggle-enabled/",
+                self.admin_site.admin_view(self.toggle_enabled_view),
+                name="library_aiservicemanager_toggle_enabled",
+            ),
         ]
         return custom_urls + super().get_urls()
 
     def changelist_view(self, request, extra_context=None):
+        from datetime import timedelta
+
+        from django.utils import timezone as tz
+
         from library.ai import CONF_KEYS, ensure_services
 
         ensure_services()
+        cutoff = tz.now() - timedelta(minutes=5)
 
         services = []
         for svc in AIServiceManager.objects.all():
             conf_key, settings_attr = CONF_KEYS.get(svc.name, (None, None))
             key_configured = bool(settings_attr and getattr(settings, settings_attr, ""))
             recent_errors = svc.errors.count()
+            cooloff = svc.errors.filter(created_at__gte=cutoff).exists()
             services.append({
                 "pk": svc.pk,
                 "name": svc.name,
                 "display_name": svc.display_name,
                 "key_configured": key_configured,
                 "recent_errors": recent_errors,
+                "cooloff": cooloff,
+                "enabled": svc.enabled,
             })
 
         context = {
@@ -538,6 +551,14 @@ class AIServiceManagerAdmin(admin.ModelAdmin):
         svc = AIServiceManager.objects.get(pk=pk)
         success, message = test_backend(svc.name)
         return JsonResponse({"success": success, "message": message})
+
+    def toggle_enabled_view(self, request, pk):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        svc = AIServiceManager.objects.get(pk=pk)
+        svc.enabled = not svc.enabled
+        svc.save(update_fields=["enabled"])
+        return JsonResponse({"ok": True, "enabled": svc.enabled})
 
 
 @admin.register(AIServiceError)
