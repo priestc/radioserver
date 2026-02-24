@@ -82,3 +82,5 @@ _config = _configparser.ConfigParser()
 _config.read(Path.home() / ".radioserver.conf")
 
 MUSIC_LIBRARY_PATH = _config.get("library", "path", fallback="/path/to/your/music")
+
+OPENAI_API_KEY = _config.get("api", "openai_key", fallback="")

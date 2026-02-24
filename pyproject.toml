@@ -13,6 +13,7 @@ dependencies = [
     "qrcode",
     "gunicorn",
     "whitenoise",
+    "openai",
 ]
 
 [project.scripts]
