@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
 
 
 CONF_KEYS = {
@@ -93,6 +94,23 @@ BACKENDS = {
 }
 
 
+def _check_cooloff(name: str) -> None:
+    """Raise ValueError if a 429 error occurred for this backend in the last 5 minutes."""
+    from library.models import AIServiceError, AIServiceManager
+
+    try:
+        service = AIServiceManager.objects.get(name=name)
+    except AIServiceManager.DoesNotExist:
+        return
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(minutes=5)
+    if service.errors.filter(created_at__gte=cutoff).exists():
+        raise ValueError(
+            f"{name}: call canceled due to 429 cool-off "
+            f"(rate-limit error within the last 5 minutes)"
+        )
+
+
 def get_backend(name: str):
     """Return the ask function for the given backend name, or raise ValueError."""
     if name not in BACKENDS:
@@ -102,6 +120,7 @@ def get_backend(name: str):
         raise ValueError(
             f"{setting_name} not set. Configure it in ~/.radioserver.conf"
         )
+    _check_cooloff(name)
     return ask_fn
 
 
