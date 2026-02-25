@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+from multiprocessing import Pool
 from pathlib import Path
 
-from django.conf import settings
 from django.core.management.base import BaseCommand
 
 import mutagen
 from mutagen import File as MutagenFile
 from mutagen.id3 import TXXX
-from mutagen.mp4 import MP4
 
 
 # EBU R128 target loudness
@@ -132,6 +131,32 @@ def _has_replaygain(path: str) -> bool:
     return False
 
 
+def _process_track(args: tuple) -> tuple[str, str, str]:
+    """Process a single track. Returns (path, status, detail).
+
+    Designed to run in a worker process — no Django ORM access.
+    """
+    path, force = args
+
+    if not Path(path).is_file():
+        return (path, "missing", "")
+
+    if not force and _has_replaygain(path):
+        return (path, "skipped", "")
+
+    loudness = _analyze_loudness(path)
+    if loudness is None:
+        return (path, "error", "could not analyze")
+
+    gain_db = _compute_gain(loudness["input_i"])
+    peak = loudness["input_tp"]
+
+    if _write_replaygain_tags(path, gain_db, peak):
+        return (path, "tagged", f"gain={gain_db:+.2f} dB, peak={peak:.2f} dBTP")
+    else:
+        return (path, "error", "failed to write tags")
+
+
 class Command(BaseCommand):
     help = "Analyze tracks and write ReplayGain tags for volume normalization."
 
@@ -145,6 +170,12 @@ class Command(BaseCommand):
             "--album",
             type=int,
             help="Only process tracks from this album ID.",
+        )
+        parser.add_argument(
+            "--cores",
+            type=int,
+            default=1,
+            help="Number of parallel processes (default: 1).",
         )
 
     def handle(self, **options):
@@ -165,42 +196,41 @@ class Command(BaseCommand):
         if options["album"]:
             qs = qs.filter(album_id=options["album"])
 
-        tracks = list(qs.order_by("id"))
-        total = len(tracks)
+        paths = list(qs.order_by("id").values_list("file_path", flat=True))
+        total = len(paths)
+        cores = max(1, options["cores"])
+        force = options["force"]
+
+        self.stdout.write(f"Processing {total} tracks with {cores} core(s)...\n")
+
         tagged = 0
         skipped = 0
         errors = 0
 
-        for i, track in enumerate(tracks, 1):
-            path = track.file_path
-            if not Path(path).is_file():
+        work = [(p, force) for p in paths]
+
+        if cores == 1:
+            results = (_process_track(w) for w in work)
+        else:
+            pool = Pool(processes=cores)
+            results = pool.imap_unordered(_process_track, work)
+
+        for i, (path, status, detail) in enumerate(results, 1):
+            if status == "tagged":
+                self.stdout.write(f"  [{i}/{total}] {Path(path).name}: {detail}")
+                tagged += 1
+            elif status == "skipped":
+                skipped += 1
+            elif status == "missing":
                 self.stdout.write(f"  [{i}/{total}] MISSING: {path}")
                 errors += 1
-                continue
-
-            if not options["force"] and _has_replaygain(path):
-                skipped += 1
-                continue
-
-            self.stdout.write(f"  [{i}/{total}] Analyzing: {track}")
-
-            loudness = _analyze_loudness(path)
-            if loudness is None:
-                self.stdout.write(self.style.WARNING(f"    Could not analyze"))
+            elif status == "error":
+                self.stdout.write(self.style.WARNING(f"  [{i}/{total}] {Path(path).name}: {detail}"))
                 errors += 1
-                continue
 
-            gain_db = _compute_gain(loudness["input_i"])
-            peak = loudness["input_tp"]
-
-            if _write_replaygain_tags(path, gain_db, peak):
-                self.stdout.write(
-                    f"    gain={gain_db:+.2f} dB, peak={peak:.2f} dBTP"
-                )
-                tagged += 1
-            else:
-                self.stdout.write(self.style.WARNING(f"    Failed to write tags"))
-                errors += 1
+        if cores > 1:
+            pool.close()
+            pool.join()
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS(
