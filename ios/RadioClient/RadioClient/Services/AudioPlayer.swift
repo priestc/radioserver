@@ -240,6 +240,14 @@ class AudioPlayer: ObservableObject {
             self?.songDidFinish()
         }
 
+        // Apply ReplayGain volume adjustment
+        if let gainDB = song.replaygainTrackGain {
+            let linear = pow(10.0, gainDB / 20.0)
+            player?.volume = Float(min(linear, 1.0))
+        } else {
+            player?.volume = 1.0
+        }
+
         player?.play()
         isPlaying = true
         loadArtworkForCurrentSong()

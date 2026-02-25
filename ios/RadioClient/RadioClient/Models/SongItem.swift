@@ -9,12 +9,14 @@ struct SongItem: Codable, Identifiable, Equatable {
     let year: Int?
     let duration: Double?
     let fileFormat: String?
+    let replaygainTrackGain: Double?
 
     enum CodingKeys: String, CodingKey {
         case id, title, artist, album
         case albumId = "album_id"
         case year, duration
         case fileFormat = "file_format"
+        case replaygainTrackGain = "replaygain_track_gain"
     }
 
     var fileExtension: String {

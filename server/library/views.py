@@ -241,6 +241,8 @@ def client_sync(request):
         size = track.file_size or 0
         if total + size > buffer_bytes and download:
             break
+        from library.tags import read_replaygain
+        rg_gain = read_replaygain(track.file_path)
         download.append({
             "id": item.id,
             "title": track.title,
@@ -250,6 +252,7 @@ def client_sync(request):
             "year": track.year,
             "duration": track.duration,
             "file_format": track.format,
+            "replaygain_track_gain": rg_gain,
         })
         total += size
         if total >= buffer_bytes:

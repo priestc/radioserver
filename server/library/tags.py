@@ -83,6 +83,44 @@ def _extract_year_from_title(title: str) -> int | None:
     return None
 
 
+def read_replaygain(path: str | Path) -> float | None:
+    """Read ReplayGain track gain in dB from file tags. Returns None if not set."""
+    path = str(path)
+    try:
+        audio = MutagenFile(path)
+    except mutagen.MutagenError:
+        return None
+    if audio is None:
+        return None
+
+    type_name = type(audio).__name__
+    gain_str = None
+
+    if type_name == "MP3":
+        if audio.tags:
+            for frame in audio.tags.getall("TXXX"):
+                if frame.desc.lower() == "replaygain_track_gain":
+                    gain_str = str(frame.text[0]) if frame.text else None
+                    break
+    elif type_name in ("FLAC", "OggVorbis", "OggOpus"):
+        vals = audio.get("replaygain_track_gain")
+        if vals:
+            gain_str = str(vals[0]) if isinstance(vals, list) else str(vals)
+    elif type_name == "MP4":
+        vals = audio.get("----:com.apple.iTunes:replaygain_track_gain")
+        if vals:
+            gain_str = vals[0].decode("utf-8") if isinstance(vals[0], bytes) else str(vals[0])
+
+    if gain_str:
+        # Parse "+3.21 dB" or "-1.50 dB"
+        gain_str = gain_str.strip().replace(" dB", "").replace("dB", "")
+        try:
+            return float(gain_str)
+        except ValueError:
+            pass
+    return None
+
+
 FORMAT_MAP = {
     "MP3": "mp3",
     "FLAC": "flac",
