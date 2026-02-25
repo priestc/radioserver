@@ -361,7 +361,7 @@ class AlbumAdmin(admin.ModelAdmin):
 
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
-    list_display = ["display_title", "display_artist_name", "album", "track_number", "genre", "format", "duration", "exclude_from_playlist"]
+    list_display = ["display_title", "display_artist_name", "album", "track_number", "genre", "format", "duration", "replaygain", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
     search_fields = ["title", "artists__name", "album__title", "source"]
@@ -437,6 +437,14 @@ class TrackAdmin(admin.ModelAdmin):
     @admin.display(description="Artist")
     def display_artist_name(self, obj):
         return obj.display_artist
+
+    @admin.display(description="RG")
+    def replaygain(self, obj):
+        from library.tags import read_replaygain
+        gain = read_replaygain(obj.file_path)
+        if gain is None:
+            return ""
+        return f"{gain:+.1f} dB"
 
     @admin.display(description="Title")
     def display_title(self, obj):
