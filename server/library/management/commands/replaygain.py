@@ -85,17 +85,16 @@ def _write_replaygain_tags(path: str, gain_db: float, peak: float) -> bool:
         audio["----:com.apple.iTunes:replaygain_track_peak"] = \
             [mutagen.mp4.MP4FreeForm(peak_str.encode("utf-8"))]
     else:
-        # Try easy tags as fallback
-        try:
-            easy = MutagenFile(path, easy=True)
-            if easy and easy.tags is not None:
-                easy.tags["replaygain_track_gain"] = [gain_str]
-                easy.tags["replaygain_track_peak"] = [peak_str]
-                easy.save()
-                return True
-        except mutagen.MutagenError:
-            pass
-        return False
+        # For any other ID3-based format, try TXXX frames directly
+        tags = getattr(audio, "tags", None)
+        if tags is not None and hasattr(tags, "add"):
+            try:
+                tags.add(TXXX(encoding=3, desc="replaygain_track_gain", text=[gain_str]))
+                tags.add(TXXX(encoding=3, desc="replaygain_track_peak", text=[peak_str]))
+            except Exception:
+                return False
+        else:
+            return False
 
     try:
         audio.save()
