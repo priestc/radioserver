@@ -133,4 +133,27 @@ class Command(BaseCommand):
             ).update(source=url)
             self.stdout.write(f"  Tagged {tagged} tracks with source URL")
 
+        # Apply ReplayGain tags for volume normalization
+        from library.management.commands.replaygain import (
+            _analyze_loudness, _compute_gain, _write_replaygain_tags,
+        )
+
+        new_tracks = list(
+            Track.objects.filter(file_path__startswith=str(library_dir))
+        )
+        if new_tracks:
+            self.stdout.write(f"\nApplying ReplayGain to {len(new_tracks)} tracks...")
+            rg_ok = 0
+            for track in new_tracks:
+                loudness = _analyze_loudness(track.file_path)
+                if loudness is None:
+                    self.stdout.write(f"  Could not analyze: {track.title}")
+                    continue
+                gain_db = _compute_gain(loudness["input_i"])
+                if _write_replaygain_tags(track.file_path, gain_db, loudness["input_tp"]):
+                    rg_ok += 1
+                else:
+                    self.stdout.write(f"  Failed to tag: {track.title}")
+            self.stdout.write(f"  ReplayGain tagged {rg_ok} track(s)")
+
         self.stdout.write(self.style.SUCCESS("Done."))
