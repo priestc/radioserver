@@ -53,6 +53,7 @@
                 <th>Artist</th>
                 <th>Current Year</th>
                 <th>AI Suggested Year</th>
+                <th>Verify</th>
             </tr>
         </thead>
         <tbody>
@@ -68,6 +69,10 @@
                     <span class="spinner"></span>
                     <span class="backend-tag" style="display:none"></span>
                     <span class="error-text" style="display:none"></span>
+                </td>
+                <td>
+                    <a href="https://www.google.com/search?q=when+was+{{ item.title|urlencode }}+by+{{ item.artist|urlencode }}+originally+released%3F"
+                       target="_blank" class="button">Verify with Google</a>
                 </td>
             </tr>
             {% endfor %}
