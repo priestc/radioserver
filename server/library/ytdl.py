@@ -23,11 +23,16 @@ def get_metadata_from_ytdl(url: str) -> dict:
     Returns dict with keys: album, artist, tracks (list of track metadata dicts).
     """
     cmd = [
-        "yt-dlp", "--dump-json", "--yes-playlist", url,
+        "yt-dlp", "--dump-json", "--yes-playlist", "--ignore-errors", url,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp metadata fetch failed: {result.stderr}")
+    # yt-dlp returns non-zero when some videos are unavailable but still
+    # outputs JSON for the ones that worked. Only fail if we got no output.
+    if not result.stdout.strip():
+        stderr = result.stderr.strip()
+        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
+        detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
+        raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}")
 
     tracks = []
     album_title = ""
@@ -95,23 +100,23 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
         "--add-metadata",
         "--parse-metadata", "playlist_index:%(track_number)s",
         "--yes-playlist",
+        "--ignore-errors",
         "-o", output_template,
         url,
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        # Pull out the last ERROR line if present for a concise message
-        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
-        detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
-        raise RuntimeError(f"yt-dlp exited with code {result.returncode}: {detail}")
 
     SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     files = []
     for item in dest_dir.rglob("*"):
         if item.suffix.lstrip(".").lower() in SUPPORTED_EXTS:
             files.append(item)
+    if not files:
+        stderr = result.stderr.strip()
+        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
+        detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
+        raise RuntimeError(f"yt-dlp downloaded no audio files: {detail}")
     return sorted(files)
 
 
