@@ -371,8 +371,57 @@ class AlbumAdmin(admin.ModelAdmin):
         write_album_tags(obj)
 
 
+class TrackForm(forms.ModelForm):
+    track_artists = forms.CharField(
+        required=False,
+        label="Artists",
+        help_text="Comma-separated list of artist names.",
+        widget=forms.TextInput(attrs={"style": "width: 400px;"}),
+    )
+
+    class Meta:
+        model = Track
+        exclude = ["artists"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            names = list(
+                self.instance.artists
+                .order_by("trackartist__position")
+                .values_list("name", flat=True)
+            )
+            self.fields["track_artists"].initial = ", ".join(names)
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if instance.pk:
+            from library.models import TrackArtist
+            raw = self.cleaned_data.get("track_artists", "")
+            names = [n.strip() for n in raw.split(",") if n.strip()]
+            TrackArtist.objects.filter(track=instance).delete()
+            for i, name in enumerate(names):
+                artist, _ = Artist.objects.get_or_create(name=name)
+                TrackArtist.objects.create(track=instance, artist=artist, position=i)
+
+            # Write artist tag to file
+            import mutagen
+            from mutagen import File as MutagenFile
+            try:
+                audio = MutagenFile(instance.file_path, easy=True)
+                if audio is not None:
+                    if audio.tags is None:
+                        audio.add_tags()
+                    audio.tags["artist"] = [", ".join(names)]
+                    audio.save()
+            except mutagen.MutagenError:
+                pass
+        return instance
+
+
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
+    form = TrackForm
     list_display = ["display_title", "display_artist_name", "album", "track_number", "genre", "format", "duration", "replaygain", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
