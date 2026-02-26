@@ -117,7 +117,7 @@ class ArtistAdmin(admin.ModelAdmin):
         if not obj.pk:
             return ""
         from django.urls import reverse
-        tracks = obj.tracks.order_by("album__title", "track_number", "title")
+        tracks = obj.tracks.order_by("title")
         if not tracks.exists():
             return "No tracks"
         items = []
