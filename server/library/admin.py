@@ -377,7 +377,7 @@ class TrackAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
     search_fields = ["title", "artists__name", "album__title", "source"]
-    readonly_fields = ["ai_year_lookup"]
+    readonly_fields = ["audio_player", "ai_year_lookup"]
 
     def get_urls(self):
         custom_urls = [
@@ -386,8 +386,34 @@ class TrackAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.ai_year_lookup_view),
                 name="library_track_ai_year_lookup",
             ),
+            path(
+                "<int:track_id>/stream/",
+                self.admin_site.admin_view(self.stream_view),
+                name="library_track_stream",
+            ),
         ]
         return custom_urls + super().get_urls()
+
+    def stream_view(self, request, track_id):
+        from django.http import FileResponse
+        track = Track.objects.get(pk=track_id)
+        file_path = Path(track.file_path)
+        if not file_path.is_file():
+            return JsonResponse({"error": "File not found"}, status=404)
+        return FileResponse(open(file_path, "rb"))
+
+    @admin.display(description="Player")
+    def audio_player(self, obj):
+        if not obj.pk:
+            return ""
+        from django.urls import reverse
+        url = reverse("admin:library_track_stream", args=[obj.pk])
+        return format_html(
+            '<audio controls preload="none" style="width:100%; max-width:500px;">'
+            '<source src="{}">'
+            '</audio>',
+            url,
+        )
 
     def ai_year_lookup_view(self, request, track_id):
         from library.ai import lookup_year_with_fallback
