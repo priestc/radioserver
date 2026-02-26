@@ -206,36 +206,90 @@ def run_download(download_id: int) -> None:
         dl.save(update_fields=["status", "progress_message"])
 
         artist_name = dl.artist_name or "from youtube music"
-        library_dir = Path(settings.MUSIC_LIBRARY_PATH) / artist_name
+        library_root = Path(settings.MUSIC_LIBRARY_PATH)
+        library_dir = library_root / artist_name
 
         library_dir.mkdir(parents=True, exist_ok=True)
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
+        # Track all library dirs affected (for source tagging + ReplayGain)
+        affected_dirs = set()
         try:
             get_audio_files_from_ytdl(dl.url, tmp_dir)
 
-            # Process each album subdirectory
-            for item in tmp_dir.iterdir():
-                if not item.is_dir():
-                    continue
-
-                # Extract album art
-                dl.progress_message = "Extracting album art..."
+            if dl.use_track_albums and dl.track_overrides:
+                # Per-track mode: each track goes to its own artist/album folder
+                dl.progress_message = "Organizing tracks by per-track artist/album..."
                 dl.save(update_fields=["progress_message"])
-                get_albumart_from_ytdl(dl.url, item)
 
-                # Remove stray image files (keep only folder.jpg)
-                for f in item.iterdir():
-                    if f.suffix.lower() in (".jpg", ".png", ".webp") and f.name != "folder.jpg":
-                        f.unlink()
+                # Build override lookup keyed by 1-based track number
+                overrides = {i + 1: ov for i, ov in enumerate(dl.track_overrides)}
 
-                # Move to library
-                dest = library_dir / item.name
-                if dest.exists():
+                # Collect all audio files from all subdirectories
+                SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+                audio_files = sorted(
+                    f for f in tmp_dir.rglob("*")
+                    if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS
+                )
+
+                # Extract album art once per unique destination dir
+                art_extracted = set()
+
+                for audio_file in audio_files:
+                    # Parse track number from filename (format: "NN title.ext")
+                    fname = audio_file.stem
+                    parts = fname.split(" ", 1)
+                    try:
+                        track_num = int(parts[0])
+                    except (ValueError, IndexError):
+                        track_num = None
+
+                    ov = overrides.get(track_num, {}) if track_num else {}
+                    track_artist = ov.get("artist", "").strip() or artist_name
+                    track_album = ov.get("album", "").strip() or dl.album_title or "Unknown Album"
+
+                    dest_dir = library_root / track_artist / track_album
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    affected_dirs.add(dest_dir)
+
+                    # Extract album art for this destination if not yet done
+                    if str(dest_dir) not in art_extracted:
+                        art_extracted.add(str(dest_dir))
+                        if not (dest_dir / "folder.jpg").exists():
+                            dl.progress_message = f"Extracting album art for {track_artist}/{track_album}..."
+                            dl.save(update_fields=["progress_message"])
+                            get_albumart_from_ytdl(dl.url, dest_dir)
+
+                    shutil.move(str(audio_file), str(dest_dir / audio_file.name))
+
+            else:
+                # Standard mode: all tracks go to artist_name/album_subdir/
+                for item in tmp_dir.iterdir():
+                    if not item.is_dir():
+                        continue
+
+                    # Extract album art
+                    dl.progress_message = "Extracting album art..."
+                    dl.save(update_fields=["progress_message"])
+                    get_albumart_from_ytdl(dl.url, item)
+
+                    # Remove stray image files (keep only folder.jpg)
                     for f in item.iterdir():
-                        shutil.move(str(f), str(dest / f.name))
-                else:
-                    shutil.move(str(item), str(dest))
+                        if f.suffix.lower() in (".jpg", ".png", ".webp") and f.name != "folder.jpg":
+                            f.unlink()
+
+                    # Move to library
+                    dest = library_dir / item.name
+                    if dest.exists():
+                        for f in item.iterdir():
+                            shutil.move(str(f), str(dest / f.name))
+                    else:
+                        shutil.move(str(item), str(dest))
+                    affected_dirs.add(dest)
+
+                # If no subdirs were found, library_dir itself is the affected dir
+                if not affected_dirs:
+                    affected_dirs.add(library_dir)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -249,9 +303,10 @@ def run_download(download_id: int) -> None:
 
         # Tag newly created tracks with source URL
         if stats["created"] > 0:
-            Track.objects.filter(source="").filter(
-                file_path__startswith=str(library_dir),
-            ).update(source=dl.url)
+            for adir in affected_dirs:
+                Track.objects.filter(source="").filter(
+                    file_path__startswith=str(adir),
+                ).update(source=dl.url)
 
         # Step 3: Apply ReplayGain
         dl.status = "applying_replaygain"
@@ -262,9 +317,11 @@ def run_download(download_id: int) -> None:
             _analyze_loudness, _compute_gain, _write_replaygain_tags,
         )
 
-        new_tracks = list(
-            Track.objects.filter(file_path__startswith=str(library_dir))
-        )
+        new_tracks = []
+        for adir in affected_dirs:
+            new_tracks.extend(
+                Track.objects.filter(file_path__startswith=str(adir))
+            )
         rg_ok = 0
         for i, track in enumerate(new_tracks, 1):
             dl.progress_message = f"Applying ReplayGain ({i}/{len(new_tracks)})..."

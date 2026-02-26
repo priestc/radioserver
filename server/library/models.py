@@ -225,6 +225,8 @@ class YtdlDownload(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     progress_message = models.TextField(blank=True, default="")
     error_message = models.TextField(blank=True, default="")
+    track_overrides = models.JSONField(default=list, blank=True)
+    use_track_albums = models.BooleanField(default=False)
     album = models.ForeignKey(
         Album, on_delete=models.SET_NULL, null=True, blank=True,
     )

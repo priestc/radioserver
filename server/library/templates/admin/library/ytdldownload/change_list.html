@@ -63,6 +63,13 @@
     <h3 style="font-size: 1em;">Album Artwork</h3>
     <div id="thumbnails-row" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
   </div>
+  <div style="margin-top: 12px;">
+    <label style="cursor:pointer;">
+      <input type="checkbox" id="use-track-album" onchange="toggleUseTrackAlbum()">
+      Use track artist/album
+    </label>
+    <span style="color:#666; font-size:0.9em; margin-left:8px;">When checked, each track is filed under its own artist/album folder.</span>
+  </div>
   <h3 style="margin-top: 12px; font-size: 1em;">Tracks</h3>
   <table class="track-table">
     <thead>
@@ -201,9 +208,9 @@ function showMetadata(data) {
     }
     tr.innerHTML =
       '<td>' + (t.track_number || '') + '</td>' +
-      '<td><input type="text" value="' + (t.title || '').replace(/"/g, '&quot;') + '" readonly></td>' +
-      '<td><input type="text" value="' + (t.artist || '').replace(/"/g, '&quot;') + '" readonly></td>' +
-      '<td><input type="text" value="' + (t.album || '').replace(/"/g, '&quot;') + '" readonly></td>' +
+      '<td><input type="text" class="track-title" value="' + (t.title || '').replace(/"/g, '&quot;') + '"></td>' +
+      '<td><input type="text" class="track-artist" value="' + (t.artist || '').replace(/"/g, '&quot;') + '"></td>' +
+      '<td><input type="text" class="track-album" value="' + (t.album || '').replace(/"/g, '&quot;') + '"></td>' +
       '<td>' + dur + '</td>';
     tbody.appendChild(tr);
   });
@@ -232,9 +239,34 @@ function showMetadata(data) {
   document.getElementById('download-error').textContent = '';
 }
 
+function toggleUseTrackAlbum() {
+  var checked = document.getElementById('use-track-album').checked;
+  document.getElementById('meta-artist').disabled = checked;
+  document.getElementById('meta-album').disabled = checked;
+  document.getElementById('meta-artist').style.opacity = checked ? '0.5' : '1';
+  document.getElementById('meta-album').style.opacity = checked ? '0.5' : '1';
+}
+
 function startDownload() {
   var artist = document.getElementById('meta-artist').value.trim();
   var album = document.getElementById('meta-album').value.trim();
+  var useTrackAlbums = document.getElementById('use-track-album').checked;
+
+  // Collect per-track overrides
+  var tracks = [];
+  var rows = document.getElementById('track-list').querySelectorAll('tr');
+  rows.forEach(function(row) {
+    var title = row.querySelector('.track-title');
+    var trackArtist = row.querySelector('.track-artist');
+    var trackAlbum = row.querySelector('.track-album');
+    if (title) {
+      tracks.push({
+        title: title.value.trim(),
+        artist: trackArtist ? trackArtist.value.trim() : '',
+        album: trackAlbum ? trackAlbum.value.trim() : '',
+      });
+    }
+  });
 
   var btn = document.getElementById('download-btn');
   var spinner = document.getElementById('download-spinner');
@@ -250,6 +282,8 @@ function startDownload() {
       url: currentUrl,
       artist_name: artist,
       album_title: album,
+      tracks: tracks,
+      use_track_albums: useTrackAlbums,
     }),
     headers: {
       'X-CSRFToken': getCookie('csrftoken'),

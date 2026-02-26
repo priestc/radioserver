@@ -700,13 +700,15 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
         url = data.get("url", "").strip()
         artist_name = data.get("artist_name", "").strip()
         album_title = data.get("album_title", "").strip()
+        track_overrides = data.get("tracks", [])
+        use_track_albums = bool(data.get("use_track_albums", False))
 
         if not url:
             return JsonResponse({"error": "No URL provided"}, status=400)
 
         # Check for duplicate
         from library.models import Album
-        if album_title and artist_name:
+        if album_title and artist_name and not use_track_albums:
             if Album.objects.filter(
                 title__iexact=album_title, artist__name__iexact=artist_name,
             ).exists():
@@ -719,6 +721,8 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
             url=url,
             artist_name=artist_name,
             album_title=album_title,
+            track_overrides=track_overrides,
+            use_track_albums=use_track_albums,
             status="pending",
         )
 
