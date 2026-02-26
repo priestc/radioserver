@@ -23,7 +23,7 @@ def get_metadata_from_ytdl(url: str) -> dict:
     Returns dict with keys: album, artist, tracks (list of track metadata dicts).
     """
     cmd = [
-        "yt-dlp", "--flat-playlist", "--dump-json", url,
+        "yt-dlp", "--dump-json", "--yes-playlist", url,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
