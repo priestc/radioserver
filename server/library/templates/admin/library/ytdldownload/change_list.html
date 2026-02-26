@@ -59,6 +59,10 @@
     <label>Album:</label>
     <input type="text" id="meta-album">
   </div>
+  <div id="thumbnails-section" style="display:none; margin-top: 12px;">
+    <h3 style="font-size: 1em;">Album Artwork</h3>
+    <div id="thumbnails-row" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
+  </div>
   <h3 style="margin-top: 12px; font-size: 1em;">Tracks</h3>
   <table class="track-table">
     <thead>
@@ -199,6 +203,26 @@ function showMetadata(data) {
       '<td>' + dur + '</td>';
     tbody.appendChild(tr);
   });
+
+  // Show thumbnails
+  var thumbSection = document.getElementById('thumbnails-section');
+  var thumbRow = document.getElementById('thumbnails-row');
+  thumbRow.innerHTML = '';
+  var thumbnails = data.thumbnails || [];
+  if (thumbnails.length > 0) {
+    thumbnails.forEach(function(th) {
+      var div = document.createElement('div');
+      div.style.textAlign = 'center';
+      div.innerHTML =
+        '<img src="' + th.url.replace(/"/g, '&quot;') + '" style="max-width:200px; max-height:200px; border:1px solid #ccc; border-radius:4px;">' +
+        '<div style="font-size:0.85em; color:#666; margin-top:4px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+        (th.track_title || '').replace(/</g, '&lt;') + '</div>';
+      thumbRow.appendChild(div);
+    });
+    thumbSection.style.display = 'block';
+  } else {
+    thumbSection.style.display = 'none';
+  }
 
   document.getElementById('metadata-section').style.display = 'block';
   document.getElementById('download-error').textContent = '';

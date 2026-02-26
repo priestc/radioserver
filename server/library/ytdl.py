@@ -7,6 +7,16 @@ import tempfile
 from pathlib import Path
 
 
+def _best_thumbnail(meta: dict) -> str:
+    """Pick the best thumbnail URL from yt-dlp metadata."""
+    # yt-dlp provides a 'thumbnails' list sorted by quality, or a single 'thumbnail'
+    thumbnails = meta.get("thumbnails")
+    if thumbnails:
+        # Pick the last (highest quality) entry
+        return thumbnails[-1].get("url", "")
+    return meta.get("thumbnail", "")
+
+
 def get_metadata_from_ytdl(url: str) -> dict:
     """Fetch album metadata from a YouTube Music URL.
 
@@ -22,6 +32,8 @@ def get_metadata_from_ytdl(url: str) -> dict:
     tracks = []
     album_title = ""
     artist_name = ""
+    seen_thumbnails = []
+    seen_thumbnail_urls = set()
     for line in result.stdout.strip().split("\n"):
         if not line:
             continue
@@ -32,14 +44,30 @@ def get_metadata_from_ytdl(url: str) -> dict:
             artist_name = meta.get("artist") or meta.get("channel") or ""
             if artist_name.endswith(" - Topic"):
                 artist_name = artist_name[: -len(" - Topic")]
+
+        # Extract best thumbnail for this track
+        thumb_url = _best_thumbnail(meta)
+        if thumb_url and thumb_url not in seen_thumbnail_urls:
+            seen_thumbnail_urls.add(thumb_url)
+            seen_thumbnails.append({
+                "url": thumb_url,
+                "track_title": meta.get("title", ""),
+            })
+
         tracks.append({
             "title": meta.get("title", ""),
             "track_number": meta.get("playlist_index"),
             "duration": meta.get("duration"),
             "url": meta.get("url") or meta.get("webpage_url") or "",
+            "thumbnail": thumb_url,
         })
 
-    return {"album": album_title, "artist": artist_name, "tracks": tracks}
+    return {
+        "album": album_title,
+        "artist": artist_name,
+        "tracks": tracks,
+        "thumbnails": seen_thumbnails,
+    }
 
 
 def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
