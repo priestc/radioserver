@@ -100,11 +100,13 @@ def get_metadata_from_ytdl(url: str) -> dict:
         "yt-dlp", "--dump-json", "--yes-playlist", "--ignore-errors", url,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    stderr = result.stderr.strip()
+    error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
+
     # yt-dlp returns non-zero when some videos are unavailable but still
     # outputs JSON for the ones that worked. Only fail if we got no output.
     if not result.stdout.strip():
-        stderr = result.stderr.strip()
-        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
         detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
         raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}")
 
@@ -152,6 +154,7 @@ def get_metadata_from_ytdl(url: str) -> dict:
         "artist": artist_name,
         "tracks": tracks,
         "thumbnails": seen_thumbnails,
+        "errors": error_lines,
     }
 
 

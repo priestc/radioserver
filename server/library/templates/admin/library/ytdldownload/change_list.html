@@ -83,6 +83,7 @@
     </thead>
     <tbody id="track-list"></tbody>
   </table>
+  <div id="metadata-errors" class="error-msg" style="display:none; margin-top: 8px; white-space: pre-wrap;"></div>
   <div style="margin-top: 12px;">
     <button class="btn btn-primary" id="download-btn" onclick="startDownload()">Download</button>
     <span class="spinner" id="download-spinner">Starting...</span>
@@ -251,6 +252,17 @@ function showMetadata(data) {
     thumbSection.style.display = 'block';
   } else {
     thumbSection.style.display = 'none';
+  }
+
+  // Show metadata fetch errors
+  var errorsDiv = document.getElementById('metadata-errors');
+  var errors = data.errors || [];
+  if (errors.length > 0) {
+    errorsDiv.textContent = errors.length + ' track(s) failed to fetch metadata:\n' + errors.join('\n');
+    errorsDiv.style.display = 'block';
+  } else {
+    errorsDiv.textContent = '';
+    errorsDiv.style.display = 'none';
   }
 
   document.getElementById('metadata-section').style.display = 'block';
