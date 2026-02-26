@@ -7,6 +7,33 @@ import tempfile
 from pathlib import Path
 
 
+def _download_thumbnail(url: str, dest_dir: Path) -> Path | None:
+    """Download a thumbnail from a URL and save as folder.jpg in dest_dir.
+
+    Downloads the image, crops to square, and saves as folder.jpg.
+    Returns the path to folder.jpg or None if download failed.
+    """
+    import urllib.request
+
+    dest = dest_dir / "folder.jpg"
+    tmp_path = dest_dir / "folder_tmp.jpg"
+    try:
+        urllib.request.urlretrieve(url, str(tmp_path))
+        # Convert to JPEG and crop to square via ffmpeg
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(tmp_path), "-frames:v", "1", str(dest)],
+            capture_output=True,
+        )
+        tmp_path.unlink(missing_ok=True)
+        if result.returncode != 0 or not dest.exists():
+            return None
+        _crop_to_square(dest)
+        return dest
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        return None
+
+
 def _best_thumbnail(meta: dict) -> str:
     """Pick the best thumbnail URL from yt-dlp metadata."""
     # yt-dlp provides a 'thumbnails' list sorted by quality, or a single 'thumbnail'
@@ -258,7 +285,9 @@ def run_download(download_id: int) -> None:
                         if not (dest_dir / "folder.jpg").exists():
                             dl.progress_message = f"Extracting album art for {track_artist}/{track_album}..."
                             dl.save(update_fields=["progress_message"])
-                            get_albumart_from_ytdl(dl.url, dest_dir)
+                            thumb_url = ov.get("thumbnail", "")
+                            if not thumb_url or not _download_thumbnail(thumb_url, dest_dir):
+                                get_albumart_from_ytdl(dl.url, dest_dir)
 
                     shutil.move(str(audio_file), str(dest_dir / audio_file.name))
 

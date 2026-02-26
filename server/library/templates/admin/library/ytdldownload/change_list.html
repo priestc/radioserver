@@ -111,6 +111,7 @@
         <th>Status</th>
         <th>Date</th>
         <th>Link</th>
+        <th>URL</th>
       </tr>
     </thead>
     <tbody>
@@ -131,6 +132,13 @@
         <td>
           {% if dl.album_id %}
             <a href="{% url 'admin:library_album_change' dl.album_id %}">View album</a>
+          {% elif dl.status == "error" %}
+            <a href="#" onclick="retryDownload('{{ dl.url|escapejs }}'); return false;">Retry</a>
+          {% endif %}
+        </td>
+        <td>
+          {% if dl.status == "error" %}
+            <span style="font-size:0.85em; color:#666; word-break:break-all;">{{ dl.url }}</span>
           {% endif %}
         </td>
       </tr>
@@ -151,6 +159,13 @@ function getCookie(name) {
 }
 
 var currentUrl = '';
+
+function retryDownload(url) {
+  var input = document.getElementById('url-input');
+  input.value = url;
+  input.focus();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
 
 function fetchMetadata() {
   var url = document.getElementById('url-input').value.trim();
@@ -206,6 +221,7 @@ function showMetadata(data) {
       var secs = Math.round(t.duration % 60);
       dur = mins + ':' + (secs < 10 ? '0' : '') + secs;
     }
+    tr.setAttribute('data-thumbnail', t.thumbnail || '');
     tr.innerHTML =
       '<td>' + (t.track_number || '') + '</td>' +
       '<td><input type="text" class="track-title" value="' + (t.title || '').replace(/"/g, '&quot;') + '"></td>' +
@@ -264,6 +280,7 @@ function startDownload() {
         title: title.value.trim(),
         artist: trackArtist ? trackArtist.value.trim() : '',
         album: trackAlbum ? trackAlbum.value.trim() : '',
+        thumbnail: row.getAttribute('data-thumbnail') || '',
       });
     }
   });
