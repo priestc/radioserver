@@ -65,9 +65,13 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
         url,
     ]
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp exited with code {result.returncode}")
+        stderr = result.stderr.strip()
+        # Pull out the last ERROR line if present for a concise message
+        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
+        detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
+        raise RuntimeError(f"yt-dlp exited with code {result.returncode}: {detail}")
 
     SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     files = []
