@@ -94,7 +94,7 @@
 <div id="progress-section" class="ytdl-section">
   <h2>Download Progress</h2>
   <div id="progress-status" class="status-active"></div>
-  <div id="progress-message"></div>
+  <div id="progress-message" style="white-space: pre-wrap;"></div>
   <div id="progress-error" class="error-msg"></div>
   <div id="progress-success" class="success-msg"></div>
 </div>
@@ -121,7 +121,9 @@
         <td>{{ dl.album_title }}</td>
         <td>
           {% if dl.status == "complete" %}
-            <span class="status-complete">Complete</span>
+            <span class="status-complete" {% if "failed to download" in dl.progress_message %}style="color:#e65100" title="{{ dl.progress_message }}"{% endif %}>
+              {% if "failed to download" in dl.progress_message %}Complete (with failures){% else %}Complete{% endif %}
+            </span>
           {% elif dl.status == "error" %}
             <span class="status-error" title="{{ dl.error_message }}">Error</span>
           {% else %}

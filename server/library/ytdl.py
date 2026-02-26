@@ -108,10 +108,11 @@ def get_metadata_from_ytdl(url: str) -> dict:
     }
 
 
-def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
+def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> tuple[list[Path], list[str]]:
     """Download audio files from a YouTube Music URL into dest_dir.
 
-    Returns list of downloaded file paths.
+    Returns (files, errors) where files is a list of downloaded file paths
+    and errors is a list of yt-dlp error lines for tracks that failed.
     """
     album_dir_template = "%(album,playlist_title)s"
     output_template = str(dest_dir / album_dir_template / "%(track_number)02d %(title)s.%(ext)s")
@@ -134,17 +135,18 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> list[Path]:
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 
+    stderr = result.stderr.strip()
+    error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
+
     SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     files = []
     for item in dest_dir.rglob("*"):
         if item.suffix.lstrip(".").lower() in SUPPORTED_EXTS:
             files.append(item)
     if not files:
-        stderr = result.stderr.strip()
-        error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
         detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
         raise RuntimeError(f"yt-dlp downloaded no audio files: {detail}")
-    return sorted(files)
+    return sorted(files), error_lines
 
 
 def get_albumart_from_ytdl(url: str, dest_dir: Path) -> Path | None:
@@ -241,8 +243,9 @@ def run_download(download_id: int) -> None:
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
         # Track all library dirs affected (for source tagging + ReplayGain)
         affected_dirs = set()
+        download_errors = []
         try:
-            get_audio_files_from_ytdl(dl.url, tmp_dir)
+            _downloaded_files, download_errors = get_audio_files_from_ytdl(dl.url, tmp_dir)
 
             if dl.use_track_albums and dl.track_overrides:
                 # Per-track mode: each track goes to its own artist/album folder
@@ -368,8 +371,43 @@ def run_download(download_id: int) -> None:
             tracks__file_path__startswith=str(library_dir),
         ).first()
 
+        # Build completion message
+        msg_parts = [f"Done. {stats['created']} tracks imported, {rg_ok} ReplayGain tagged."]
+
+        # Identify which tracks failed to download
+        if dl.track_overrides and download_errors:
+            # Parse track numbers from downloaded files
+            SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+            downloaded_nums = set()
+            for adir in affected_dirs:
+                for f in adir.iterdir():
+                    if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS:
+                        parts = f.stem.split(" ", 1)
+                        try:
+                            downloaded_nums.add(int(parts[0]))
+                        except (ValueError, IndexError):
+                            pass
+
+            failed_tracks = []
+            for i, ov in enumerate(dl.track_overrides):
+                track_num = i + 1
+                if track_num not in downloaded_nums:
+                    title = ov.get("title", f"Track {track_num}")
+                    failed_tracks.append(f"#{track_num} {title}")
+
+            if failed_tracks:
+                msg_parts.append(
+                    f"\n{len(failed_tracks)} track(s) failed to download:\n"
+                    + "\n".join(failed_tracks)
+                )
+        elif download_errors:
+            msg_parts.append(
+                f"\n{len(download_errors)} download error(s):\n"
+                + "\n".join(download_errors)
+            )
+
         dl.status = "complete"
-        dl.progress_message = f"Done. {stats['created']} tracks imported, {rg_ok} ReplayGain tagged."
+        dl.progress_message = "\n".join(msg_parts)
         dl.album = album
         dl.save(update_fields=["status", "progress_message", "album"])
 
