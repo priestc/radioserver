@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -137,3 +138,113 @@ def _crop_to_square(path: Path):
     top = (h - side) // 2
     img = img.crop((left, top, left + side, top + side))
     img.save(path)
+
+
+def run_download(download_id: int) -> None:
+    """Run the full download pipeline for a YtdlDownload record.
+
+    Designed to run in a background thread. Updates the model row at each step.
+    """
+    import django
+    from django.conf import settings
+    from django.db import connection
+
+    # Ensure clean DB connection in thread
+    connection.close()
+
+    from library.models import Album, Track, YtdlDownload
+
+    dl = YtdlDownload.objects.get(pk=download_id)
+
+    try:
+        # Step 1: Download audio
+        dl.status = "downloading"
+        dl.progress_message = "Downloading audio files..."
+        dl.save(update_fields=["status", "progress_message"])
+
+        artist_name = dl.artist_name or "from youtube music"
+        library_dir = Path(settings.MUSIC_LIBRARY_PATH) / artist_name
+
+        library_dir.mkdir(parents=True, exist_ok=True)
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
+        try:
+            get_audio_files_from_ytdl(dl.url, tmp_dir)
+
+            # Process each album subdirectory
+            for item in tmp_dir.iterdir():
+                if not item.is_dir():
+                    continue
+
+                # Extract album art
+                dl.progress_message = "Extracting album art..."
+                dl.save(update_fields=["progress_message"])
+                get_albumart_from_ytdl(dl.url, item)
+
+                # Remove stray image files (keep only folder.jpg)
+                for f in item.iterdir():
+                    if f.suffix.lower() in (".jpg", ".png", ".webp") and f.name != "folder.jpg":
+                        f.unlink()
+
+                # Move to library
+                dest = library_dir / item.name
+                if dest.exists():
+                    for f in item.iterdir():
+                        shutil.move(str(f), str(dest / f.name))
+                else:
+                    shutil.move(str(item), str(dest))
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        # Step 2: Scan library
+        dl.status = "scanning"
+        dl.progress_message = "Scanning library..."
+        dl.save(update_fields=["status", "progress_message"])
+
+        from library.scanner import scan
+        stats = scan()
+
+        # Tag newly created tracks with source URL
+        if stats["created"] > 0:
+            Track.objects.filter(source="").filter(
+                file_path__startswith=str(library_dir),
+            ).update(source=dl.url)
+
+        # Step 3: Apply ReplayGain
+        dl.status = "applying_replaygain"
+        dl.progress_message = "Applying ReplayGain..."
+        dl.save(update_fields=["status", "progress_message"])
+
+        from library.management.commands.replaygain import (
+            _analyze_loudness, _compute_gain, _write_replaygain_tags,
+        )
+
+        new_tracks = list(
+            Track.objects.filter(file_path__startswith=str(library_dir))
+        )
+        rg_ok = 0
+        for i, track in enumerate(new_tracks, 1):
+            dl.progress_message = f"Applying ReplayGain ({i}/{len(new_tracks)})..."
+            dl.save(update_fields=["progress_message"])
+            loudness = _analyze_loudness(track.file_path)
+            if loudness is None:
+                continue
+            gain_db = _compute_gain(loudness["input_i"])
+            if _write_replaygain_tags(track.file_path, gain_db, loudness["input_tp"]):
+                rg_ok += 1
+
+        # Find the album that was created
+        album = Album.objects.filter(
+            artist__name=dl.artist_name,
+            tracks__file_path__startswith=str(library_dir),
+        ).first()
+
+        dl.status = "complete"
+        dl.progress_message = f"Done. {stats['created']} tracks imported, {rg_ok} ReplayGain tagged."
+        dl.album = album
+        dl.save(update_fields=["status", "progress_message", "album"])
+
+    except Exception as e:
+        dl.status = "error"
+        dl.error_message = str(e)
+        dl.save(update_fields=["status", "error_message"])

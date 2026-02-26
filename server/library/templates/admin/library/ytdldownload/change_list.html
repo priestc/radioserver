@@ -1,0 +1,290 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}YouTube Downloads{% endblock %}
+
+{% block content_title %}<h1>YouTube Downloads</h1>{% endblock %}
+
+{% block content %}
+<style>
+  .ytdl-section { margin-bottom: 24px; }
+  .ytdl-section h2 { font-size: 1.1em; margin-bottom: 8px; }
+  .ytdl-input-row { display: flex; gap: 8px; align-items: center; }
+  .ytdl-input-row input[type="text"] { flex: 1; padding: 6px 10px; }
+  .btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; background: #fff; }
+  .btn:hover { background: #f0f0f0; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #417690; color: #fff; border-color: #417690; }
+  .btn-primary:hover { background: #205067; }
+  .btn-primary:disabled { background: #417690; }
+  #metadata-section { display: none; }
+  #progress-section { display: none; }
+  .meta-field { margin-bottom: 8px; }
+  .meta-field label { display: inline-block; width: 80px; font-weight: bold; }
+  .meta-field input { width: 400px; padding: 4px 8px; }
+  .track-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .track-table th, .track-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #ddd; }
+  .track-table th { background: #f8f8f8; }
+  .track-table input { width: 100%; padding: 2px 6px; box-sizing: border-box; }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th, .history-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #ddd; }
+  .history-table th { background: #f8f8f8; }
+  .status-complete { color: #2e7d32; font-weight: bold; }
+  .status-error { color: #c62828; font-weight: bold; }
+  .status-active { color: #1565c0; font-weight: bold; }
+  .error-msg { color: #c62828; margin-top: 8px; }
+  .success-msg { color: #2e7d32; margin-top: 8px; }
+  .spinner { display: none; margin-left: 8px; }
+</style>
+
+<!-- URL Input Section -->
+<div class="ytdl-section">
+  <h2>Download from YouTube Music</h2>
+  <div class="ytdl-input-row">
+    <input type="text" id="url-input" placeholder="Paste YouTube Music URL...">
+    <button class="btn btn-primary" id="fetch-btn" onclick="fetchMetadata()">Fetch Metadata</button>
+    <span class="spinner" id="fetch-spinner">Fetching...</span>
+  </div>
+  <div id="fetch-error" class="error-msg"></div>
+</div>
+
+<!-- Metadata Section -->
+<div id="metadata-section" class="ytdl-section">
+  <h2>Album Metadata</h2>
+  <div class="meta-field">
+    <label>Artist:</label>
+    <input type="text" id="meta-artist">
+  </div>
+  <div class="meta-field">
+    <label>Album:</label>
+    <input type="text" id="meta-album">
+  </div>
+  <h3 style="margin-top: 12px; font-size: 1em;">Tracks</h3>
+  <table class="track-table">
+    <thead>
+      <tr>
+        <th style="width:50px">#</th>
+        <th>Title</th>
+        <th style="width:80px">Duration</th>
+      </tr>
+    </thead>
+    <tbody id="track-list"></tbody>
+  </table>
+  <div style="margin-top: 12px;">
+    <button class="btn btn-primary" id="download-btn" onclick="startDownload()">Download</button>
+    <span class="spinner" id="download-spinner">Starting...</span>
+  </div>
+  <div id="download-error" class="error-msg"></div>
+</div>
+
+<!-- Progress Section -->
+<div id="progress-section" class="ytdl-section">
+  <h2>Download Progress</h2>
+  <div id="progress-status" class="status-active"></div>
+  <div id="progress-message"></div>
+  <div id="progress-error" class="error-msg"></div>
+  <div id="progress-success" class="success-msg"></div>
+</div>
+
+<!-- Download History -->
+{% if downloads %}
+<div class="ytdl-section">
+  <h2>Download History</h2>
+  <table class="history-table">
+    <thead>
+      <tr>
+        <th>Artist</th>
+        <th>Album</th>
+        <th>Status</th>
+        <th>Date</th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for dl in downloads %}
+      <tr>
+        <td>{{ dl.artist_name }}</td>
+        <td>{{ dl.album_title }}</td>
+        <td>
+          {% if dl.status == "complete" %}
+            <span class="status-complete">Complete</span>
+          {% elif dl.status == "error" %}
+            <span class="status-error" title="{{ dl.error_message }}">Error</span>
+          {% else %}
+            <span class="status-active">{{ dl.get_status_display }}</span>
+          {% endif %}
+        </td>
+        <td>{{ dl.created_at|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% if dl.album_id %}
+            <a href="{% url 'admin:library_album_change' dl.album_id %}">View album</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+function getCookie(name) {
+  const cookies = document.cookie.split(';');
+  for (let c of cookies) {
+    c = c.trim();
+    if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
+  }
+  return '';
+}
+
+var currentUrl = '';
+
+function fetchMetadata() {
+  var url = document.getElementById('url-input').value.trim();
+  if (!url) { alert('Please enter a URL.'); return; }
+
+  var btn = document.getElementById('fetch-btn');
+  var spinner = document.getElementById('fetch-spinner');
+  var errorDiv = document.getElementById('fetch-error');
+
+  btn.disabled = true;
+  spinner.style.display = 'inline';
+  errorDiv.textContent = '';
+  document.getElementById('metadata-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+
+  var formData = new FormData();
+  formData.append('url', url);
+
+  fetch('fetch-metadata/', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    if (!res.ok) {
+      errorDiv.textContent = res.data.error || 'Unknown error';
+      return;
+    }
+    currentUrl = url;
+    showMetadata(res.data);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    errorDiv.textContent = 'Request failed: ' + err;
+  });
+}
+
+function showMetadata(data) {
+  document.getElementById('meta-artist').value = data.artist || '';
+  document.getElementById('meta-album').value = data.album || '';
+
+  var tbody = document.getElementById('track-list');
+  tbody.innerHTML = '';
+  (data.tracks || []).forEach(function(t) {
+    var tr = document.createElement('tr');
+    var dur = '';
+    if (t.duration) {
+      var mins = Math.floor(t.duration / 60);
+      var secs = Math.round(t.duration % 60);
+      dur = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    }
+    tr.innerHTML =
+      '<td>' + (t.track_number || '') + '</td>' +
+      '<td><input type="text" value="' + (t.title || '').replace(/"/g, '&quot;') + '" readonly></td>' +
+      '<td>' + dur + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('metadata-section').style.display = 'block';
+  document.getElementById('download-error').textContent = '';
+}
+
+function startDownload() {
+  var artist = document.getElementById('meta-artist').value.trim();
+  var album = document.getElementById('meta-album').value.trim();
+
+  var btn = document.getElementById('download-btn');
+  var spinner = document.getElementById('download-spinner');
+  var errorDiv = document.getElementById('download-error');
+
+  btn.disabled = true;
+  spinner.style.display = 'inline';
+  errorDiv.textContent = '';
+
+  fetch('start-download/', {
+    method: 'POST',
+    body: JSON.stringify({
+      url: currentUrl,
+      artist_name: artist,
+      album_title: album,
+    }),
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken'),
+      'Content-Type': 'application/json',
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    spinner.style.display = 'none';
+    if (!res.ok) {
+      btn.disabled = false;
+      errorDiv.textContent = res.data.error || 'Unknown error';
+      return;
+    }
+    document.getElementById('metadata-section').style.display = 'none';
+    pollStatus(res.data.id);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    errorDiv.textContent = 'Request failed: ' + err;
+  });
+}
+
+function pollStatus(downloadId) {
+  var section = document.getElementById('progress-section');
+  var statusDiv = document.getElementById('progress-status');
+  var msgDiv = document.getElementById('progress-message');
+  var errorDiv = document.getElementById('progress-error');
+  var successDiv = document.getElementById('progress-success');
+
+  section.style.display = 'block';
+  statusDiv.textContent = 'Starting...';
+  msgDiv.textContent = '';
+  errorDiv.textContent = '';
+  successDiv.textContent = '';
+
+  var interval = setInterval(function() {
+    fetch('download-status/' + downloadId + '/')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        statusDiv.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1).replace(/_/g, ' ');
+        msgDiv.textContent = data.progress_message || '';
+
+        if (data.status === 'complete') {
+          clearInterval(interval);
+          statusDiv.className = 'status-complete';
+          var msg = 'Download complete!';
+          if (data.album_id) {
+            msg += ' <a href="/admin/library/album/' + data.album_id + '/change/">View album in admin</a>';
+          }
+          successDiv.innerHTML = msg;
+        } else if (data.status === 'error') {
+          clearInterval(interval);
+          statusDiv.className = 'status-error';
+          errorDiv.textContent = data.error_message || 'An error occurred.';
+        }
+      })
+      .catch(function(err) {
+        clearInterval(interval);
+        errorDiv.textContent = 'Polling failed: ' + err;
+      });
+  }, 2000);
+}
+</script>
+{% endblock %}

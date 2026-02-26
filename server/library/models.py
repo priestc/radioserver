@@ -208,6 +208,37 @@ class AIServiceError(models.Model):
         return f"{self.service} — {self.created_at:%Y-%m-%d %H:%M}"
 
 
+class YtdlDownload(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("fetching", "Fetching"),
+        ("downloading", "Downloading"),
+        ("scanning", "Scanning"),
+        ("applying_replaygain", "Applying ReplayGain"),
+        ("complete", "Complete"),
+        ("error", "Error"),
+    ]
+
+    url = models.URLField(max_length=500)
+    artist_name = models.CharField(max_length=500)
+    album_title = models.CharField(max_length=500)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    progress_message = models.TextField(blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    album = models.ForeignKey(
+        Album, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "YouTube download"
+        verbose_name_plural = "YouTube downloads"
+
+    def __str__(self):
+        return f"{self.artist_name} — {self.album_title}"
+
+
 class ApiKey(models.Model):
     key = models.CharField(max_length=64, unique=True, default=_generate_api_key)
     label = models.CharField(max_length=200, blank=True, default="")

@@ -21,6 +21,7 @@ from library.models import (
     PlaylistItem,
     PlaylistSettings,
     Track,
+    YtdlDownload,
 )
 from library.views import has_cover, _nuke_cover_art
 
@@ -617,6 +618,117 @@ class AIServiceManagerAdmin(admin.ModelAdmin):
         svc.enabled = not svc.enabled
         svc.save(update_fields=["enabled"])
         return JsonResponse({"ok": True, "enabled": svc.enabled})
+
+
+@admin.register(YtdlDownload)
+class YtdlDownloadAdmin(admin.ModelAdmin):
+    list_display = ["artist_name", "album_title", "status", "created_at"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "fetch-metadata/",
+                self.admin_site.admin_view(self.fetch_metadata_view),
+                name="library_ytdldownload_fetch_metadata",
+            ),
+            path(
+                "start-download/",
+                self.admin_site.admin_view(self.start_download_view),
+                name="library_ytdldownload_start_download",
+            ),
+            path(
+                "download-status/<int:pk>/",
+                self.admin_site.admin_view(self.download_status_view),
+                name="library_ytdldownload_download_status",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        downloads = YtdlDownload.objects.all()[:50]
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "YouTube Downloads",
+            "downloads": downloads,
+            "opts": self.model._meta,
+            "has_add_permission": False,
+        }
+        return TemplateResponse(
+            request,
+            "admin/library/ytdldownload/change_list.html",
+            context,
+        )
+
+    def fetch_metadata_view(self, request):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        url = request.POST.get("url", "").strip()
+        if not url:
+            return JsonResponse({"error": "No URL provided"}, status=400)
+        try:
+            from library.ytdl import get_metadata_from_ytdl
+            metadata = get_metadata_from_ytdl(url)
+            return JsonResponse(metadata)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def start_download_view(self, request):
+        import json as json_mod
+        import threading
+
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+
+        data = json_mod.loads(request.body)
+        url = data.get("url", "").strip()
+        artist_name = data.get("artist_name", "").strip()
+        album_title = data.get("album_title", "").strip()
+
+        if not url:
+            return JsonResponse({"error": "No URL provided"}, status=400)
+
+        # Check for duplicate
+        from library.models import Album
+        if album_title and artist_name:
+            if Album.objects.filter(
+                title__iexact=album_title, artist__name__iexact=artist_name,
+            ).exists():
+                return JsonResponse(
+                    {"error": f"Album already in library: {artist_name} — {album_title}"},
+                    status=400,
+                )
+
+        dl = YtdlDownload.objects.create(
+            url=url,
+            artist_name=artist_name,
+            album_title=album_title,
+            status="pending",
+        )
+
+        from library.ytdl import run_download
+        thread = threading.Thread(daemon=True, target=run_download, args=(dl.pk,))
+        thread.start()
+
+        return JsonResponse({"id": dl.pk})
+
+    def download_status_view(self, request, pk):
+        try:
+            dl = YtdlDownload.objects.get(pk=pk)
+        except YtdlDownload.DoesNotExist:
+            return JsonResponse({"error": "Not found"}, status=404)
+        data = {
+            "status": dl.status,
+            "progress_message": dl.progress_message,
+            "error_message": dl.error_message,
+            "album_id": dl.album_id,
+        }
+        return JsonResponse(data)
 
 
 @admin.register(AIServiceError)
