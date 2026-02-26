@@ -40,7 +40,9 @@
 {% endif %}
 
 {% if tracks %}
-<p id="progress">Preparing lookups...</p>
+<p id="progress">
+    <button type="button" class="default" id="start-btn" onclick="startLookups()">Start Fetching</button>
+</p>
 
 <form method="post">
     {% csrf_token %}
@@ -66,7 +68,7 @@
                     <input type="text" name="year_{{ item.track_id }}"
                            value="" size="6" style="width:5em; display:none"
                            class="year-input">
-                    <span class="spinner"></span>
+                    <span class="spinner" style="display:none"></span>
                     <span class="backend-tag" style="display:none"></span>
                     <span class="error-text" style="display:none"></span>
                 </td>
@@ -84,60 +86,66 @@
 </form>
 
 <script>
-(function() {
-    var albumId = {{ album.pk }};
-    var backend = "{{ backend }}";
+var albumId = {{ album.pk }};
+var backend = "{{ backend }}";
+
+async function startLookups() {
+    var startBtn = document.getElementById("start-btn");
+    startBtn.disabled = true;
+    startBtn.style.display = "none";
+
     var rows = document.querySelectorAll("tr[data-track-id]");
     var total = rows.length;
     var progress = document.getElementById("progress");
     var saveBtn = document.getElementById("save-btn");
 
-    async function lookupAll() {
-        for (var i = 0; i < total; i++) {
-            var row = rows[i];
-            var trackId = row.getAttribute("data-track-id");
-            var spinner = row.querySelector(".spinner");
-            var input = row.querySelector(".year-input");
-            var errorSpan = row.querySelector(".error-text");
+    // Show all spinners
+    rows.forEach(function(row) {
+        row.querySelector(".spinner").style.display = "inline-block";
+    });
 
-            progress.textContent = "Looking up track " + (i + 1) + " of " + total + "...";
+    for (var i = 0; i < total; i++) {
+        var row = rows[i];
+        var trackId = row.getAttribute("data-track-id");
+        var spinner = row.querySelector(".spinner");
+        var input = row.querySelector(".year-input");
+        var errorSpan = row.querySelector(".error-text");
 
-            try {
-                var url = "/admin/library/album/" + albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
-                var resp = await fetch(url);
-                if (!resp.ok) {
-                    throw new Error("HTTP " + resp.status + ": " + resp.statusText);
-                }
-                var data = await resp.json();
+        progress.textContent = "Looking up track " + (i + 1) + " of " + total + "...";
 
-                spinner.style.display = "none";
-                if (data.error) {
-                    errorSpan.textContent = data.error;
-                    errorSpan.style.display = "inline";
-                    input.style.display = "inline";
-                } else {
-                    input.value = data.year;
-                    input.style.display = "inline";
-                    if (data.backend) {
-                        var tag = row.querySelector(".backend-tag");
-                        tag.textContent = "via " + data.backend;
-                        tag.style.display = "inline";
-                    }
-                }
-            } catch (e) {
-                spinner.style.display = "none";
-                errorSpan.textContent = e.message || "Request failed";
+        try {
+            var url = "/admin/library/album/" + albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
+            var resp = await fetch(url);
+            if (!resp.ok) {
+                throw new Error("HTTP " + resp.status + ": " + resp.statusText);
+            }
+            var data = await resp.json();
+
+            spinner.style.display = "none";
+            if (data.error) {
+                errorSpan.textContent = data.error;
                 errorSpan.style.display = "inline";
                 input.style.display = "inline";
+            } else {
+                input.value = data.year;
+                input.style.display = "inline";
+                if (data.backend) {
+                    var tag = row.querySelector(".backend-tag");
+                    tag.textContent = "via " + data.backend;
+                    tag.style.display = "inline";
+                }
             }
+        } catch (e) {
+            spinner.style.display = "none";
+            errorSpan.textContent = e.message || "Request failed";
+            errorSpan.style.display = "inline";
+            input.style.display = "inline";
         }
-
-        progress.textContent = "All " + total + " tracks looked up.";
-        saveBtn.disabled = false;
     }
 
-    lookupAll();
-})();
+    progress.textContent = "All " + total + " tracks looked up.";
+    saveBtn.disabled = false;
+}
 </script>
 {% endif %}
 {% endblock %}
