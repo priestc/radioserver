@@ -7,6 +7,53 @@ import tempfile
 from pathlib import Path
 
 
+def _apply_track_overrides(tmp_dir: Path, track_overrides: list[dict]) -> None:
+    """Write track metadata overrides into downloaded audio file tags.
+
+    Matches files by track number parsed from the filename (format: "NN title.ext").
+    """
+    import mutagen
+    from mutagen import File as MutagenFile
+
+    SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+    overrides = {i + 1: ov for i, ov in enumerate(track_overrides)}
+
+    for audio_file in tmp_dir.rglob("*"):
+        if audio_file.suffix.lstrip(".").lower() not in SUPPORTED_EXTS:
+            continue
+
+        parts = audio_file.stem.split(" ", 1)
+        try:
+            track_num = int(parts[0])
+        except (ValueError, IndexError):
+            continue
+
+        ov = overrides.get(track_num)
+        if not ov:
+            continue
+
+        try:
+            audio = MutagenFile(str(audio_file), easy=True)
+        except mutagen.MutagenError:
+            continue
+        if audio is None:
+            continue
+        if audio.tags is None:
+            audio.add_tags()
+
+        if ov.get("title", "").strip():
+            audio.tags["title"] = [ov["title"].strip()]
+        if ov.get("artist", "").strip():
+            audio.tags["artist"] = [ov["artist"].strip()]
+        if ov.get("album", "").strip():
+            audio.tags["album"] = [ov["album"].strip()]
+
+        try:
+            audio.save()
+        except mutagen.MutagenError:
+            continue
+
+
 def _download_thumbnail(url: str, dest_dir: Path) -> Path | None:
     """Download a thumbnail from a URL and save as folder.jpg in dest_dir.
 
@@ -246,6 +293,12 @@ def run_download(download_id: int) -> None:
         download_errors = []
         try:
             _downloaded_files, download_errors = get_audio_files_from_ytdl(dl.url, tmp_dir)
+
+            # Write track overrides into file tags
+            if dl.track_overrides:
+                dl.progress_message = "Applying track metadata overrides..."
+                dl.save(update_fields=["progress_message"])
+                _apply_track_overrides(tmp_dir, dl.track_overrides)
 
             if dl.use_track_albums and dl.track_overrides:
                 # Per-track mode: each track goes to its own artist/album folder
