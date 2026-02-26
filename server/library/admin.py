@@ -141,7 +141,7 @@ class AlbumAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["year", "cover_status"]
     search_fields = ["title", "artist__name"]
-    readonly_fields = ["cover_art", "track_list", "strip_track_years_btn"]
+    readonly_fields = ["cover_art", "track_list", "strip_track_years_btn", "ai_date_finder_btn"]
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
@@ -233,6 +233,17 @@ class AlbumAdmin(admin.ModelAdmin):
             '}}'
             '</script>',
             pk=obj.pk,
+        )
+
+    @admin.display(description="AI Date Finder")
+    def ai_date_finder_btn(self, obj):
+        if not obj.pk:
+            return ""
+        from django.urls import reverse
+        url = reverse("admin:library_album_ai_date_finder", args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="button">AI Date Finder</a>',
+            url,
         )
 
     actions = ["delete_cover_art", "ai_date_finder"]
