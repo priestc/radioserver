@@ -16,7 +16,11 @@ def _apply_track_overrides(tmp_dir: Path, track_overrides: list[dict]) -> None:
     from mutagen import File as MutagenFile
 
     SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
-    overrides = {i + 1: ov for i, ov in enumerate(track_overrides)}
+    overrides = {}
+    for ov in track_overrides:
+        tn = ov.get("track_number")
+        if tn is not None:
+            overrides[tn] = ov
 
     for audio_file in tmp_dir.rglob("*"):
         if audio_file.suffix.lstrip(".").lower() not in SUPPORTED_EXTS:
@@ -308,8 +312,12 @@ def run_download(download_id: int) -> None:
                 dl.progress_message = "Organizing tracks by per-track artist/album..."
                 dl.save(update_fields=["progress_message"])
 
-                # Build override lookup keyed by 1-based track number
-                overrides = {i + 1: ov for i, ov in enumerate(dl.track_overrides)}
+                # Build override lookup keyed by playlist track number
+                overrides = {}
+                for ov in dl.track_overrides:
+                    tn = ov.get("track_number")
+                    if tn is not None:
+                        overrides[tn] = ov
 
                 # Collect all audio files from all subdirectories
                 SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
@@ -445,9 +453,9 @@ def run_download(download_id: int) -> None:
                             pass
 
             failed_tracks = []
-            for i, ov in enumerate(dl.track_overrides):
-                track_num = i + 1
-                if track_num not in downloaded_nums:
+            for ov in dl.track_overrides:
+                track_num = ov.get("track_number")
+                if track_num is not None and track_num not in downloaded_nums:
                     title = ov.get("title", f"Track {track_num}")
                     failed_tracks.append(f"#{track_num} {title}")
 

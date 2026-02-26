@@ -225,6 +225,7 @@ function showMetadata(data) {
       dur = mins + ':' + (secs < 10 ? '0' : '') + secs;
     }
     tr.setAttribute('data-thumbnail', t.thumbnail || '');
+    tr.setAttribute('data-track-number', t.track_number || '');
     tr.innerHTML =
       '<td>' + (t.track_number || '') + '</td>' +
       '<td><input type="text" class="track-title" value="' + (t.title || '').replace(/"/g, '&quot;') + '"></td>' +
@@ -291,6 +292,7 @@ function startDownload() {
     var trackAlbum = row.querySelector('.track-album');
     if (title) {
       tracks.push({
+        track_number: parseInt(row.getAttribute('data-track-number')) || null,
         title: title.value.trim(),
         artist: trackArtist ? trackArtist.value.trim() : '',
         album: trackAlbum ? trackAlbum.value.trim() : '',
