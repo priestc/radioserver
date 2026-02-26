@@ -69,6 +69,8 @@
       <tr>
         <th style="width:50px">#</th>
         <th>Title</th>
+        <th>Artist</th>
+        <th>Album</th>
         <th style="width:80px">Duration</th>
       </tr>
     </thead>
@@ -200,6 +202,8 @@ function showMetadata(data) {
     tr.innerHTML =
       '<td>' + (t.track_number || '') + '</td>' +
       '<td><input type="text" value="' + (t.title || '').replace(/"/g, '&quot;') + '" readonly></td>' +
+      '<td><input type="text" value="' + (t.artist || '').replace(/"/g, '&quot;') + '" readonly></td>' +
+      '<td><input type="text" value="' + (t.album || '').replace(/"/g, '&quot;') + '" readonly></td>' +
       '<td>' + dur + '</td>';
     tbody.appendChild(tr);
   });

@@ -54,12 +54,18 @@ def get_metadata_from_ytdl(url: str) -> dict:
                 "track_title": meta.get("title", ""),
             })
 
+        track_artist = meta.get("artist") or meta.get("channel") or ""
+        if track_artist.endswith(" - Topic"):
+            track_artist = track_artist[: -len(" - Topic")]
+
         tracks.append({
             "title": meta.get("title", ""),
             "track_number": meta.get("playlist_index"),
             "duration": meta.get("duration"),
             "url": meta.get("url") or meta.get("webpage_url") or "",
             "thumbnail": thumb_url,
+            "album": meta.get("album") or meta.get("playlist_title") or "",
+            "artist": track_artist,
         })
 
     return {
