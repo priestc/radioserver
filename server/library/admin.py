@@ -125,7 +125,7 @@ class ArtistAdmin(admin.ModelAdmin):
             url = reverse("admin:library_track_change", args=[t.pk])
             album_label = f" ({t.album.title})" if t.album else ""
             items.append(format_html('<li><a href="{}">{}</a>{}</li>', url, t.title, album_label))
-        return format_html("<ul style='margin:0;padding-left:1.5em'>{}</ul>", format_html("".join(items)))
+        return format_html("<ol style='margin:0;padding-left:2.5em'>{}</ol>", format_html("".join(items)))
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
