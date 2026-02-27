@@ -9,7 +9,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from library.models import Album, ApiKey, PlaylistItem
+from library.models import Album, ApiKey, PlaylistItem, Track
 
 
 def require_api_key(view_func):
@@ -369,3 +369,68 @@ def cover_art(request, album_id):
             return FileResponse(resized, content_type="image/jpeg")
 
     raise Http404
+
+
+@csrf_exempt
+@require_api_key
+@require_POST
+def search_tracks(request):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    filters = body.get("filters", [])
+    if not filters:
+        return JsonResponse({"tracks": []})
+
+    from django.db.models import Q
+
+    combined_q = Q()
+    for filter_set in filters:
+        set_q = Q()
+        if "genre" in filter_set:
+            set_q &= Q(genre__iexact=filter_set["genre"])
+        if "artist" in filter_set:
+            set_q &= (
+                Q(artists__name__iexact=filter_set["artist"])
+                | Q(album__artist__name__iexact=filter_set["artist"])
+            )
+        if "year" in filter_set:
+            set_q &= Q(year=filter_set["year"])
+        if "album" in filter_set:
+            set_q &= Q(album__title__iexact=filter_set["album"])
+        combined_q |= set_q
+
+    qs = Track.objects.filter(combined_q).distinct().order_by("?")[:100]
+    qs = qs.select_related("album", "album__artist").prefetch_related("artists")
+
+    tracks = []
+    for t in qs:
+        tracks.append({
+            "id": t.id,
+            "title": t.title,
+            "artist": t.display_artist,
+            "album": t.album.title if t.album else None,
+            "genre": t.genre,
+            "year": t.year,
+            "duration": t.duration,
+            "format": t.format,
+        })
+
+    return JsonResponse({"tracks": tracks})
+
+
+@require_api_key
+@require_GET
+def download_track(request, track_id):
+    try:
+        track = Track.objects.get(pk=track_id)
+    except Track.DoesNotExist:
+        raise Http404
+
+    path = Path(track.file_path)
+    if not path.is_file():
+        raise Http404
+
+    return FileResponse(open(path, "rb"))
