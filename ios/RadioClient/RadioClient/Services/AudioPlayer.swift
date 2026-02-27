@@ -326,6 +326,9 @@ class AudioPlayer: ObservableObject {
             if let dur = song.duration {
                 info[MPMediaItemPropertyPlaybackDuration] = dur
             }
+            if let year = song.year {
+                info[MPMediaItemPropertyAlbumTrackNumber] = year
+            }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
             info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
             if let artwork = currentArtwork {
