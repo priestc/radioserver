@@ -414,6 +414,8 @@ def search_tracks(request):
     qs = Track.objects.filter(combined_q).distinct().order_by("?")[:100]
     qs = qs.select_related("album", "album__artist").prefetch_related("artists")
 
+    from library.tags import read_replaygain
+
     tracks = []
     for t in qs:
         tracks.append({
@@ -425,6 +427,7 @@ def search_tracks(request):
             "year": t.year,
             "duration": t.duration,
             "format": t.format,
+            "replaygain_track_gain": read_replaygain(t.file_path),
         })
 
     return JsonResponse({"tracks": tracks})
