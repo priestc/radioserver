@@ -141,7 +141,7 @@ class AlbumAdmin(admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["year", "cover_status"]
     search_fields = ["title", "artist__name"]
-    readonly_fields = ["cover_art", "track_list", "strip_track_years_btn", "ai_date_finder_btn"]
+    readonly_fields = ["cover_art", "track_list", "strip_track_years_btn", "ai_date_finder_btn", "apply_genre_btn"]
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
@@ -235,6 +235,52 @@ class AlbumAdmin(admin.ModelAdmin):
             pk=obj.pk,
         )
 
+    @admin.display(description="Apply Genre to All Tracks")
+    def apply_genre_btn(self, obj):
+        if not obj.pk:
+            return ""
+        # Pre-fill with the most common genre among tracks
+        genres = list(obj.tracks.exclude(genre="").values_list("genre", flat=True))
+        default_genre = max(set(genres), key=genres.count) if genres else ""
+        return format_html(
+            '<input type="text" id="apply-genre-input" value="{}" style="width:200px">'
+            ' <button type="button" class="button" onclick="applyGenre({pk})">Apply</button>'
+            ' <span id="apply-genre-result"></span>'
+            '<script>'
+            'function applyGenre(pk) {{'
+            '  var genre = document.getElementById("apply-genre-input").value;'
+            '  if (!genre) return;'
+            '  var result = document.getElementById("apply-genre-result");'
+            '  result.textContent = "Applying...";'
+            '  result.style.color = "";'
+            '  fetch("/admin/library/album/" + pk + "/apply-genre/", {{'
+            '    method: "POST",'
+            '    headers: {{'
+            '      "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,'
+            '      "Content-Type": "application/json"'
+            '    }},'
+            '    body: JSON.stringify({{genre: genre}})'
+            '  }})'
+            '  .then(function(r) {{ return r.json(); }})'
+            '  .then(function(data) {{'
+            '    if (data.ok) {{'
+            '      result.textContent = "Applied \\"" + genre + "\\" to " + data.count + " track(s).";'
+            '      result.style.color = "#2e7d32";'
+            '    }} else {{'
+            '      result.textContent = "Error: " + data.error;'
+            '      result.style.color = "red";'
+            '    }}'
+            '  }})'
+            '  .catch(function(err) {{'
+            '    result.textContent = "Request failed: " + err;'
+            '    result.style.color = "red";'
+            '  }});'
+            '}}'
+            '</script>',
+            default_genre,
+            pk=obj.pk,
+        )
+
     @admin.display(description="AI Date Finder")
     def ai_date_finder_btn(self, obj):
         if not obj.pk:
@@ -264,6 +310,11 @@ class AlbumAdmin(admin.ModelAdmin):
                 "<int:album_id>/strip-track-years/",
                 self.admin_site.admin_view(self.strip_track_years_view),
                 name="library_album_strip_track_years",
+            ),
+            path(
+                "<int:album_id>/apply-genre/",
+                self.admin_site.admin_view(self.apply_genre_view),
+                name="library_album_apply_genre",
             ),
         ]
         return custom_urls + super().get_urls()
@@ -353,6 +404,22 @@ class AlbumAdmin(admin.ModelAdmin):
             return JsonResponse({"error": "POST required"}, status=405)
         album = Album.objects.get(pk=album_id)
         count = album.tracks.exclude(year=None).update(year=None)
+        return JsonResponse({"ok": True, "count": count})
+
+    def apply_genre_view(self, request, album_id):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        import json as _json
+        body = _json.loads(request.body)
+        genre = body.get("genre", "").strip()
+        if not genre:
+            return JsonResponse({"error": "Genre is required"}, status=400)
+        album = Album.objects.get(pk=album_id)
+        count = album.tracks.update(genre=genre)
+        # Write genre to file tags
+        from library.tags import write_track_tags
+        for track in album.tracks.all():
+            write_track_tags(track)
         return JsonResponse({"ok": True, "count": count})
 
     @admin.action(description="Delete cover art")
