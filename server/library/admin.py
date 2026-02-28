@@ -407,18 +407,8 @@ class TrackForm(forms.ModelForm):
                 artist, _ = Artist.objects.get_or_create(name=name)
                 TrackArtist.objects.create(track=instance, artist=artist, position=i)
 
-            # Write artist tag to file
-            import mutagen
-            from mutagen import File as MutagenFile
-            try:
-                audio = MutagenFile(instance.file_path, easy=True)
-                if audio is not None:
-                    if audio.tags is None:
-                        audio.add_tags()
-                    audio.tags["artist"] = [", ".join(names)]
-                    audio.save()
-            except mutagen.MutagenError:
-                pass
+            from library.tags import write_track_tags
+            write_track_tags(instance)
         return instance
 
 

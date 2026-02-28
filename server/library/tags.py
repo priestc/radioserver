@@ -134,10 +134,11 @@ FORMAT_MAP = {
 }
 
 
-def write_track_year(track) -> bool:
-    """Write a track's year to its file's date tag. Returns True on success."""
-    if track.year is None:
-        return False
+def write_track_tags(track) -> bool:
+    """Write a track's metadata to its file tags. Returns True on success.
+
+    Writes: title, artist, genre, date (year), tracknumber, discnumber.
+    """
     try:
         audio = MutagenFile(track.file_path, easy=True)
     except mutagen.MutagenError:
@@ -146,12 +147,38 @@ def write_track_year(track) -> bool:
         return False
     if audio.tags is None:
         audio.add_tags()
-    audio.tags["date"] = [str(track.year)]
+
+    audio.tags["title"] = [track.title]
+    if track.genre:
+        audio.tags["genre"] = [track.genre]
+    if track.year is not None:
+        audio.tags["date"] = [str(track.year)]
+    if track.track_number is not None:
+        audio.tags["tracknumber"] = [str(track.track_number)]
+    if track.disc_number is not None:
+        audio.tags["discnumber"] = [str(track.disc_number)]
+
+    # Write artists if prefetched/available
+    try:
+        names = list(
+            track.artists.order_by("trackartist__position")
+            .values_list("name", flat=True)
+        )
+        if names:
+            audio.tags["artist"] = [", ".join(names)]
+    except Exception:
+        pass
+
     try:
         audio.save()
     except mutagen.MutagenError:
         return False
     return True
+
+
+def write_track_year(track) -> bool:
+    """Write a track's year to its file's date tag. Returns True on success."""
+    return write_track_tags(track)
 
 
 def write_album_tags(album) -> None:
