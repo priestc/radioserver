@@ -400,6 +400,9 @@ def search_tracks(request):
             set_q &= Q(year=filter_set["year"])
         if "album" in filter_set:
             set_q &= Q(album__title__iexact=filter_set["album"])
+        if "decade" in filter_set:
+            decade_start = int(filter_set["decade"])
+            set_q &= Q(year__gte=decade_start, year__lt=decade_start + 10)
         combined_q |= set_q
 
     qs = Track.objects.filter(combined_q).distinct().order_by("?")[:100]
