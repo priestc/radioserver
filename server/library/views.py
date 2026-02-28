@@ -9,7 +9,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from library.models import Album, ApiKey, PlaylistItem, Track
+from library.models import Album, ApiKey, GenreGroup, PlaylistItem, Track
 
 
 def require_api_key(view_func):
@@ -403,6 +403,12 @@ def search_tracks(request):
         if "decade" in filter_set:
             decade_start = int(filter_set["decade"])
             set_q &= Q(year__gte=decade_start, year__lt=decade_start + 10)
+        if "genre_group" in filter_set:
+            try:
+                group = GenreGroup.objects.get(name__iexact=filter_set["genre_group"])
+                set_q &= Q(genre__in=group.genre_list())
+            except GenreGroup.DoesNotExist:
+                set_q &= Q(pk__isnull=True)  # match nothing
         combined_q |= set_q
 
     qs = Track.objects.filter(combined_q).distinct().order_by("?")[:100]
