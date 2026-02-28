@@ -411,13 +411,71 @@ def search_tracks(request):
                 set_q &= Q(pk__isnull=True)  # match nothing
         combined_q |= set_q
 
-    qs = Track.objects.filter(combined_q).distinct().order_by("?")[:100]
-    qs = qs.select_related("album", "album__artist").prefetch_related("artists")
+    all_tracks = list(
+        Track.objects.filter(combined_q)
+        .filter(exclude_from_playlist=False)
+        .exclude(duration__isnull=True)
+        .distinct()
+        .select_related("album", "album__artist")
+        .prefetch_related("artists")
+    )
+    if not all_tracks:
+        return JsonResponse({"tracks": []})
+
+    # Use the same playlist generation logic as the main radio channel
+    import random
+    from collections import deque
+    from library.models import PlaylistSettings
+
+    settings, _ = PlaylistSettings.objects.get_or_create(pk=1)
+
+    for t in all_tracks:
+        t._artist_ids = set(a.id for a in t.artists.all())
+
+    genre_to_group: dict[str, str] = {}
+    for gg in GenreGroup.objects.all():
+        for genre in gg.genre_list():
+            genre_to_group[genre] = gg.name
+
+    def get_decade(track):
+        year = track.year or (track.album.year if track.album else None)
+        return (year // 10 * 10) if year else None
+
+    def get_genre_group(track):
+        return genre_to_group.get(track.genre)
+
+    from library.playlist import _passes
+
+    recent_artists: deque[set[int]] = deque(maxlen=settings.artist_skip)
+    recent_genres: deque[str | None] = deque(maxlen=settings.genre_skip)
+    recent_decades: deque[int | None] = deque(maxlen=settings.decade_skip)
+
+    picked = []
+    while len(picked) < 100:
+        candidates = None
+        for relaxation in range(4):
+            candidates = [t for t in all_tracks if t not in picked and _passes(
+                t, recent_artists, recent_genres, recent_decades,
+                get_genre_group, get_decade, relaxation,
+            )]
+            if candidates:
+                break
+        if not candidates:
+            break
+        pick = random.choice(candidates)
+        picked.append(pick)
+        recent_artists.append(pick._artist_ids)
+        recent_genres.append(get_genre_group(pick))
+        recent_decades.append(get_decade(pick))
 
     from library.tags import read_replaygain
 
     tracks = []
-    for t in qs:
+    for t in picked:
+        try:
+            rg = read_replaygain(t.file_path)
+        except Exception:
+            rg = None
         tracks.append({
             "id": t.id,
             "title": t.title,
@@ -427,7 +485,7 @@ def search_tracks(request):
             "year": t.year,
             "duration": t.duration,
             "format": t.format,
-            "replaygain_track_gain": read_replaygain(t.file_path),
+            "replaygain_track_gain": rg,
         })
 
     return JsonResponse({"tracks": tracks})
