@@ -134,6 +134,26 @@ FORMAT_MAP = {
 }
 
 
+def write_track_year(track) -> bool:
+    """Write a track's year to its file's date tag. Returns True on success."""
+    if track.year is None:
+        return False
+    try:
+        audio = MutagenFile(track.file_path, easy=True)
+    except mutagen.MutagenError:
+        return False
+    if audio is None:
+        return False
+    if audio.tags is None:
+        audio.add_tags()
+    audio.tags["date"] = [str(track.year)]
+    try:
+        audio.save()
+    except mutagen.MutagenError:
+        return False
+    return True
+
+
 def write_album_tags(album) -> None:
     """Write album-level metadata to the tags of all tracks in the album.
 

@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from library.ai import get_backend, lookup_year
 from library.models import Album
+from library.tags import write_track_year
 
 
 class Command(BaseCommand):
@@ -79,6 +80,7 @@ class Command(BaseCommand):
             else:
                 track.year = year
                 track.save(update_fields=["year"])
+                write_track_year(track)
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"  \"{track.title}\" by {artist_name} → {year}"

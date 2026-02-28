@@ -295,6 +295,8 @@ class AlbumAdmin(admin.ModelAdmin):
             backend_name = available[0]
 
         if request.method == "POST" and request.POST.get("confirm"):
+            from library.tags import write_track_year
+
             tracks = album.tracks.all()
             updated = 0
             for track in tracks:
@@ -303,6 +305,7 @@ class AlbumAdmin(admin.ModelAdmin):
                     try:
                         track.year = int(raw)
                         track.save(update_fields=["year"])
+                        write_track_year(track)
                         updated += 1
                     except (ValueError, TypeError):
                         pass
