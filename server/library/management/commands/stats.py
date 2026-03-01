@@ -5,10 +5,10 @@ import subprocess
 
 from django.core.management.base import BaseCommand
 
-# Matches gunicorn default access log:
-# 192.168.1.50 - - [01/Mar/2026:12:00:00 +0000] "GET /path HTTP/1.1" 200 12345
+# Matches gunicorn combined access log:
+# 192.168.1.50 - - [01/Mar/2026:12:00:00 +0000] "GET /path HTTP/1.1" 200 12345 "ref" "ua"
 LOG_RE = re.compile(
-    r'^(?P<ip>\S+) \S+ \S+ \[.*?\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<bytes>\S+)$'
+    r'^(?P<ip>\S+) \S+ \S+ \[.*?\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<bytes>\S+)'
 )
 
 # Replace numeric path segments with * for grouping
