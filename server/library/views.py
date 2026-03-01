@@ -273,7 +273,7 @@ def download_song(request, playlist_item_id):
     if not path.is_file():
         raise Http404
 
-    return FileResponse(open(path, "rb"))
+    return FileResponse(path)
 
 
 @require_api_key
@@ -291,7 +291,7 @@ def download_song_lowbitrate(request, playlist_item_id):
 
     # If already 128kbps or lower, serve the original file
     if track.bitrate and track.bitrate <= 128000:
-        return FileResponse(open(path, "rb"))
+        return FileResponse(path)
 
     # Transcode to 128kbps MP3 via ffmpeg
     import subprocess
@@ -308,7 +308,7 @@ def download_song_lowbitrate(request, playlist_item_id):
     except (subprocess.CalledProcessError, FileNotFoundError):
         # ffmpeg failed or not installed — fall back to original
         Path(tmp.name).unlink(missing_ok=True)
-        return FileResponse(open(path, "rb"))
+        return FileResponse(path)
 
     tmp_path = Path(tmp.name)
     fh = open(tmp_path, "rb")
@@ -503,4 +503,4 @@ def download_track(request, track_id):
     if not path.is_file():
         raise Http404
 
-    return FileResponse(open(path, "rb"))
+    return FileResponse(path)
