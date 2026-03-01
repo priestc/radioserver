@@ -70,8 +70,12 @@ class Command(BaseCommand):
             else:
                 resp_bytes = int(resp_bytes_str)
 
+            path = m.group("path")
+            if path.startswith(("/admin/", "/static/")):
+                continue
+
             ip = m.group("ip")
-            path = normalize_path(m.group("path"))
+            path = normalize_path(path)
 
             entry = ip_stats.get(ip)
             if entry:
