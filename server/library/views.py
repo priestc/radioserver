@@ -12,6 +12,13 @@ from django.views.decorators.http import require_GET, require_POST
 from library.models import Album, ApiKey, GenreGroup, PlaylistItem, Track
 
 
+def _file_response(path: Path) -> FileResponse:
+    """Return a FileResponse with Content-Length set."""
+    response = FileResponse(open(path, "rb"))
+    response["Content-Length"] = path.stat().st_size
+    return response
+
+
 def require_api_key(view_func):
     @functools.wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -273,7 +280,7 @@ def download_song(request, playlist_item_id):
     if not path.is_file():
         raise Http404
 
-    return FileResponse(path)
+    return _file_response(path)
 
 
 @require_api_key
@@ -291,7 +298,7 @@ def download_song_lowbitrate(request, playlist_item_id):
 
     # If already 128kbps or lower, serve the original file
     if track.bitrate and track.bitrate <= 128000:
-        return FileResponse(path)
+        return _file_response(path)
 
     # Transcode to 128kbps MP3 via ffmpeg
     import subprocess
@@ -308,7 +315,7 @@ def download_song_lowbitrate(request, playlist_item_id):
     except (subprocess.CalledProcessError, FileNotFoundError):
         # ffmpeg failed or not installed — fall back to original
         Path(tmp.name).unlink(missing_ok=True)
-        return FileResponse(path)
+        return _file_response(path)
 
     tmp_path = Path(tmp.name)
     fh = open(tmp_path, "rb")
@@ -503,4 +510,4 @@ def download_track(request, track_id):
     if not path.is_file():
         raise Http404
 
-    return FileResponse(path)
+    return _file_response(path)
