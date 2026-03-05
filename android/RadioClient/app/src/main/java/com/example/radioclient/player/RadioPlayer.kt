@@ -269,13 +269,19 @@ class RadioPlayer(
     }
 
     private suspend fun performSyncWithRetry() {
-        while (true) {
-            val success = performSync()
-            if (success) return
+        try {
+            while (true) {
+                val success = performSync()
+                if (success) return
 
-            val delayMs = (syncBackoffSeconds * 1000).toLong()
-            syncBackoffSeconds = min(syncBackoffSeconds * 2, 60.0)
-            delay(delayMs)
+                val delayMs = (syncBackoffSeconds * 1000).toLong()
+                syncBackoffSeconds = min(syncBackoffSeconds * 2, 60.0)
+                delay(delayMs)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -284,33 +290,34 @@ class RadioPlayer(
         val apiKey = settingsManager.apiKey.value
         if (serverURL.isBlank() || apiKey.isBlank()) return false
 
-        val playedItems = pendingPlayed.map { played ->
-            SyncRequestPlayed(
-                id = played.song.id,
-                playedAt = isoFormatter.format(played.playedAt),
-                skipped = played.skipped,
-            )
-        }
-
-        val nowPlaying = _currentSong.value?.let { song ->
-            currentSongStartedAt?.let { startedAt ->
-                SyncRequestNowPlaying(
-                    id = song.id,
-                    startedAt = isoFormatter.format(startedAt),
+        try {
+            val playedItems = pendingPlayed.map { played ->
+                SyncRequestPlayed(
+                    id = played.song.id,
+                    playedAt = isoFormatter.format(played.playedAt),
+                    skipped = played.skipped,
                 )
             }
-        }
 
-        val request = SyncRequest(
-            played = playedItems,
-            bufferCacheMb = settingsManager.bufferCacheMB.value,
-            nowPlaying = nowPlaying,
-        )
+            val nowPlaying = _currentSong.value?.let { song ->
+                currentSongStartedAt?.let { startedAt ->
+                    SyncRequestNowPlaying(
+                        id = song.id,
+                        startedAt = isoFormatter.format(startedAt),
+                    )
+                }
+            }
 
-        val result = apiService.sync(request)
-        if (result.isFailure) return false
+            val request = SyncRequest(
+                played = playedItems,
+                bufferCacheMb = settingsManager.bufferCacheMB.value,
+                nowPlaying = nowPlaying,
+            )
 
-        val response = result.getOrThrow()
+            val result = apiService.sync(request)
+            if (result.isFailure) return false
+
+            val response = result.getOrNull() ?: return false
 
         // Clear sent pending items
         val sentCount = playedItems.size
@@ -335,8 +342,12 @@ class RadioPlayer(
             playNext()
         }
 
-        syncBackoffSeconds = 2.0
-        return true
+            syncBackoffSeconds = 2.0
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
     }
 
     private suspend fun downloadNewSongs(songs: List<SongItem>) {

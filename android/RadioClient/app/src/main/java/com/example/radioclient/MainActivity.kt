@@ -40,12 +40,16 @@ class MainActivity : ComponentActivity() {
         }
 
         // Connect to MediaSessionService to start it
-        val sessionToken = SessionToken(
-            this,
-            ComponentName(this, AudioPlayerService::class.java),
-        )
-        val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture.addListener({ /* controller ready */ }, MoreExecutors.directExecutor())
+        try {
+            val sessionToken = SessionToken(
+                this,
+                ComponentName(this, AudioPlayerService::class.java),
+            )
+            val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
+            controllerFuture.addListener({ /* controller ready */ }, MoreExecutors.directExecutor())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         setContent {
             RadioClientTheme {

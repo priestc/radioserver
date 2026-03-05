@@ -136,15 +136,19 @@ fun SettingsScreen(app: RadioClientApp) {
                 isTesting = true
                 testResult = null
                 scope.launch {
-                    val result = app.apiService.sync(
-                        SyncRequest(
-                            played = emptyList(),
-                            bufferCacheMb = 0,
+                    try {
+                        val result = app.apiService.sync(
+                            SyncRequest(
+                                played = emptyList(),
+                                bufferCacheMb = 0,
+                            )
                         )
-                    )
-                    result.onSuccess { response ->
-                        testResult = "Connected! ${response.download.size} songs available"
-                    }.onFailure { e ->
+                        result.onSuccess { response ->
+                            testResult = "Connected! ${response.download.size} songs available"
+                        }.onFailure { e ->
+                            testResult = "Failed: ${e.message}"
+                        }
+                    } catch (e: Exception) {
                         testResult = "Failed: ${e.message}"
                     }
                     isTesting = false
