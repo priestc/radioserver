@@ -34,13 +34,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import android.os.Handler
+import android.os.Looper
 import com.example.radioclient.RadioClientApp
-import com.example.radioclient.model.SyncRequest
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun SettingsScreen(app: RadioClientApp) {
@@ -138,30 +140,47 @@ fun SettingsScreen(app: RadioClientApp) {
             onClick = {
                 isTesting = true
                 testResult = null
-                val handler = CoroutineExceptionHandler { _, throwable ->
-                    testResult = "Failed: ${throwable.message}"
-                    isTesting = false
-                }
-                CoroutineScope(Dispatchers.Main + handler).launch {
+                val baseURL = app.apiService.buildBaseURL()
+                val apiKey = app.settingsManager.apiKey.value
+                val mainHandler = Handler(Looper.getMainLooper())
+                Thread {
                     try {
-                        val result = withContext(Dispatchers.IO) {
-                            app.apiService.sync(
-                                SyncRequest(
-                                    played = emptyList(),
-                                    bufferCacheMb = 0,
-                                )
+                        val client = OkHttpClient.Builder()
+                            .connectTimeout(15, TimeUnit.SECONDS)
+                            .readTimeout(15, TimeUnit.SECONDS)
+                            .build()
+                        val body = """{"played":[],"buffer_cache_mb":0}"""
+                            .toRequestBody("application/json".toMediaType())
+                        val request = Request.Builder()
+                            .url("${baseURL}library/api/client_sync/")
+                            .addHeader("Authorization", "Bearer $apiKey")
+                            .post(body)
+                            .build()
+                        val response = client.newCall(request).execute()
+                        val responseBody = response.body?.string() ?: ""
+                        if (response.isSuccessful) {
+                            val json = Json { ignoreUnknownKeys = true }
+                            val syncResponse = json.decodeFromString(
+                                com.example.radioclient.model.SyncResponse.serializer(),
+                                responseBody,
                             )
-                        }
-                        result.onSuccess { response ->
-                            testResult = "Connected! ${response.download.size} songs available"
-                        }.onFailure { e ->
-                            testResult = "Failed: ${e.message}"
+                            mainHandler.post {
+                                testResult = "Connected! ${syncResponse.download.size} songs available"
+                                isTesting = false
+                            }
+                        } else {
+                            mainHandler.post {
+                                testResult = "Failed: Server error ${response.code}"
+                                isTesting = false
+                            }
                         }
                     } catch (e: Exception) {
-                        testResult = "Failed: ${e.message}"
+                        mainHandler.post {
+                            testResult = "Failed: ${e.message}"
+                            isTesting = false
+                        }
                     }
-                    isTesting = false
-                }
+                }.start()
             },
             enabled = !isTesting,
         ) {
