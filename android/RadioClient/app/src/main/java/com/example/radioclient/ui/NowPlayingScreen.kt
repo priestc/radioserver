@@ -142,7 +142,7 @@ fun NowPlayingScreen(app: RadioClientApp) {
         // Progress bar
         val progress = if (duration > 0) (currentTime / duration).toFloat().coerceIn(0f, 1f) else 0f
         LinearProgressIndicator(
-            progress = { progress },
+            progress = progress,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(4.dp))
