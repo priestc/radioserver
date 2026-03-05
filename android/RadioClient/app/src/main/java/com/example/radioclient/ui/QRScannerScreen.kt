@@ -102,7 +102,7 @@ private fun CameraPreview(onScanned: (String) -> Unit) {
                 val cameraProvider = cameraProviderFuture.get()
 
                 val preview = Preview.Builder().build().also {
-                    it.surfaceProvider = previewView.surfaceProvider
+                    it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
                 val analyzer = ImageAnalysis.Builder()
