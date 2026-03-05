@@ -36,9 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.radioclient.RadioClientApp
 import com.example.radioclient.model.SyncRequest
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(app: RadioClientApp) {
@@ -138,14 +136,12 @@ fun SettingsScreen(app: RadioClientApp) {
                 isTesting = true
                 testResult = null
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        app.apiService.sync(
-                            SyncRequest(
-                                played = emptyList(),
-                                bufferCacheMb = 0,
-                            )
+                    val result = app.apiService.sync(
+                        SyncRequest(
+                            played = emptyList(),
+                            bufferCacheMb = 0,
                         )
-                    }
+                    )
                     result.onSuccess { response ->
                         testResult = "Connected! ${response.download.size} songs available"
                     }.onFailure { e ->

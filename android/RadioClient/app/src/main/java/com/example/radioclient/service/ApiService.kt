@@ -2,6 +2,8 @@ package com.example.radioclient.service
 
 import com.example.radioclient.model.SyncRequest
 import com.example.radioclient.model.SyncResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -50,64 +52,72 @@ class ApiService(
         return "${base}library/cover/$albumId/"
     }
 
-    suspend fun sync(request: SyncRequest): Result<SyncResponse> = runCatching {
-        val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
-        val apiKey = settingsManager.apiKey.value
-        val body = json.encodeToString(SyncRequest.serializer(), request)
-            .toRequestBody("application/json".toMediaType())
+    suspend fun sync(request: SyncRequest): Result<SyncResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
+            val apiKey = settingsManager.apiKey.value
+            val body = json.encodeToString(SyncRequest.serializer(), request)
+                .toRequestBody("application/json".toMediaType())
 
-        val httpRequest = Request.Builder()
-            .url("${base}library/api/client_sync/")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .post(body)
-            .build()
+            val httpRequest = Request.Builder()
+                .url("${base}library/api/client_sync/")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .post(body)
+                .build()
 
-        val response = client.newCall(httpRequest).execute()
-        if (!response.isSuccessful) throw RuntimeException("Server error: ${response.code}")
-        val responseBody = response.body?.string() ?: throw RuntimeException("Empty response")
-        json.decodeFromString(SyncResponse.serializer(), responseBody)
+            val response = client.newCall(httpRequest).execute()
+            if (!response.isSuccessful) throw RuntimeException("Server error: ${response.code}")
+            val responseBody = response.body?.string() ?: throw RuntimeException("Empty response")
+            json.decodeFromString(SyncResponse.serializer(), responseBody)
+        }
     }
 
-    suspend fun downloadSong(playlistItemId: Int): Result<ByteArray> = runCatching {
-        val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
-        val apiKey = settingsManager.apiKey.value
+    suspend fun downloadSong(playlistItemId: Int): Result<ByteArray> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
+            val apiKey = settingsManager.apiKey.value
 
-        val request = Request.Builder()
-            .url("${base}library/api/download_song/$playlistItemId/")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .get()
-            .build()
+            val request = Request.Builder()
+                .url("${base}library/api/download_song/$playlistItemId/")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
 
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) throw RuntimeException("Download failed: ${response.code}")
-        response.body?.bytes() ?: throw RuntimeException("Empty body")
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) throw RuntimeException("Download failed: ${response.code}")
+            response.body?.bytes() ?: throw RuntimeException("Empty body")
+        }
     }
 
-    suspend fun downloadSongLowBitrate(playlistItemId: Int): Result<ByteArray> = runCatching {
-        val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
-        val apiKey = settingsManager.apiKey.value
+    suspend fun downloadSongLowBitrate(playlistItemId: Int): Result<ByteArray> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
+            val apiKey = settingsManager.apiKey.value
 
-        val request = Request.Builder()
-            .url("${base}library/api/download_song_lowbitrate/$playlistItemId/")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .get()
-            .build()
+            val request = Request.Builder()
+                .url("${base}library/api/download_song_lowbitrate/$playlistItemId/")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
 
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) throw RuntimeException("Download failed: ${response.code}")
-        response.body?.bytes() ?: throw RuntimeException("Empty body")
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) throw RuntimeException("Download failed: ${response.code}")
+            response.body?.bytes() ?: throw RuntimeException("Empty body")
+        }
     }
 
-    suspend fun downloadArtwork(albumId: Int): Result<ByteArray> = runCatching {
-        val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
+    suspend fun downloadArtwork(albumId: Int): Result<ByteArray> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
 
-        val request = Request.Builder()
-            .url("${base}library/cover/$albumId/")
-            .get()
-            .build()
+            val request = Request.Builder()
+                .url("${base}library/cover/$albumId/")
+                .get()
+                .build()
 
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) throw RuntimeException("Artwork not found: ${response.code}")
-        response.body?.bytes() ?: throw RuntimeException("Empty body")
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) throw RuntimeException("Artwork not found: ${response.code}")
+            response.body?.bytes() ?: throw RuntimeException("Empty body")
+        }
     }
 }
