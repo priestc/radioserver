@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -184,14 +183,7 @@ fun SettingsScreen(app: RadioClientApp) {
             },
             enabled = !isTesting,
         ) {
-            if (isTesting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Text("Test Connection")
+            Text(if (isTesting) "Testing..." else "Test Connection")
         }
 
         testResult?.let { result ->
