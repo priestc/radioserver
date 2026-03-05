@@ -29,18 +29,20 @@ class ApiService(
             settingsManager.remoteURL.value
         }
 
-    fun buildBaseURL(serverURL: String = activeServerURL): URL? {
+    fun buildBaseURL(serverURL: String = activeServerURL): String? {
         if (serverURL.isBlank()) return null
         var urlStr = serverURL.trim()
         if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) {
             urlStr = "http://$urlStr"
         }
         val parsed = try { URL(urlStr) } catch (_: Exception) { return null }
-        return if (parsed.port == -1) {
+        val withPort = if (parsed.port == -1) {
             URL(parsed.protocol, parsed.host, 9437, parsed.file)
         } else {
             parsed
         }
+        val str = withPort.toString()
+        return if (str.endsWith("/")) str else "$str/"
     }
 
     fun coverArtURL(albumId: Int): String? {
