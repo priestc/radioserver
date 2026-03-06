@@ -320,6 +320,7 @@ def download_song_lowbitrate(request, playlist_item_id):
     tmp_path = Path(tmp.name)
     fh = open(tmp_path, "rb")
     response = FileResponse(fh, content_type="audio/mpeg")
+    response["Content-Length"] = tmp_path.stat().st_size
     response["Content-Disposition"] = f'attachment; filename="{path.stem}.mp3"'
     # Remove temp file once the file handle is closed
     original_close = fh.close

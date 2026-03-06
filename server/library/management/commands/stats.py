@@ -5,10 +5,11 @@ import subprocess
 
 from django.core.management.base import BaseCommand
 
-# Matches gunicorn combined access log:
-# 192.168.1.50 - - [01/Mar/2026:12:00:00 +0000] "GET /path HTTP/1.1" 200 12345 "ref" "ua"
+# Matches gunicorn access log (with optional cl=<Content-Length> suffix):
+# 192.168.1.50 - - [01/Mar/2026:12:00:00 +0000] "GET /path HTTP/1.1" 200 12345 "ref" "ua" cl=54321
 LOG_RE = re.compile(
     r'^(?P<ip>\S+) \S+ \S+ \[.*?\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<bytes>\S+)'
+    r'(?:.* cl=(?P<content_length>\S+))?'
 )
 
 # Replace numeric path segments with * for grouping
@@ -64,8 +65,13 @@ class Command(BaseCommand):
             if not m:
                 continue
 
+            # Prefer Content-Length header (accurate for streaming responses)
+            # over gunicorn's %(b)s which reports "-" for FileResponse
+            cl = m.group("content_length")
             resp_bytes_str = m.group("bytes")
-            if resp_bytes_str == "-":
+            if cl and cl not in ("-", "None"):
+                resp_bytes = int(cl)
+            elif resp_bytes_str == "-":
                 resp_bytes = 0
             else:
                 resp_bytes = int(resp_bytes_str)
