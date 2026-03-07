@@ -1,0 +1,102 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Duplicate Finder — {{ artist.name }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+.dup-group {
+    margin-bottom: 2em;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.dup-group h3 {
+    margin: 0;
+    padding: 0.5em 1em;
+    background: #f8f8f8;
+    border-bottom: 1px solid #ddd;
+    font-size: 1em;
+}
+.dup-group table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.dup-group td, .dup-group th {
+    padding: 0.5em 1em;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+.dup-group th {
+    background: #f0f0f0;
+    font-weight: bold;
+    text-align: left;
+}
+.dup-group audio {
+    height: 32px;
+    width: 260px;
+}
+.delete-col {
+    text-align: center;
+    width: 70px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Duplicate Finder — {{ artist.name }}</h2>
+
+<p><a href="{% url 'admin:library_artist_change' artist.pk %}">&larr; Back to {{ artist.name }}</a></p>
+
+{% if not duplicate_groups %}
+<p>No duplicate tracks found for <strong>{{ artist.name }}</strong>.</p>
+{% else %}
+<p>Found <strong>{{ duplicate_groups|length }}</strong> group(s) of similar tracks.
+   Check the tracks you want to delete, then click <em>Delete Selected</em>.</p>
+
+<form method="post" action="{% url 'admin:library_artist_delete_duplicates' artist.pk %}">
+    {% csrf_token %}
+
+    {% for group in duplicate_groups %}
+    <div class="dup-group">
+        <h3>{{ group.0.title }}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Album</th>
+                    <th>Year</th>
+                    <th>Listen</th>
+                    <th class="delete-col">Delete?</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for track in group %}
+                <tr>
+                    <td>{{ track.title }}</td>
+                    <td>{{ track.album.title|default:"—" }}</td>
+                    <td>{{ track.year|default:"—" }}</td>
+                    <td>
+                        <audio controls preload="none">
+                            <source src="{% url 'admin:library_track_stream' track.pk %}">
+                        </audio>
+                    </td>
+                    <td class="delete-col">
+                        <input type="checkbox" name="delete_tracks" value="{{ track.pk }}">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    <p>
+        <input type="submit" value="Delete Selected" class="default"
+               onclick="return confirm('Delete the checked tracks? This also removes them from disk and cannot be undone.');">
+        <a href="{% url 'admin:library_artist_change' artist.pk %}" style="margin-left:1em">Cancel</a>
+    </p>
+</form>
+{% endif %}
+{% endblock %}

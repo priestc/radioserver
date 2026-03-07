@@ -89,7 +89,105 @@ class ArtistAdmin(admin.ModelAdmin):
     list_display = ["display_name", "sort_name", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     search_fields = ["name"]
-    readonly_fields = ["album_list", "track_list"]
+    readonly_fields = ["album_list", "track_list", "duplicate_finder_btn"]
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<int:artist_id>/duplicate-finder/",
+                self.admin_site.admin_view(self.duplicate_finder_view),
+                name="library_artist_duplicate_finder",
+            ),
+            path(
+                "<int:artist_id>/duplicate-finder/delete/",
+                self.admin_site.admin_view(self.delete_duplicates_view),
+                name="library_artist_delete_duplicates",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    @admin.display(description="Duplicate Finder")
+    def duplicate_finder_btn(self, obj):
+        if not obj.pk:
+            return ""
+        from django.urls import reverse
+        url = reverse("admin:library_artist_duplicate_finder", args=[obj.pk])
+        return format_html('<a href="{}" class="button">Find Duplicates</a>', url)
+
+    def duplicate_finder_view(self, request, artist_id):
+        import difflib
+        import re
+        from collections import defaultdict
+
+        artist = Artist.objects.get(pk=artist_id)
+        tracks = list(artist.tracks.select_related("album").order_by("title"))
+
+        def normalize(title):
+            t = re.sub(r"\s*\([^)]*\)", "", title)
+            t = re.sub(r"\s*\[[^\]]*\]", "", t)
+            t = re.sub(r"[^\w\s]", "", t.lower())
+            return " ".join(t.split())
+
+        n = len(tracks)
+        parent = list(range(n))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        def union(i, j):
+            parent[find(i)] = find(j)
+
+        normalized = [normalize(t.title) for t in tracks]
+        for i in range(n):
+            for j in range(i + 1, n):
+                if not normalized[i] or not normalized[j]:
+                    continue
+                ratio = difflib.SequenceMatcher(None, normalized[i], normalized[j]).ratio()
+                if ratio >= 0.85:
+                    union(i, j)
+
+        groups = defaultdict(list)
+        for i, track in enumerate(tracks):
+            groups[find(i)].append(track)
+
+        duplicate_groups = sorted(
+            [g for g in groups.values() if len(g) >= 2],
+            key=lambda g: g[0].title.lower(),
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Duplicate Finder — {artist.name}",
+            "artist": artist,
+            "duplicate_groups": duplicate_groups,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/library/duplicate_finder.html", context)
+
+    def delete_duplicates_view(self, request, artist_id):
+        from django.urls import reverse
+
+        artist = Artist.objects.get(pk=artist_id)
+        if request.method != "POST":
+            return redirect(reverse("admin:library_artist_duplicate_finder", args=[artist_id]))
+
+        track_ids = request.POST.getlist("delete_tracks")
+        deleted = 0
+        for tid in track_ids:
+            try:
+                track = Track.objects.get(pk=tid, artists=artist)
+                file_path = Path(track.file_path)
+                track.delete()
+                file_path.unlink(missing_ok=True)
+                deleted += 1
+            except Track.DoesNotExist:
+                pass
+
+        self.message_user(request, f"Deleted {deleted} track(s).")
+        return redirect(reverse("admin:library_artist_duplicate_finder", args=[artist_id]))
 
     @admin.display(description="Name")
     def display_name(self, obj):
