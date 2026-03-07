@@ -178,7 +178,7 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> tuple[list[Path], lis
     cmd = [
         "yt-dlp",
         "-x", "--audio-format", "best",
-        "-f", "bestaudio",
+        "-f", "bestaudio/best",
         "--add-metadata",
         "--parse-metadata", "playlist_index:%(track_number)s",
         "--yes-playlist",
@@ -216,6 +216,7 @@ def get_albumart_from_ytdl(url: str, dest_dir: Path) -> Path | None:
         cmd = [
             "yt-dlp",
             "-x", "--audio-format", "best",
+            "-f", "bestaudio/best",
             "--embed-thumbnail",
             "--playlist-items", "1",
             "-o", output_template,
