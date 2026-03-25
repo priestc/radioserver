@@ -150,7 +150,10 @@ class AudioPlayer: ObservableObject {
                     }
                 }
             } else {
-                for item in newItems {
+                let queued = await MainActor.run { self.queue }
+                let newIds = Set(newItems.map { $0.id })
+                let allItems = newItems + queued.filter { !newIds.contains($0.id) }
+                for item in allItems {
                     if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
                         _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
                     }
