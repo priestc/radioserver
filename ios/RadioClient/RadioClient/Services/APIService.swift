@@ -2,6 +2,7 @@ import Foundation
 import Network
 
 class APIService: ObservableObject {
+    static let shared = APIService()
     @Published var localURL: String {
         didSet { UserDefaults.standard.set(localURL, forKey: "localURL") }
     }

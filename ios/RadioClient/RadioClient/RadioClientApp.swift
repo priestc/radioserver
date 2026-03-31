@@ -2,8 +2,8 @@ import SwiftUI
 
 @main
 struct RadioClientApp: App {
-    @StateObject private var apiService = APIService()
-    @StateObject private var audioPlayer = AudioPlayer()
+    @StateObject private var apiService = APIService.shared
+    @StateObject private var audioPlayer = AudioPlayer.shared
 
     var body: some Scene {
         WindowGroup {

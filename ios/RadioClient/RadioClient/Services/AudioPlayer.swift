@@ -5,6 +5,7 @@ import Network
 import UIKit
 
 class AudioPlayer: ObservableObject {
+    static let shared = AudioPlayer()
     @Published var currentSong: SongItem?
     @Published var queue: [SongItem] = []
     @Published var playHistory: [PlayedSong] = []
