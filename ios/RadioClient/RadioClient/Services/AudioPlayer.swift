@@ -37,6 +37,7 @@ class AudioPlayer: ObservableObject {
         setupAudioSession()
         setupRemoteCommands()
         startNetworkMonitor()
+        setupAudioSessionObservers()
     }
 
     private func startNetworkMonitor() {
@@ -54,6 +55,51 @@ class AudioPlayer: ObservableObject {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Audio session setup failed: \(error)")
+        }
+    }
+
+    private func setupAudioSessionObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        guard let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
+        DispatchQueue.main.async {
+            switch reason {
+            case .newDeviceAvailable:
+                // New output (e.g. CarPlay connecting) — resume if we were playing
+                if self.isPlaying { self.player?.play() }
+            case .oldDeviceUnavailable:
+                // Output removed (e.g. headphones unplugged) — pause
+                self.pause()
+            default:
+                break
+            }
+        }
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+        if type == .ended {
+            let options = AVAudioSession.InterruptionOptions(
+                rawValue: notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            )
+            if options.contains(.shouldResume) {
+                DispatchQueue.main.async { self.play() }
+            }
         }
     }
 
