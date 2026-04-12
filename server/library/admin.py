@@ -280,7 +280,9 @@ class AlbumAdmin(admin.ModelAdmin):
             return "No tracks"
         multi_disc = obj.total_discs and obj.total_discs > 1
         from django.urls import reverse
-        track_ids = []
+        from library.tags import read_replaygain
+        import json as _json
+        track_data = []  # [{stream, gain}]
         items = []
         for i, t in enumerate(tracks):
             prefix = f"{t.disc_number}-" if t.disc_number and multi_disc else ""
@@ -288,29 +290,44 @@ class AlbumAdmin(admin.ModelAdmin):
             url = reverse("admin:library_track_change", args=[t.pk])
             stream_url = reverse("admin:library_track_stream", args=[t.pk])
             year_str = f" ({t.year})" if t.year else ""
-            track_ids.append(stream_url)
+            gain = read_replaygain(t.file_path)
+            track_data.append({"stream": stream_url, "gain": gain})
             items.append(format_html(
                 '<li style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
-                '<button type="button" data-index="{i}" data-stream="{stream}" '
+                '<button type="button" data-index="{i}" '
                 'onclick="albumTrackPlay(this)" '
                 'style="font-size:0.75em;padding:1px 6px;cursor:pointer;line-height:1.4">&#9654;</button>'
                 '{num}<a href="{url}">{title}</a>{year}</li>',
-                i=i, stream=stream_url, num=num, url=url, title=t.title, year=year_str,
+                i=i, url=url, title=t.title, year=year_str, num=num,
             ))
-        stream_urls_json = format_html(
-            "{}",
-            mark_safe(__import__("json").dumps(track_ids)),
-        )
+        track_data_json = mark_safe(_json.dumps(track_data))
         player_html = format_html(
-            '<audio id="album-track-player" style="display:block;width:100%;max-width:500px;margin-bottom:8px"></audio>'
+            '<audio id="album-track-player" style="display:block;width:100%;max-width:500px;margin-bottom:4px"></audio>'
+            '<div style="display:flex;align-items:center;gap:8px;max-width:500px;margin-bottom:8px">'
+            '<label for="album-volume-slider" style="font-size:0.85em;white-space:nowrap">Volume</label>'
+            '<input type="range" id="album-volume-slider" min="0" max="100" value="100" '
+            'style="flex:1" oninput="albumVolumeChange(this.value)">'
+            '<span id="album-volume-display" style="font-size:0.85em;width:3em;text-align:right">100%</span>'
+            '</div>'
             '<script>'
             '(function(){{'
-            '  var streams = {streams};'
+            '  var tracks = {track_data};'
             '  var currentBtn = null;'
+            '  var sliderVol = 1.0;'
             '  var audio = document.getElementById("album-track-player");'
+            '  function applyVolume(idx) {{'
+            '    var gain = tracks[idx].gain;'
+            '    var rg = (gain !== null) ? Math.pow(10, gain / 20) : 1.0;'
+            '    audio.volume = Math.min(rg * sliderVol, 1.0);'
+            '  }}'
+            '  window.albumVolumeChange = function(val) {{'
+            '    sliderVol = val / 100;'
+            '    document.getElementById("album-volume-display").textContent = val + "%";'
+            '    if (audio.dataset.index !== undefined) applyVolume(parseInt(audio.dataset.index));'
+            '  }};'
             '  audio.addEventListener("ended", function(){{'
             '    var next = audio.dataset.index !== undefined ? parseInt(audio.dataset.index) + 1 : null;'
-            '    if (next !== null && next < streams.length) {{'
+            '    if (next !== null && next < tracks.length) {{'
             '      var nextBtn = document.querySelector("[data-index=\'" + next + "\']");'
             '      if (nextBtn) nextBtn.click();'
             '    }} else {{'
@@ -328,13 +345,14 @@ class AlbumAdmin(admin.ModelAdmin):
             '    }}'
             '    currentBtn = btn;'
             '    btn.textContent = "\\u23F8";'
-            '    audio.src = streams[idx];'
+            '    audio.src = tracks[idx].stream;'
             '    audio.dataset.index = idx;'
+            '    applyVolume(idx);'
             '    audio.play();'
             '  }};'
             '}})()'
             '</script>',
-            streams=stream_urls_json,
+            track_data=track_data_json,
         )
         return format_html(
             "{}<ol style='margin:0;padding-left:1.5em'>{}</ol>",
