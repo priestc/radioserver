@@ -163,8 +163,40 @@ class PlaylistSettings(models.Model):
         return "Playlist Settings"
 
 
+class Channel(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    year_min = models.IntegerField(
+        null=True, blank=True,
+        help_text="Oldest release year to include (inclusive). Leave blank for no lower bound.",
+    )
+    year_max = models.IntegerField(
+        null=True, blank=True,
+        help_text="Newest release year to include (inclusive). Leave blank for no upper bound.",
+    )
+    genre_group = models.ForeignKey(
+        GenreGroup, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="channels",
+        help_text="Only include tracks from this genre group. Leave blank for all genres.",
+    )
+    artist = models.ForeignKey(
+        Artist, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="channels",
+        help_text="Only include tracks by this artist. Leave blank for all artists.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class PlaylistItem(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="playlist_items")
+    channel = models.ForeignKey(
+        Channel, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="playlist_items",
+    )
     started_at = models.DateTimeField(null=True, blank=True)
     played_at = models.DateTimeField(null=True, blank=True)
     skipped = models.BooleanField(default=False)

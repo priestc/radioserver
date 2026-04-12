@@ -211,6 +211,16 @@ def client_sync(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+    # Resolve requested channel (None = default / all music)
+    from library.models import Channel
+    channel_id = body.get("channel_id")
+    channel = None
+    if channel_id is not None:
+        try:
+            channel = Channel.objects.get(pk=channel_id)
+        except Channel.DoesNotExist:
+            pass
+
     # Mark played items
     for entry in body.get("played", []):
         PlaylistItem.objects.filter(pk=entry["id"]).update(
@@ -225,19 +235,24 @@ def client_sync(request):
             started_at=now_playing["started_at"],
         )
 
-    # Auto-generate playlist if unplayed duration is under 1 hour
+    # If the client has switched channels, discard unplayed items from the old channel
+    first_unplayed = PlaylistItem.objects.filter(played_at__isnull=True).order_by("id").first()
+    if first_unplayed is not None and first_unplayed.channel != channel:
+        PlaylistItem.objects.filter(played_at__isnull=True).delete()
+
+    # Auto-generate playlist for this channel if unplayed duration is under 1 hour
     from django.db.models import Sum
     unplayed_duration = (
-        PlaylistItem.objects.filter(played_at__isnull=True)
+        PlaylistItem.objects.filter(played_at__isnull=True, channel=channel)
         .aggregate(total=Sum("track__duration"))["total"]
     ) or 0
     if unplayed_duration < 3600:
         from library.playlist import generate_playlist
-        generate_playlist(3600)
+        generate_playlist(3600, channel=channel)
 
     # Determine items to download
     buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
-    unplayed = PlaylistItem.objects.filter(played_at__isnull=True).select_related("track").order_by("id")
+    unplayed = PlaylistItem.objects.filter(played_at__isnull=True, channel=channel).select_related("track").order_by("id")
 
     unplayed = unplayed.select_related("track__album", "track__album__artist").prefetch_related("track__artists")
 
@@ -266,6 +281,26 @@ def client_sync(request):
             break
 
     return JsonResponse({"download": download})
+
+
+@require_api_key
+@require_GET
+def list_channels(request):
+    from library.models import Channel
+    channels = Channel.objects.select_related("genre_group", "artist").all()
+    return JsonResponse({
+        "channels": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "year_min": c.year_min,
+                "year_max": c.year_max,
+                "genre_group": c.genre_group.name if c.genre_group else None,
+                "artist": c.artist.name if c.artist else None,
+            }
+            for c in channels
+        ]
+    })
 
 
 @require_api_key

@@ -12,6 +12,7 @@ class AudioPlayer: ObservableObject {
     @Published var isPlaying = false
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
+    @Published var selectedChannel: Channel?
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -129,6 +130,27 @@ class AudioPlayer: ObservableObject {
         Task { await performSync() }
     }
 
+    func selectChannel(_ channel: Channel?) {
+        guard selectedChannel != channel else { return }
+        selectedChannel = channel
+        // Clear local queue and stop playback; server will clear its unplayed items
+        // on the next sync when it detects the channel change.
+        player?.pause()
+        isPlaying = false
+        for song in queue {
+            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
+            CacheManager.shared.removeFile(for: song.id, ext: "mp3")
+        }
+        if let song = currentSong {
+            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
+            CacheManager.shared.removeFile(for: song.id, ext: "mp3")
+        }
+        queue.removeAll()
+        currentSong = nil
+        updateNowPlaying()
+        triggerSync()
+    }
+
     func stopSyncTimer() {
         syncRetryTask?.cancel()
         syncRetryTask = nil
@@ -165,7 +187,8 @@ class AudioPlayer: ObservableObject {
                 nowPlaying = (id: song.id, startedAt: startedAt)
             }
 
-            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB, nowPlaying: nowPlaying)
+            let channelId = await MainActor.run { self.selectedChannel?.id }
+            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB, nowPlaying: nowPlaying, channelId: channelId)
             await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
 
             // Add new items to queue (skip already queued)

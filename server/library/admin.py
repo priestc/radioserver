@@ -17,6 +17,7 @@ from library.models import (
     Album,
     ApiKey,
     Artist,
+    Channel,
     GenreGroup,
     PlaylistItem,
     PlaylistSettings,
@@ -787,6 +788,29 @@ class GenreGroupAdmin(admin.ModelAdmin):
             return "0 (0%)"
         total = Track.objects.count()
         count = Track.objects.filter(genre__in=genres).count()
+        pct = (count / total * 100) if total else 0
+        return f"{count} ({pct:.1f}%)"
+
+
+@admin.register(Channel)
+class ChannelAdmin(admin.ModelAdmin):
+    list_display = ["name", "year_min", "year_max", "genre_group", "artist", "track_count"]
+    fields = ["name", "year_min", "year_max", "genre_group", "artist"]
+
+    @admin.display(description="Matching tracks")
+    def track_count(self, obj):
+        from library.models import Track
+        qs = Track.objects.filter(exclude_from_playlist=False).exclude(duration__isnull=True)
+        if obj.year_min is not None:
+            qs = qs.filter(year__gte=obj.year_min)
+        if obj.year_max is not None:
+            qs = qs.filter(year__lte=obj.year_max)
+        if obj.genre_group is not None:
+            qs = qs.filter(genre__in=obj.genre_group.genre_list())
+        if obj.artist is not None:
+            qs = qs.filter(artists=obj.artist)
+        total = Track.objects.filter(exclude_from_playlist=False).exclude(duration__isnull=True).count()
+        count = qs.count()
         pct = (count / total * 100) if total else 0
         return f"{count} ({pct:.1f}%)"
 

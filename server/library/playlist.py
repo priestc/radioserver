@@ -37,19 +37,27 @@ def _passes(
     return True
 
 
-def generate_playlist(target_seconds: float) -> tuple[int, float]:
+def generate_playlist(target_seconds: float, channel=None) -> tuple[int, float]:
     """Generate playlist items to fill *target_seconds* of audio.
 
     Returns (items_created, total_duration_seconds).
+    If *channel* is given, only tracks matching its filters are used.
     """
     settings, _ = PlaylistSettings.objects.get_or_create(pk=1)
 
-    tracks = list(
-        Track.objects.filter(exclude_from_playlist=False)
-        .exclude(duration__isnull=True)
-        .select_related("album")
-        .prefetch_related("artists")
-    )
+    qs = Track.objects.filter(exclude_from_playlist=False).exclude(duration__isnull=True)
+
+    if channel is not None:
+        if channel.year_min is not None:
+            qs = qs.filter(year__gte=channel.year_min)
+        if channel.year_max is not None:
+            qs = qs.filter(year__lte=channel.year_max)
+        if channel.genre_group is not None:
+            qs = qs.filter(genre__in=channel.genre_group.genre_list())
+        if channel.artist is not None:
+            qs = qs.filter(artists=channel.artist)
+
+    tracks = list(qs.select_related("album").prefetch_related("artists"))
     if not tracks:
         return 0, 0.0
 
@@ -91,7 +99,7 @@ def generate_playlist(target_seconds: float) -> tuple[int, float]:
             break
 
         pick = random.choice(candidates)
-        PlaylistItem.objects.create(track=pick)
+        PlaylistItem.objects.create(track=pick, channel=channel)
         items_created += 1
         total_duration += pick.duration
 

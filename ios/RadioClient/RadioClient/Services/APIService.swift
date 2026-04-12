@@ -71,7 +71,19 @@ class APIService: ObservableObject {
         return request
     }
 
-    func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil) async throws -> [SongItem] {
+    func fetchChannels() async throws -> [Channel] {
+        guard let base = baseURL else { throw APIError.invalidURL }
+        let url = base.appendingPathComponent("/library/api/channels/")
+        let request = authorizedRequest(url: url)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw APIError.serverError(code)
+        }
+        return try JSONDecoder().decode(ChannelsResponse.self, from: data).channels
+    }
+
+    func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil, channelId: Int? = nil) async throws -> [SongItem] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/client_sync/")
 
@@ -87,6 +99,9 @@ class APIService: ObservableObject {
         var body: [String: Any] = ["played": playedData, "buffer_cache_mb": bufferCacheMB]
         if let np = nowPlaying {
             body["now_playing"] = ["id": np.id, "started_at": formatter.string(from: np.startedAt)]
+        }
+        if let cid = channelId {
+            body["channel_id"] = cid
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

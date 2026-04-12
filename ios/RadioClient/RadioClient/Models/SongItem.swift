@@ -34,3 +34,38 @@ struct PlayedSong: Identifiable {
 struct SyncResponse: Codable {
     let download: [SongItem]
 }
+
+struct Channel: Codable, Identifiable, Equatable {
+    let id: Int
+    let name: String
+    let yearMin: Int?
+    let yearMax: Int?
+    let genreGroup: String?
+    let artist: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case yearMin = "year_min"
+        case yearMax = "year_max"
+        case genreGroup = "genre_group"
+        case artist
+    }
+
+    var subtitle: String {
+        var parts: [String] = []
+        if let min = yearMin, let max = yearMax {
+            parts.append("\(min)–\(max)")
+        } else if let min = yearMin {
+            parts.append("\(min) and newer")
+        } else if let max = yearMax {
+            parts.append("up to \(max)")
+        }
+        if let g = genreGroup { parts.append(g) }
+        if let a = artist { parts.append(a) }
+        return parts.isEmpty ? "All music" : parts.joined(separator: " · ")
+    }
+}
+
+struct ChannelsResponse: Codable {
+    let channels: [Channel]
+}

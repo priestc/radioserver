@@ -13,6 +13,11 @@ struct RadioClientApp: App {
                         Label("Now Playing", systemImage: "music.note")
                     }
 
+                ChannelsView()
+                    .tabItem {
+                        Label("Channels", systemImage: "dot.radiowaves.left.and.right")
+                    }
+
                 HistoryView()
                     .tabItem {
                         Label("History", systemImage: "clock")
