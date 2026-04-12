@@ -280,14 +280,67 @@ class AlbumAdmin(admin.ModelAdmin):
             return "No tracks"
         multi_disc = obj.total_discs and obj.total_discs > 1
         from django.urls import reverse
+        track_ids = []
         items = []
-        for t in tracks:
+        for i, t in enumerate(tracks):
             prefix = f"{t.disc_number}-" if t.disc_number and multi_disc else ""
             num = f"{prefix}{t.track_number}. " if t.track_number else ""
             url = reverse("admin:library_track_change", args=[t.pk])
+            stream_url = reverse("admin:library_track_stream", args=[t.pk])
             year_str = f" ({t.year})" if t.year else ""
-            items.append(format_html('<li>{}<a href="{}">{}</a>{}</li>', num, url, t.title, year_str))
-        return format_html("<ol style='margin:0;padding-left:1.5em'>{}</ol>", format_html("".join(items)))
+            track_ids.append(stream_url)
+            items.append(format_html(
+                '<li style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+                '<button type="button" data-index="{i}" data-stream="{stream}" '
+                'onclick="albumTrackPlay(this)" '
+                'style="font-size:0.75em;padding:1px 6px;cursor:pointer;line-height:1.4">&#9654;</button>'
+                '{num}<a href="{url}">{title}</a>{year}</li>',
+                i=i, stream=stream_url, num=num, url=url, title=t.title, year=year_str,
+            ))
+        stream_urls_json = format_html(
+            "{}",
+            mark_safe(__import__("json").dumps(track_ids)),
+        )
+        player_html = format_html(
+            '<audio id="album-track-player" style="display:block;width:100%;max-width:500px;margin-bottom:8px"></audio>'
+            '<script>'
+            '(function(){{'
+            '  var streams = {streams};'
+            '  var currentBtn = null;'
+            '  var audio = document.getElementById("album-track-player");'
+            '  audio.addEventListener("ended", function(){{'
+            '    var next = audio.dataset.index !== undefined ? parseInt(audio.dataset.index) + 1 : null;'
+            '    if (next !== null && next < streams.length) {{'
+            '      var nextBtn = document.querySelector("[data-index=\'" + next + "\']");'
+            '      if (nextBtn) nextBtn.click();'
+            '    }} else {{'
+            '      if (currentBtn) currentBtn.textContent = "\\u25B6";'
+            '      currentBtn = null;'
+            '    }}'
+            '  }});'
+            '  window.albumTrackPlay = function(btn) {{'
+            '    var idx = parseInt(btn.dataset.index);'
+            '    if (currentBtn) currentBtn.textContent = "\\u25B6";'
+            '    if (currentBtn === btn && !audio.paused) {{'
+            '      audio.pause();'
+            '      currentBtn = null;'
+            '      return;'
+            '    }}'
+            '    currentBtn = btn;'
+            '    btn.textContent = "\\u23F8";'
+            '    audio.src = streams[idx];'
+            '    audio.dataset.index = idx;'
+            '    audio.play();'
+            '  }};'
+            '}})()'
+            '</script>',
+            streams=stream_urls_json,
+        )
+        return format_html(
+            "{}<ol style='margin:0;padding-left:1.5em'>{}</ol>",
+            player_html,
+            format_html("".join(str(i) for i in items)),
+        )
 
     @admin.display(description="Title")
     def display_title(self, obj):
