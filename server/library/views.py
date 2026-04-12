@@ -296,6 +296,7 @@ def list_channels(request):
                 "year_min": c.year_min,
                 "year_max": c.year_max,
                 "genre_group": c.genre_group.name if c.genre_group else None,
+                "genre": c.genre or None,
                 "artist": c.artist.name if c.artist else None,
             }
             for c in channels

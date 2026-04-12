@@ -178,6 +178,10 @@ class Channel(models.Model):
         related_name="channels",
         help_text="Only include tracks from this genre group. Leave blank for all genres.",
     )
+    genre = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text="Only include tracks with this exact genre tag. Leave blank for all genres.",
+    )
     artist = models.ForeignKey(
         Artist, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="channels",

@@ -54,6 +54,8 @@ def generate_playlist(target_seconds: float, channel=None) -> tuple[int, float]:
             qs = qs.filter(year__lte=channel.year_max)
         if channel.genre_group is not None:
             qs = qs.filter(genre__in=channel.genre_group.genre_list())
+        if channel.genre:
+            qs = qs.filter(genre__iexact=channel.genre)
         if channel.artist is not None:
             qs = qs.filter(artists=channel.artist)
 

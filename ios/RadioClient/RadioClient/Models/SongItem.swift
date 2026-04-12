@@ -41,14 +41,14 @@ struct Channel: Codable, Identifiable, Equatable {
     let yearMin: Int?
     let yearMax: Int?
     let genreGroup: String?
+    let genre: String?
     let artist: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, genre, artist
         case yearMin = "year_min"
         case yearMax = "year_max"
         case genreGroup = "genre_group"
-        case artist
     }
 
     var subtitle: String {
@@ -61,6 +61,7 @@ struct Channel: Codable, Identifiable, Equatable {
             parts.append("up to \(max)")
         }
         if let g = genreGroup { parts.append(g) }
+        if let g = genre { parts.append(g) }
         if let a = artist { parts.append(a) }
         return parts.isEmpty ? "All music" : parts.joined(separator: " · ")
     }

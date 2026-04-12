@@ -794,8 +794,8 @@ class GenreGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
-    list_display = ["name", "year_min", "year_max", "genre_group", "artist", "track_count"]
-    fields = ["name", "year_min", "year_max", "genre_group", "artist"]
+    list_display = ["name", "year_min", "year_max", "genre_group", "genre", "artist", "track_count"]
+    fields = ["name", "year_min", "year_max", "genre_group", "genre", "artist"]
 
     @admin.display(description="Matching tracks")
     def track_count(self, obj):
@@ -807,6 +807,8 @@ class ChannelAdmin(admin.ModelAdmin):
             qs = qs.filter(year__lte=obj.year_max)
         if obj.genre_group is not None:
             qs = qs.filter(genre__in=obj.genre_group.genre_list())
+        if obj.genre:
+            qs = qs.filter(genre__iexact=obj.genre)
         if obj.artist is not None:
             qs = qs.filter(artists=obj.artist)
         total = Track.objects.filter(exclude_from_playlist=False).exclude(duration__isnull=True).count()
