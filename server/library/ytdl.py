@@ -318,85 +318,56 @@ def run_download(download_id: int) -> None:
                 dl.save(update_fields=["progress_message"])
                 _apply_track_overrides(tmp_dir, dl.track_overrides)
 
-            if dl.use_track_albums and dl.track_overrides:
-                # Per-track mode: each track goes to its own artist/album folder
-                dl.progress_message = "Organizing tracks by per-track artist/album..."
-                dl.save(update_fields=["progress_message"])
+            # Organise each track into album_artist/album/
+            dl.progress_message = "Organizing tracks by album artist/album..."
+            dl.save(update_fields=["progress_message"])
 
-                # Build override lookup keyed by playlist track number
-                overrides = {}
+            overrides = {}
+            if dl.track_overrides:
                 for ov in dl.track_overrides:
                     tn = ov.get("track_number")
                     if tn is not None:
                         overrides[tn] = ov
 
-                # Collect all audio files from all subdirectories
-                SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
-                audio_files = sorted(
-                    f for f in tmp_dir.rglob("*")
-                    if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS
+            SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+            audio_files = sorted(
+                f for f in tmp_dir.rglob("*")
+                if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS
+            )
+
+            art_extracted = set()
+
+            for audio_file in audio_files:
+                fname = audio_file.stem
+                parts = fname.split(" ", 1)
+                try:
+                    track_num = int(parts[0])
+                except (ValueError, IndexError):
+                    track_num = None
+
+                ov = overrides.get(track_num, {}) if track_num else {}
+                folder_artist = (
+                    ov.get("album_artist", "").strip()
+                    or ov.get("artist", "").strip()
+                    or artist_name
+                    or "Unknown Artist"
                 )
+                track_album = ov.get("album", "").strip() or dl.album_title or "Unknown Album"
 
-                # Extract album art once per unique destination dir
-                art_extracted = set()
+                dest_dir = library_root / folder_artist / track_album
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                affected_dirs.add(dest_dir)
 
-                for audio_file in audio_files:
-                    # Parse track number from filename (format: "NN title.ext")
-                    fname = audio_file.stem
-                    parts = fname.split(" ", 1)
-                    try:
-                        track_num = int(parts[0])
-                    except (ValueError, IndexError):
-                        track_num = None
+                if str(dest_dir) not in art_extracted:
+                    art_extracted.add(str(dest_dir))
+                    if not (dest_dir / "folder.jpg").exists():
+                        dl.progress_message = f"Extracting album art for {folder_artist}/{track_album}..."
+                        dl.save(update_fields=["progress_message"])
+                        thumb_url = ov.get("thumbnail", "")
+                        if not thumb_url or not _download_thumbnail(thumb_url, dest_dir):
+                            get_albumart_from_ytdl(dl.url, dest_dir)
 
-                    ov = overrides.get(track_num, {}) if track_num else {}
-                    track_artist = ov.get("artist", "").strip() or artist_name
-                    track_album = ov.get("album", "").strip() or dl.album_title or "Unknown Album"
-
-                    dest_dir = library_root / track_artist / track_album
-                    dest_dir.mkdir(parents=True, exist_ok=True)
-                    affected_dirs.add(dest_dir)
-
-                    # Extract album art for this destination if not yet done
-                    if str(dest_dir) not in art_extracted:
-                        art_extracted.add(str(dest_dir))
-                        if not (dest_dir / "folder.jpg").exists():
-                            dl.progress_message = f"Extracting album art for {track_artist}/{track_album}..."
-                            dl.save(update_fields=["progress_message"])
-                            thumb_url = ov.get("thumbnail", "")
-                            if not thumb_url or not _download_thumbnail(thumb_url, dest_dir):
-                                get_albumart_from_ytdl(dl.url, dest_dir)
-
-                    shutil.move(str(audio_file), str(dest_dir / audio_file.name))
-
-            else:
-                # Standard mode: all tracks go to artist_name/album_subdir/
-                for item in tmp_dir.iterdir():
-                    if not item.is_dir():
-                        continue
-
-                    # Extract album art
-                    dl.progress_message = "Extracting album art..."
-                    dl.save(update_fields=["progress_message"])
-                    get_albumart_from_ytdl(dl.url, item)
-
-                    # Remove stray image files (keep only folder.jpg)
-                    for f in item.iterdir():
-                        if f.suffix.lower() in (".jpg", ".png", ".webp") and f.name != "folder.jpg":
-                            f.unlink()
-
-                    # Move to library
-                    dest = library_dir / item.name
-                    if dest.exists():
-                        for f in item.iterdir():
-                            shutil.move(str(f), str(dest / f.name))
-                    else:
-                        shutil.move(str(item), str(dest))
-                    affected_dirs.add(dest)
-
-                # If no subdirs were found, library_dir itself is the affected dir
-                if not affected_dirs:
-                    affected_dirs.add(library_dir)
+                shutil.move(str(audio_file), str(dest_dir / audio_file.name))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

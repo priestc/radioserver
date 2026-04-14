@@ -1029,10 +1029,9 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
         data = json_mod.loads(request.body)
         url = data.get("url", "").strip()
         track_overrides = data.get("tracks", [])
-        use_track_albums = bool(data.get("use_track_albums", True))
-        # Derive artist/album from the first track when not provided top-level
+        use_track_albums = True
         first = track_overrides[0] if track_overrides else {}
-        artist_name = (first.get("artist") or first.get("album_artist") or "").strip()
+        artist_name = (first.get("album_artist") or first.get("artist") or "").strip()
         album_title = (first.get("album") or "").strip()
 
         if not url:

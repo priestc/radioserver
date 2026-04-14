@@ -79,10 +79,6 @@
     </table>
   </div>
   <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-    <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
-      <input type="checkbox" id="use-track-album" checked>
-      Use per-track artist/album for folder structure
-    </label>
     <button class="btn btn-primary" id="download-btn" onclick="startDownload()">Download</button>
     <span class="spinner" id="download-spinner">Starting...</span>
   </div>
@@ -256,8 +252,6 @@ function showMetadata(data) {
 }
 
 function startDownload() {
-  var useTrackAlbums = document.getElementById('use-track-album').checked;
-
   var tracks = [];
   var rows = document.getElementById('track-list').querySelectorAll('tr');
   rows.forEach(function(row) {
@@ -287,7 +281,6 @@ function startDownload() {
     body: JSON.stringify({
       url: currentUrl,
       tracks: tracks,
-      use_track_albums: useTrackAlbums,
     }),
     headers: {
       'X-CSRFToken': getCookie('csrftoken'),
