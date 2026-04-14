@@ -12,27 +12,34 @@
 <p style="color:#c62828;font-weight:bold">{{ cascade_description }}</p>
 {% endif %}
 
-{% if fs_paths %}
-<p style="color:#555;font-size:0.9em">
-  Filesystem path{{ fs_paths|length|pluralize }}:<br>
-  {% for p in fs_paths %}
-    <code>{{ p }}</code>{% if not forloop.last %}<br>{% endif %}
-  {% endfor %}
-</p>
+{% if fs_path_files %}
+<p style="color:#555;font-size:0.9em;margin-bottom:4px">Files that will be removed from disk:</p>
+{% for dir_path, files in fs_path_files %}
+<div style="margin-bottom:0.8em">
+  <code style="font-weight:bold">{{ dir_path }}/</code>
+  {% if files %}
+  <ul style="margin:4px 0 0 1.5em;padding:0;font-size:0.85em;color:#333">
+    {% for f in files %}<li><code>{{ f }}</code></li>{% endfor %}
+  </ul>
+  {% else %}
+  <span style="color:#999;font-size:0.85em">(directory does not exist on disk)</span>
+  {% endif %}
+</div>
+{% endfor %}
 {% endif %}
 
 <form method="post">
     {% csrf_token %}
-    <p>
+    <p style="margin-top:1.2em">
         <button type="submit" name="delete_db_only" value="1" class="default"
                 onclick="return confirm('Delete from database only (keep files on disk)?');">
             Delete (database only)
         </button>
         &nbsp;
-        {% if fs_paths %}
+        {% if fs_path_files %}
         <button type="submit" name="delete_files" value="1"
                 style="background:#ba2121;color:#fff;border-color:#ba2121;padding:6px 14px;cursor:pointer;"
-                onclick="return confirm('Delete from database AND remove from filesystem? This cannot be undone.');">
+                onclick="return confirm('Delete from database AND remove all listed files from disk? This cannot be undone.');">
             Delete (database + files)
         </button>
         &nbsp;

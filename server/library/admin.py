@@ -118,13 +118,24 @@ class DeleteWithFilesMixin:
 
         if request.method == "GET":
             fs_paths = self._filesystem_paths(obj)
+            # Build a list of (dir_path, [file_names...]) for display
+            fs_path_files = []
+            for p in fs_paths:
+                if p.is_dir():
+                    files = sorted(f.name for f in p.iterdir() if f.is_file())
+                elif p.is_file():
+                    files = [p.name]
+                    p = p.parent
+                else:
+                    files = []
+                fs_path_files.append((str(p), files))
             context = {
                 **self.admin_site.each_context(request),
                 "title": f"Delete {self.model._meta.verbose_name}",
                 "object": obj,
                 "opts": self.model._meta,
                 "app_label": self.model._meta.app_label,
-                "fs_paths": [str(p) for p in fs_paths],
+                "fs_path_files": fs_path_files,
                 "cascade_description": self._cascade_description(obj),
             }
             return TemplateResponse(
