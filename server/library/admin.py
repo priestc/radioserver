@@ -85,6 +85,24 @@ class AlbumForm(forms.ModelForm):
         return instance
 
 
+_AUDIO_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+
+
+def _delete_file_and_cleanup_dir(file_path: Path) -> None:
+    """Unlink an audio file, then remove its parent directory if no audio files remain."""
+    file_path.unlink(missing_ok=True)
+    parent = file_path.parent
+    if parent.is_dir():
+        has_audio = any(
+            f.suffix.lstrip(".").lower() in _AUDIO_EXTS
+            for f in parent.iterdir()
+            if f.is_file()
+        )
+        if not has_audio:
+            import shutil
+            shutil.rmtree(parent, ignore_errors=True)
+
+
 class DeleteWithFilesMixin:
     """Mixin that replaces Django's delete confirmation with a two-option prompt:
     delete DB entries only, or delete DB entries plus the audio files from disk."""
@@ -103,7 +121,7 @@ class DeleteWithFilesMixin:
                 # Delete audio files before the DB rows disappear
                 for track in self._tracks_to_delete(obj):
                     if track.file_path:
-                        Path(track.file_path).unlink(missing_ok=True)
+                        _delete_file_and_cleanup_dir(Path(track.file_path))
             # Both "delete_files" and "delete_db_only" proceed with DB deletion
             return super().delete_view(request, object_id, extra_context)
 
@@ -221,7 +239,7 @@ class ArtistAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 track = Track.objects.get(pk=tid, artists=artist)
                 file_path = Path(track.file_path)
                 track.delete()
-                file_path.unlink(missing_ok=True)
+                _delete_file_and_cleanup_dir(file_path)
                 deleted += 1
             except Track.DoesNotExist:
                 pass
