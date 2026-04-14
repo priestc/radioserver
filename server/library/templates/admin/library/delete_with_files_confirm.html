@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Delete {{ opts.verbose_name }} — {{ object }}{% endblock %}
+
+{% block content %}
+<h1>Delete {{ opts.verbose_name }}</h1>
+
+<p>Are you sure you want to delete <strong>{{ object }}</strong>?</p>
+
+{% if fs_path %}
+<p style="color:#555;font-size:0.9em">Filesystem path: <code>{{ fs_path }}</code></p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    <p>
+        <button type="submit" name="delete_db_only" value="1" class="default"
+                onclick="return confirm('Delete from database only (keep files on disk)?');">
+            Delete (database only)
+        </button>
+        &nbsp;
+        {% if fs_path %}
+        <button type="submit" name="delete_files" value="1"
+                style="background:#ba2121;color:#fff;border-color:#ba2121;padding:6px 14px;cursor:pointer;"
+                onclick="return confirm('Delete from database AND remove from filesystem? This cannot be undone.');">
+            Delete (database + files)
+        </button>
+        &nbsp;
+        {% endif %}
+        <a href="../">Cancel</a>
+    </p>
+</form>
+{% endblock %}
