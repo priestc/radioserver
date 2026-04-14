@@ -51,6 +51,10 @@ def _apply_track_overrides(tmp_dir: Path, track_overrides: list[dict]) -> None:
             audio.tags["artist"] = [ov["artist"].strip()]
         if ov.get("album", "").strip():
             audio.tags["album"] = [ov["album"].strip()]
+        if ov.get("album_artist", "").strip():
+            audio.tags["albumartist"] = [ov["album_artist"].strip()]
+        if ov.get("genre", "").strip():
+            audio.tags["genre"] = [ov["genre"].strip()]
 
         try:
             audio.save()
@@ -143,6 +147,10 @@ def get_metadata_from_ytdl(url: str) -> dict:
         if track_artist.endswith(" - Topic"):
             track_artist = track_artist[: -len(" - Topic")]
 
+        album_artist = meta.get("album_artist") or meta.get("uploader") or meta.get("channel") or ""
+        if album_artist.endswith(" - Topic"):
+            album_artist = album_artist[: -len(" - Topic")]
+
         tracks.append({
             "title": meta.get("title", ""),
             "track_number": meta.get("playlist_index"),
@@ -151,6 +159,8 @@ def get_metadata_from_ytdl(url: str) -> dict:
             "thumbnail": thumb_url,
             "album": meta.get("album") or meta.get("playlist_title") or "",
             "artist": track_artist,
+            "album_artist": album_artist,
+            "genre": meta.get("genre") or "",
         })
 
     return {

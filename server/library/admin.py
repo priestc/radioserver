@@ -1028,10 +1028,12 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
 
         data = json_mod.loads(request.body)
         url = data.get("url", "").strip()
-        artist_name = data.get("artist_name", "").strip()
-        album_title = data.get("album_title", "").strip()
         track_overrides = data.get("tracks", [])
-        use_track_albums = bool(data.get("use_track_albums", False))
+        use_track_albums = bool(data.get("use_track_albums", True))
+        # Derive artist/album from the first track when not provided top-level
+        first = track_overrides[0] if track_overrides else {}
+        artist_name = (first.get("artist") or first.get("album_artist") or "").strip()
+        album_title = (first.get("album") or "").strip()
 
         if not url:
             return JsonResponse({"error": "No URL provided"}, status=400)

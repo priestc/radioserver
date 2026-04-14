@@ -19,13 +19,12 @@
   .btn-primary:disabled { background: #417690; }
   #metadata-section { display: none; }
   #progress-section { display: none; }
-  .meta-field { margin-bottom: 8px; }
-  .meta-field label { display: inline-block; width: 80px; font-weight: bold; }
-  .meta-field input { width: 400px; padding: 4px 8px; }
-  .track-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .track-table th, .track-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #ddd; }
-  .track-table th { background: #f8f8f8; }
-  .track-table input { width: 100%; padding: 2px 6px; box-sizing: border-box; }
+  .track-table { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  .track-table th, .track-table td { padding: 5px 6px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: middle; }
+  .track-table th { background: #f8f8f8; font-size: 0.85em; }
+  .track-table input[type="text"] { width: 100%; padding: 2px 5px; box-sizing: border-box; font-size: 0.85em; }
+  .track-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 3px; display: block; }
+  .track-thumb-placeholder { width: 48px; height: 48px; background: #eee; border-radius: 3px; display: block; }
   .history-table { width: 100%; border-collapse: collapse; }
   .history-table th, .history-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #ddd; }
   .history-table th { background: #f8f8f8; }
@@ -50,41 +49,40 @@
 
 <!-- Metadata Section -->
 <div id="metadata-section" class="ytdl-section">
-  <h2>Album Metadata</h2>
-  <div class="meta-field">
-    <label>Artist:</label>
-    <input type="text" id="meta-artist">
+  <h2>Tracks</h2>
+  <div id="metadata-errors" class="error-msg" style="display:none; margin-bottom: 8px; white-space: pre-wrap;"></div>
+  <div style="overflow-x: auto;">
+    <table class="track-table">
+      <colgroup>
+        <col style="width:54px">
+        <col style="width:36px">
+        <col style="width:18%">
+        <col style="width:14%">
+        <col style="width:14%">
+        <col style="width:14%">
+        <col style="width:12%">
+        <col style="width:56px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Art</th>
+          <th>#</th>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Album Artist</th>
+          <th>Album</th>
+          <th>Genre</th>
+          <th>Dur</th>
+        </tr>
+      </thead>
+      <tbody id="track-list"></tbody>
+    </table>
   </div>
-  <div class="meta-field">
-    <label>Album:</label>
-    <input type="text" id="meta-album">
-  </div>
-  <div id="thumbnails-section" style="display:none; margin-top: 12px;">
-    <h3 style="font-size: 1em;">Album Artwork</h3>
-    <div id="thumbnails-row" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
-  </div>
-  <div style="margin-top: 12px;">
-    <label style="cursor:pointer;">
-      <input type="checkbox" id="use-track-album" onchange="toggleUseTrackAlbum()">
-      Use track artist/album
+  <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+    <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <input type="checkbox" id="use-track-album" checked>
+      Use per-track artist/album for folder structure
     </label>
-    <span style="color:#666; font-size:0.9em; margin-left:8px;">When checked, each track is filed under its own artist/album folder.</span>
-  </div>
-  <h3 style="margin-top: 12px; font-size: 1em;">Tracks</h3>
-  <table class="track-table">
-    <thead>
-      <tr>
-        <th style="width:50px">#</th>
-        <th>Title</th>
-        <th>Artist</th>
-        <th>Album</th>
-        <th style="width:80px">Duration</th>
-      </tr>
-    </thead>
-    <tbody id="track-list"></tbody>
-  </table>
-  <div id="metadata-errors" class="error-msg" style="display:none; margin-top: 8px; white-space: pre-wrap;"></div>
-  <div style="margin-top: 12px;">
     <button class="btn btn-primary" id="download-btn" onclick="startDownload()">Download</button>
     <span class="spinner" id="download-spinner">Starting...</span>
   </div>
@@ -210,50 +208,37 @@ function fetchMetadata() {
   });
 }
 
-function showMetadata(data) {
-  document.getElementById('meta-artist').value = data.artist || '';
-  document.getElementById('meta-album').value = data.album || '';
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
 
+function showMetadata(data) {
   var tbody = document.getElementById('track-list');
   tbody.innerHTML = '';
   (data.tracks || []).forEach(function(t) {
-    var tr = document.createElement('tr');
     var dur = '';
     if (t.duration) {
       var mins = Math.floor(t.duration / 60);
       var secs = Math.round(t.duration % 60);
       dur = mins + ':' + (secs < 10 ? '0' : '') + secs;
     }
-    tr.setAttribute('data-thumbnail', t.thumbnail || '');
+    var thumb = t.thumbnail
+      ? '<img class="track-thumb" src="' + esc(t.thumbnail) + '" loading="lazy">'
+      : '<span class="track-thumb-placeholder"></span>';
+    var tr = document.createElement('tr');
     tr.setAttribute('data-track-number', t.track_number || '');
+    tr.setAttribute('data-thumbnail', t.thumbnail || '');
     tr.innerHTML =
-      '<td>' + (t.track_number || '') + '</td>' +
-      '<td><input type="text" class="track-title" value="' + (t.title || '').replace(/"/g, '&quot;') + '"></td>' +
-      '<td><input type="text" class="track-artist" value="' + (t.artist || '').replace(/"/g, '&quot;') + '"></td>' +
-      '<td><input type="text" class="track-album" value="' + (t.album || '').replace(/"/g, '&quot;') + '"></td>' +
-      '<td>' + dur + '</td>';
+      '<td>' + thumb + '</td>' +
+      '<td style="text-align:center;color:#666;font-size:0.85em">' + (t.track_number || '') + '</td>' +
+      '<td><input type="text" class="track-title" value="' + esc(t.title) + '"></td>' +
+      '<td><input type="text" class="track-artist" value="' + esc(t.artist) + '"></td>' +
+      '<td><input type="text" class="track-album-artist" value="' + esc(t.album_artist) + '"></td>' +
+      '<td><input type="text" class="track-album" value="' + esc(t.album) + '"></td>' +
+      '<td><input type="text" class="track-genre" value="' + esc(t.genre) + '"></td>' +
+      '<td style="color:#666;font-size:0.85em;white-space:nowrap">' + dur + '</td>';
     tbody.appendChild(tr);
   });
-
-  // Show thumbnails
-  var thumbSection = document.getElementById('thumbnails-section');
-  var thumbRow = document.getElementById('thumbnails-row');
-  thumbRow.innerHTML = '';
-  var thumbnails = data.thumbnails || [];
-  if (thumbnails.length > 0) {
-    thumbnails.forEach(function(th) {
-      var div = document.createElement('div');
-      div.style.textAlign = 'center';
-      div.innerHTML =
-        '<img src="' + th.url.replace(/"/g, '&quot;') + '" style="max-width:200px; max-height:200px; border:1px solid #ccc; border-radius:4px;">' +
-        '<div style="font-size:0.85em; color:#666; margin-top:4px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
-        (th.track_title || '').replace(/</g, '&lt;') + '</div>';
-      thumbRow.appendChild(div);
-    });
-    thumbSection.style.display = 'block';
-  } else {
-    thumbSection.style.display = 'none';
-  }
 
   // Show metadata fetch errors
   var errorsDiv = document.getElementById('metadata-errors');
@@ -270,35 +255,23 @@ function showMetadata(data) {
   document.getElementById('download-error').textContent = '';
 }
 
-function toggleUseTrackAlbum() {
-  var checked = document.getElementById('use-track-album').checked;
-  document.getElementById('meta-artist').disabled = checked;
-  document.getElementById('meta-album').disabled = checked;
-  document.getElementById('meta-artist').style.opacity = checked ? '0.5' : '1';
-  document.getElementById('meta-album').style.opacity = checked ? '0.5' : '1';
-}
-
 function startDownload() {
-  var artist = document.getElementById('meta-artist').value.trim();
-  var album = document.getElementById('meta-album').value.trim();
   var useTrackAlbums = document.getElementById('use-track-album').checked;
 
-  // Collect per-track overrides
   var tracks = [];
   var rows = document.getElementById('track-list').querySelectorAll('tr');
   rows.forEach(function(row) {
     var title = row.querySelector('.track-title');
-    var trackArtist = row.querySelector('.track-artist');
-    var trackAlbum = row.querySelector('.track-album');
-    if (title) {
-      tracks.push({
-        track_number: parseInt(row.getAttribute('data-track-number')) || null,
-        title: title.value.trim(),
-        artist: trackArtist ? trackArtist.value.trim() : '',
-        album: trackAlbum ? trackAlbum.value.trim() : '',
-        thumbnail: row.getAttribute('data-thumbnail') || '',
-      });
-    }
+    if (!title) return;
+    tracks.push({
+      track_number: parseInt(row.getAttribute('data-track-number')) || null,
+      title: title.value.trim(),
+      artist: (row.querySelector('.track-artist') || {value:''}).value.trim(),
+      album_artist: (row.querySelector('.track-album-artist') || {value:''}).value.trim(),
+      album: (row.querySelector('.track-album') || {value:''}).value.trim(),
+      genre: (row.querySelector('.track-genre') || {value:''}).value.trim(),
+      thumbnail: row.getAttribute('data-thumbnail') || '',
+    });
   });
 
   var btn = document.getElementById('download-btn');
@@ -313,8 +286,6 @@ function startDownload() {
     method: 'POST',
     body: JSON.stringify({
       url: currentUrl,
-      artist_name: artist,
-      album_title: album,
       tracks: tracks,
       use_track_albums: useTrackAlbums,
     }),
