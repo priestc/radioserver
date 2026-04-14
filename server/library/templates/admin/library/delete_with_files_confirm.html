@@ -8,8 +8,17 @@
 
 <p>Are you sure you want to delete <strong>{{ object }}</strong>?</p>
 
-{% if fs_path %}
-<p style="color:#555;font-size:0.9em">Filesystem path: <code>{{ fs_path }}</code></p>
+{% if cascade_description %}
+<p style="color:#c62828;font-weight:bold">{{ cascade_description }}</p>
+{% endif %}
+
+{% if fs_paths %}
+<p style="color:#555;font-size:0.9em">
+  Filesystem path{{ fs_paths|length|pluralize }}:<br>
+  {% for p in fs_paths %}
+    <code>{{ p }}</code>{% if not forloop.last %}<br>{% endif %}
+  {% endfor %}
+</p>
 {% endif %}
 
 <form method="post">
@@ -20,7 +29,7 @@
             Delete (database only)
         </button>
         &nbsp;
-        {% if fs_path %}
+        {% if fs_paths %}
         <button type="submit" name="delete_files" value="1"
                 style="background:#ba2121;color:#fff;border-color:#ba2121;padding:6px 14px;cursor:pointer;"
                 onclick="return confirm('Delete from database AND remove from filesystem? This cannot be undone.');">

@@ -88,23 +88,25 @@ class AlbumForm(forms.ModelForm):
 class DeleteWithFilesMixin:
     """Mixin that adds a 'delete from filesystem too?' prompt to the Django admin delete view."""
 
-    def _filesystem_path(self, obj) -> Path | None:
-        """Return the filesystem path to delete for this object, or None."""
+    def _filesystem_paths(self, obj) -> list[Path]:
+        """Return filesystem paths to delete for this object."""
         raise NotImplementedError
 
+    def _cascade_description(self, obj) -> str:
+        """Return a human-readable description of what else will be deleted (DB cascade)."""
+        return ""
+
     def delete_view(self, request, object_id, extra_context=None):
+        import shutil
+
         obj = self.get_object(request, object_id)
         if obj is None:
             return super().delete_view(request, object_id, extra_context)
 
         if request.method == "POST" and "delete_files" in request.POST:
-            # User chose "Delete database + files"
-            fs_path = self._filesystem_path(obj)
-            # Delegate to super first to handle all the cascade/permission logic.
-            # We sneak the choice through via a mutable extra_context sentinel.
+            fs_paths = self._filesystem_paths(obj)
             response = super().delete_view(request, object_id, extra_context)
-            if fs_path:
-                import shutil
+            for fs_path in fs_paths:
                 if fs_path.is_dir():
                     shutil.rmtree(fs_path, ignore_errors=True)
                 elif fs_path.is_file():
@@ -112,22 +114,18 @@ class DeleteWithFilesMixin:
             return response
 
         if request.method == "POST" and "delete_db_only" in request.POST:
-            # User chose "Delete database only" — just delegate with a normal POST
-            # We need to trick super() into thinking the confirmation was clicked.
-            # Django's delete_view looks for 'post' key OR any POST to confirm.
-            # Easiest: just call super() — it will detect method==POST and delete.
             return super().delete_view(request, object_id, extra_context)
 
         if request.method == "GET":
-            # Show our custom confirmation page instead of Django's default.
-            fs_path = self._filesystem_path(obj)
+            fs_paths = self._filesystem_paths(obj)
             context = {
                 **self.admin_site.each_context(request),
                 "title": f"Delete {self.model._meta.verbose_name}",
                 "object": obj,
                 "opts": self.model._meta,
                 "app_label": self.model._meta.app_label,
-                "fs_path": str(fs_path) if fs_path else None,
+                "fs_paths": [str(p) for p in fs_paths],
+                "cascade_description": self._cascade_description(obj),
             }
             return TemplateResponse(
                 request,
@@ -279,11 +277,23 @@ class ArtistAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             items.append(format_html('<li><a href="{}">{}</a>{}</li>', url, t.title, album_label))
         return format_html("<ol style='margin:0;padding-left:2.5em'>{}</ol>", format_html("".join(items)))
 
-    def _filesystem_path(self, obj) -> Path | None:
-        track = obj.tracks.first()
-        if not track:
-            return None
-        return Path(track.file_path).parent.parent
+    def _filesystem_paths(self, obj) -> list[Path]:
+        # Collect all unique album directories across every track for this artist.
+        paths = set()
+        for track in Track.objects.filter(artists=obj):
+            if track.file_path:
+                paths.add(Path(track.file_path).parent)
+        return sorted(paths)
+
+    def _cascade_description(self, obj) -> str:
+        album_count = obj.albums.count()
+        track_count = Track.objects.filter(artists=obj).count()
+        parts = []
+        if album_count:
+            parts.append(f"{album_count} album{'s' if album_count != 1 else ''}")
+        if track_count:
+            parts.append(f"{track_count} track{'s' if track_count != 1 else ''}")
+        return "Also deletes: " + ", ".join(parts) if parts else ""
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -662,11 +672,15 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 count += 1
         self.message_user(request, f"Deleted cover art from {count} album(s).")
 
-    def _filesystem_path(self, obj) -> Path | None:
+    def _filesystem_paths(self, obj) -> list[Path]:
         track = obj.tracks.first()
         if not track:
-            return None
-        return Path(track.file_path).parent
+            return []
+        return [Path(track.file_path).parent]
+
+    def _cascade_description(self, obj) -> str:
+        track_count = obj.tracks.count()
+        return f"Also deletes: {track_count} track{'s' if track_count != 1 else ''}" if track_count else ""
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -738,10 +752,10 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         ]
         return custom_urls + super().get_urls()
 
-    def _filesystem_path(self, obj) -> Path | None:
+    def _filesystem_paths(self, obj) -> list[Path]:
         if not obj.file_path:
-            return None
-        return Path(obj.file_path)
+            return []
+        return [Path(obj.file_path)]
 
     def stream_view(self, request, track_id):
         from django.http import FileResponse
