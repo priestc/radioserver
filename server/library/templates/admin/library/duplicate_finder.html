@@ -69,6 +69,7 @@
                     <th>Year</th>
                     <th>Format</th>
                     <th>Bitrate</th>
+                    <th>File Path</th>
                     <th>Listen</th>
                     <th class="delete-col">Delete?</th>
                 </tr>
@@ -81,6 +82,7 @@
                     <td>{{ track.year|default:"—" }}</td>
                     <td>{{ track.format|upper|default:"—" }}</td>
                     <td>{% if track.bitrate %}{% widthratio track.bitrate 1000 1 %} kbps{% else %}—{% endif %}</td>
+                    <td style="font-size:0.8em;color:#555;word-break:break-all">{{ track.file_path }}</td>
                     <td>
                         <audio controls preload="none">
                             <source src="{% url 'admin:library_track_stream' track.pk %}">
