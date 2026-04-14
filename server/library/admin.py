@@ -86,65 +86,42 @@ class AlbumForm(forms.ModelForm):
 
 
 class DeleteWithFilesMixin:
-    """Mixin that adds a 'delete from filesystem too?' prompt to the Django admin delete view."""
+    """Mixin that replaces Django's delete confirmation with a two-option prompt:
+    delete DB entries only, or delete DB entries plus the audio files from disk."""
 
-    def _filesystem_paths(self, obj) -> list[Path]:
-        """Return filesystem paths to delete for this object."""
+    def _tracks_to_delete(self, obj) -> list:
+        """Return the list of Track objects that will be deleted."""
         raise NotImplementedError
 
-    def _cascade_description(self, obj) -> str:
-        """Return a human-readable description of what else will be deleted (DB cascade)."""
-        return ""
-
     def delete_view(self, request, object_id, extra_context=None):
-        import shutil
-
         obj = self.get_object(request, object_id)
         if obj is None:
             return super().delete_view(request, object_id, extra_context)
 
-        if request.method == "POST" and "delete_files" in request.POST:
-            fs_paths = self._filesystem_paths(obj)
-            response = super().delete_view(request, object_id, extra_context)
-            for fs_path in fs_paths:
-                if fs_path.is_dir():
-                    shutil.rmtree(fs_path, ignore_errors=True)
-                elif fs_path.is_file():
-                    fs_path.unlink(missing_ok=True)
-            return response
-
-        if request.method == "POST" and "delete_db_only" in request.POST:
+        if request.method == "POST":
+            if "delete_files" in request.POST:
+                # Delete audio files before the DB rows disappear
+                for track in self._tracks_to_delete(obj):
+                    if track.file_path:
+                        Path(track.file_path).unlink(missing_ok=True)
+            # Both "delete_files" and "delete_db_only" proceed with DB deletion
             return super().delete_view(request, object_id, extra_context)
 
-        if request.method == "GET":
-            fs_paths = self._filesystem_paths(obj)
-            # Build a list of (dir_path, [file_names...]) for display
-            fs_path_files = []
-            for p in fs_paths:
-                if p.is_dir():
-                    files = sorted(f.name for f in p.iterdir() if f.is_file())
-                elif p.is_file():
-                    files = [p.name]
-                    p = p.parent
-                else:
-                    files = []
-                fs_path_files.append((str(p), files))
-            context = {
-                **self.admin_site.each_context(request),
-                "title": f"Delete {self.model._meta.verbose_name}",
-                "object": obj,
-                "opts": self.model._meta,
-                "app_label": self.model._meta.app_label,
-                "fs_path_files": fs_path_files,
-                "cascade_description": self._cascade_description(obj),
-            }
-            return TemplateResponse(
-                request,
-                "admin/library/delete_with_files_confirm.html",
-                context,
-            )
-
-        return super().delete_view(request, object_id, extra_context)
+        # GET: show custom confirmation listing every track with its path
+        tracks = self._tracks_to_delete(obj)
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Delete {self.model._meta.verbose_name}",
+            "object": obj,
+            "opts": self.model._meta,
+            "app_label": self.model._meta.app_label,
+            "tracks": tracks,
+        }
+        return TemplateResponse(
+            request,
+            "admin/library/delete_with_files_confirm.html",
+            context,
+        )
 
 
 @admin.register(Artist)
@@ -288,23 +265,12 @@ class ArtistAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             items.append(format_html('<li><a href="{}">{}</a>{}</li>', url, t.title, album_label))
         return format_html("<ol style='margin:0;padding-left:2.5em'>{}</ol>", format_html("".join(items)))
 
-    def _filesystem_paths(self, obj) -> list[Path]:
-        # Collect all unique album directories across every track for this artist.
-        paths = set()
-        for track in Track.objects.filter(artists=obj):
-            if track.file_path:
-                paths.add(Path(track.file_path).parent)
-        return sorted(paths)
-
-    def _cascade_description(self, obj) -> str:
-        album_count = obj.albums.count()
-        track_count = Track.objects.filter(artists=obj).count()
-        parts = []
-        if album_count:
-            parts.append(f"{album_count} album{'s' if album_count != 1 else ''}")
-        if track_count:
-            parts.append(f"{track_count} track{'s' if track_count != 1 else ''}")
-        return "Also deletes: " + ", ".join(parts) if parts else ""
+    def _tracks_to_delete(self, obj):
+        return list(
+            Track.objects.filter(artists=obj)
+            .select_related("album")
+            .order_by("album__title", "track_number", "title")
+        )
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -683,15 +649,8 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 count += 1
         self.message_user(request, f"Deleted cover art from {count} album(s).")
 
-    def _filesystem_paths(self, obj) -> list[Path]:
-        track = obj.tracks.first()
-        if not track:
-            return []
-        return [Path(track.file_path).parent]
-
-    def _cascade_description(self, obj) -> str:
-        track_count = obj.tracks.count()
-        return f"Also deletes: {track_count} track{'s' if track_count != 1 else ''}" if track_count else ""
+    def _tracks_to_delete(self, obj):
+        return list(obj.tracks.order_by("track_number", "title"))
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -763,10 +722,8 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         ]
         return custom_urls + super().get_urls()
 
-    def _filesystem_paths(self, obj) -> list[Path]:
-        if not obj.file_path:
-            return []
-        return [Path(obj.file_path)]
+    def _tracks_to_delete(self, obj):
+        return [obj]
 
     def stream_view(self, request, track_id):
         from django.http import FileResponse

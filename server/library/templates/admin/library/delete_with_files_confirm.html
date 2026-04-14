@@ -3,43 +3,80 @@
 
 {% block title %}Delete {{ opts.verbose_name }} — {{ object }}{% endblock %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+.del-track-list {
+    margin: 1em 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.del-track-list table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.del-track-list th, .del-track-list td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    font-size: 0.9em;
+}
+.del-track-list th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+.del-track-list td.path {
+    color: #555;
+    font-size: 0.8em;
+    word-break: break-all;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Delete {{ opts.verbose_name }}</h1>
+<h1>Delete {{ opts.verbose_name }}: <em>{{ object }}</em></h1>
 
-<p>Are you sure you want to delete <strong>{{ object }}</strong>?</p>
-
-{% if cascade_description %}
-<p style="color:#c62828;font-weight:bold">{{ cascade_description }}</p>
-{% endif %}
-
-{% if fs_path_files %}
-<p style="color:#555;font-size:0.9em;margin-bottom:4px">Files that will be removed from disk:</p>
-{% for dir_path, files in fs_path_files %}
-<div style="margin-bottom:0.8em">
-  <code style="font-weight:bold">{{ dir_path }}/</code>
-  {% if files %}
-  <ul style="margin:4px 0 0 1.5em;padding:0;font-size:0.85em;color:#333">
-    {% for f in files %}<li><code>{{ f }}</code></li>{% endfor %}
-  </ul>
-  {% else %}
-  <span style="color:#999;font-size:0.85em">(directory does not exist on disk)</span>
-  {% endif %}
+{% if tracks %}
+<p>The following {{ tracks|length }} track{{ tracks|length|pluralize }} will be deleted from the database:</p>
+<div class="del-track-list">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Title</th>
+        <th>Album</th>
+        <th>Full Path</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for track in tracks %}
+      <tr>
+        <td>{{ track.track_number|default:"—" }}</td>
+        <td>{{ track.title }}</td>
+        <td>{{ track.album.title|default:"—" }}</td>
+        <td class="path">{{ track.file_path }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
-{% endfor %}
+{% else %}
+<p>No tracks are associated with this {{ opts.verbose_name }}.</p>
 {% endif %}
 
 <form method="post">
     {% csrf_token %}
     <p style="margin-top:1.2em">
         <button type="submit" name="delete_db_only" value="1" class="default"
-                onclick="return confirm('Delete from database only (keep files on disk)?');">
+                onclick="return confirm('Delete database entries only — files will remain on disk?');">
             Delete (database only)
         </button>
         &nbsp;
-        {% if fs_path_files %}
+        {% if tracks %}
         <button type="submit" name="delete_files" value="1"
                 style="background:#ba2121;color:#fff;border-color:#ba2121;padding:6px 14px;cursor:pointer;"
-                onclick="return confirm('Delete from database AND remove all listed files from disk? This cannot be undone.');">
+                onclick="return confirm('Delete database entries AND remove all {{ tracks|length }} file{{ tracks|length|pluralize }} from disk? This cannot be undone.');">
             Delete (database + files)
         </button>
         &nbsp;
