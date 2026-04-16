@@ -33,6 +33,7 @@ struct RadioClientApp: App {
             .onAppear {
                 audioPlayer.apiService = apiService
                 audioPlayer.startSyncTimer()
+                audioPlayer.fetchChannels()
             }
         }
     }

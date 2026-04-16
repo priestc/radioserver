@@ -13,6 +13,7 @@ class AudioPlayer: ObservableObject {
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var selectedChannel: Channel?
+    @Published var availableChannels: [Channel] = []
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -130,6 +131,15 @@ class AudioPlayer: ObservableObject {
         Task { await performSync() }
     }
 
+    func fetchChannels() {
+        guard let api = apiService else { return }
+        Task {
+            if let channels = try? await api.fetchChannels() {
+                await MainActor.run { self.availableChannels = channels }
+            }
+        }
+    }
+
     func selectChannel(_ channel: Channel?) {
         guard selectedChannel != channel else { return }
         selectedChannel = channel
@@ -203,20 +213,25 @@ class AudioPlayer: ObservableObject {
             let onCellular = await MainActor.run { self.isCellular }
 
             if onCellular {
-                // On cellular: only keep at most 2 low-bitrate songs cached
-                // (the currently playing one + the next one)
-                let cachedCount = newItems.filter {
-                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                // On cellular: keep at most 2 low-bitrate songs cached.
+                // Check the full queue (including songs re-queued after a cache miss).
+                let allQueued = await MainActor.run { self.queue }
+                let cachedCount = allQueued.filter {
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") ||
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
                 }.count
                 if cachedCount < 2 {
-                    // Find the first uncached song and download just that one
-                    if let next = newItems.first(where: {
-                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                    if let next = allQueued.first(where: {
+                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") &&
+                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
                     }) {
                         _ = try? await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
                         if let albumId = next.albumId {
                             await prefetchArtwork(albumId: albumId, api: api)
                         }
+                        // Trigger auto-start if player went idle waiting for this download
+                        let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+                        if idle { await MainActor.run { self.playNext() } }
                     }
                 }
             } else {
@@ -226,6 +241,9 @@ class AudioPlayer: ObservableObject {
                 for item in allItems {
                     if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
                         _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                        // Trigger auto-start if player went idle waiting for this download
+                        let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+                        if idle { await MainActor.run { self.playNext() } }
                     }
                     if let albumId = item.albumId {
                         await prefetchArtwork(albumId: albumId, api: api)
@@ -233,8 +251,14 @@ class AudioPlayer: ObservableObject {
                 }
             }
 
-            // Auto-start playback if nothing is playing
-            let shouldStart = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+            // Final auto-start check: only if a cached file is actually ready
+            let shouldStart = await MainActor.run {
+                guard self.currentSong == nil, !self.queue.isEmpty else { return false }
+                return self.queue.contains {
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                }
+            }
             if shouldStart {
                 await MainActor.run { self.playNext() }
             }
@@ -272,8 +296,10 @@ class AudioPlayer: ObservableObject {
         } else if CacheManager.shared.hasCached(playlistItemId: song.id, ext: "mp3") {
             ext = "mp3"
         } else {
-            // Not downloaded yet, skip to next
-            skipToNext()
+            // Not cached yet — put back at front of queue and wait for download
+            queue.insert(song, at: 0)
+            currentSong = nil
+            triggerSync()
             return
         }
         let fileURL = CacheManager.shared.fileURL(for: song.id, ext: ext)
