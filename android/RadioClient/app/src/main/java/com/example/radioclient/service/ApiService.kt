@@ -1,5 +1,6 @@
 package com.example.radioclient.service
 
+import com.example.radioclient.model.ChannelsResponse
 import com.example.radioclient.model.SyncRequest
 import com.example.radioclient.model.SyncResponse
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +104,24 @@ class ApiService(
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) throw RuntimeException("Download failed: ${response.code}")
             response.body?.bytes() ?: throw RuntimeException("Empty body")
+        }
+    }
+
+    suspend fun fetchChannels(): Result<ChannelsResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = buildBaseURL() ?: throw IllegalStateException("No server URL configured")
+            val apiKey = settingsManager.apiKey.value
+
+            val request = Request.Builder()
+                .url("${base}library/api/channels/")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) throw RuntimeException("Channels fetch failed: ${response.code}")
+            val responseBody = response.body?.string() ?: throw RuntimeException("Empty response")
+            json.decodeFromString(ChannelsResponse.serializer(), responseBody)
         }
     }
 

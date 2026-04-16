@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.example.radioclient.model.Channel
 import com.example.radioclient.model.PlayedSong
 import com.example.radioclient.model.SongItem
 import com.example.radioclient.model.SyncRequest
@@ -62,6 +63,12 @@ class RadioPlayer(
     private val _artworkCache = MutableStateFlow<Map<Int, Bitmap>>(emptyMap())
     val artworkCache: StateFlow<Map<Int, Bitmap>> = _artworkCache
 
+    private val _channels = MutableStateFlow<List<Channel>>(emptyList())
+    val channels: StateFlow<List<Channel>> = _channels
+
+    var selectedChannelId: Int? = null
+        private set
+
     private val pendingPlayed = mutableListOf<PlayedSong>()
     private val artworkFailed = mutableSetOf<Int>()
     private var hasSyncedCurrentSong = false
@@ -89,6 +96,22 @@ class RadioPlayer(
 
     fun startSyncTimer() {
         scope.launch { performSyncWithRetry() }
+    }
+
+    fun fetchChannels() {
+        scope.launch {
+            apiService.fetchChannels().onSuccess { response ->
+                _channels.value = response.channels
+            }
+        }
+    }
+
+    fun selectChannel(channelId: Int?) {
+        if (selectedChannelId == channelId) return
+        selectedChannelId = channelId
+        _queue.value = emptyList()
+        stopPlayback()
+        triggerSync()
     }
 
     fun togglePlayPause() {
@@ -312,6 +335,7 @@ class RadioPlayer(
                 played = playedItems,
                 bufferCacheMb = settingsManager.bufferCacheMB.value,
                 nowPlaying = nowPlaying,
+                channelId = selectedChannelId,
             )
 
             val result = apiService.sync(request)
@@ -337,9 +361,14 @@ class RadioPlayer(
             scope.launch { downloadNewSongs(newSongs) }
         }
 
-        // Auto-start if idle and queue has songs
+        // Auto-start only if a cached file is ready to play; otherwise wait
+        // for downloadNewSongs to trigger playback once a file is available.
         if (_currentSong.value == null && _queue.value.isNotEmpty()) {
-            playNext()
+            val hasReady = _queue.value.any { song ->
+                cacheManager.hasCachedSong(song.id, song.fileExtension) ||
+                    cacheManager.hasCachedSong(song.id, "mp3")
+            }
+            if (hasReady) playNext()
         }
 
             syncBackoffSeconds = 2.0
@@ -372,6 +401,10 @@ class RadioPlayer(
                     }
                     downloadArtworkIfNeeded(song)
                 }
+                // Trigger auto-start if player went idle waiting for this download
+                if (_currentSong.value == null && _queue.value.isNotEmpty()) {
+                    playNext()
+                }
             }
         } else {
             // WiFi: download all at full quality
@@ -385,6 +418,10 @@ class RadioPlayer(
                         cacheManager.saveSong(song.id, song.fileExtension, data)
                     }
                     downloadArtworkIfNeeded(song)
+                }
+                // Trigger auto-start if player went idle waiting for this download
+                if (_currentSong.value == null && _queue.value.isNotEmpty()) {
+                    playNext()
                 }
             }
         }

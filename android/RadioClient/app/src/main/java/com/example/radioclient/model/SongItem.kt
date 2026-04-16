@@ -51,4 +51,18 @@ data class SyncRequest(
     val played: List<SyncRequestPlayed>,
     @SerialName("buffer_cache_mb") val bufferCacheMb: Int,
     @SerialName("now_playing") val nowPlaying: SyncRequestNowPlaying? = null,
+    @SerialName("channel_id") val channelId: Int? = null,
 )
+
+@Serializable
+data class Channel(
+    val id: Int,
+    val name: String,
+    @SerialName("year_min") val yearMin: Int? = null,
+    @SerialName("year_max") val yearMax: Int? = null,
+    val genre: String? = null,
+    val artist: String? = null,
+)
+
+@Serializable
+data class ChannelsResponse(val channels: List<Channel>)

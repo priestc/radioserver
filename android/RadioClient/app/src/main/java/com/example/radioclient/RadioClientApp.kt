@@ -33,5 +33,6 @@ class RadioClientApp : Application() {
             settingsManager = settingsManager,
         )
         radioPlayer?.startSyncTimer()
+        radioPlayer?.fetchChannels()
     }
 }
