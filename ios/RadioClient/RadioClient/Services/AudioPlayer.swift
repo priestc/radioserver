@@ -23,6 +23,9 @@ class AudioPlayer: ObservableObject {
     private var artworkFailed: Set<Int> = []  // albumIds with no artwork
     private var currentArtwork: MPMediaItemArtwork?
 
+    // Per-channel queues. Key is channel ID (nil = All Music).
+    private var backgroundQueues: [Int?: [SongItem]] = [:]
+
     // Sync state
     private var hasSyncedCurrentSong = false
     private var currentSongStartedAt: Date?
@@ -136,29 +139,46 @@ class AudioPlayer: ObservableObject {
         Task {
             if let channels = try? await api.fetchChannels() {
                 await MainActor.run { self.availableChannels = channels }
+                await syncBackgroundChannels()
             }
         }
     }
 
     func selectChannel(_ channel: Channel?) {
         guard selectedChannel != channel else { return }
-        selectedChannel = channel
-        // Clear local queue and stop playback; server will clear its unplayed items
-        // on the next sync when it detects the channel change.
+
+        // Save current queue (prepend current song so it plays again when we return)
+        var savedQueue = queue
+        if let song = currentSong { savedQueue.insert(song, at: 0) }
+        backgroundQueues[selectedChannel?.id] = savedQueue
+
+        // Stop playback without deleting cache files
         player?.pause()
+        removeObservers()
+        player = nil
         isPlaying = false
-        for song in queue {
-            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
-            CacheManager.shared.removeFile(for: song.id, ext: "mp3")
-        }
-        if let song = currentSong {
-            CacheManager.shared.removeFile(for: song.id, ext: song.fileExtension)
-            CacheManager.shared.removeFile(for: song.id, ext: "mp3")
-        }
-        queue.removeAll()
         currentSong = nil
+        hasSyncedCurrentSong = false
+        currentSongStartedAt = nil
+        currentTime = 0
+        duration = 0
         updateNowPlaying()
+
+        selectedChannel = channel
+
+        // Restore whatever we already pre-downloaded for this channel
+        queue = backgroundQueues[channel?.id] ?? []
+
         triggerSync()
+
+        // Start immediately if a cached file is already waiting
+        if !queue.isEmpty {
+            let hasCached = queue.contains {
+                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
+                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+            }
+            if hasCached { playNext() }
+        }
     }
 
     func stopSyncTimer() {
@@ -263,10 +283,61 @@ class AudioPlayer: ObservableObject {
                 await MainActor.run { self.playNext() }
             }
 
+            // Fire-and-forget: prefill every other channel's queue
+            Task { await syncBackgroundChannels() }
+
             return true
         } catch {
             print("Sync failed: \(error)")
             return false
+        }
+    }
+
+    private func syncBackgroundChannels() async {
+        guard let api = apiService, api.isConfigured else { return }
+        let activeId = await MainActor.run { selectedChannel?.id }
+        var channelIds: [Int?] = [nil]
+        channelIds += await MainActor.run { availableChannels.map { Optional($0.id) } }
+        for channelId in channelIds where channelId != activeId {
+            await prefillBackgroundQueue(channelId: channelId, api: api)
+        }
+    }
+
+    private func prefillBackgroundQueue(channelId: Int?, api: APIService) async {
+        do {
+            let existing = await MainActor.run { backgroundQueues[channelId] ?? [] }
+            let existingIds = Set(existing.map { $0.id })
+            let bufferMB = api.bufferCacheMB
+
+            let newItems = try await api.sync(
+                played: [],
+                bufferCacheMB: bufferMB,
+                nowPlaying: nil,
+                channelId: channelId
+            )
+            let toAdd = newItems.filter { !existingIds.contains($0.id) }
+            if !toAdd.isEmpty {
+                await MainActor.run {
+                    var q = self.backgroundQueues[channelId] ?? []
+                    q.append(contentsOf: toAdd)
+                    self.backgroundQueues[channelId] = q
+                }
+            }
+
+            // Download on WiFi at full quality; skip on cellular to save data
+            let onCellular = await MainActor.run { isCellular }
+            guard !onCellular else { return }
+            let all = await MainActor.run { backgroundQueues[channelId] ?? [] }
+            for item in all {
+                if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
+                    _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                }
+                if let albumId = item.albumId {
+                    await prefetchArtwork(albumId: albumId, api: api)
+                }
+            }
+        } catch {
+            // Background sync failures are non-fatal
         }
     }
 

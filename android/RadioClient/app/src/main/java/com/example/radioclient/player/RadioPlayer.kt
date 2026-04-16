@@ -69,6 +69,9 @@ class RadioPlayer(
     var selectedChannelId: Int? = null
         private set
 
+    // Per-channel queues keyed by channel ID (null = All Music)
+    private val backgroundQueues = mutableMapOf<Int?, MutableList<SongItem>>()
+
     private val pendingPlayed = mutableListOf<PlayedSong>()
     private val artworkFailed = mutableSetOf<Int>()
     private var hasSyncedCurrentSong = false
@@ -102,16 +105,95 @@ class RadioPlayer(
         scope.launch {
             apiService.fetchChannels().onSuccess { response ->
                 _channels.value = response.channels
+                syncBackgroundChannels()
             }
+        }
+    }
+
+    private fun syncBackgroundChannels() {
+        scope.launch {
+            val activeId = selectedChannelId
+            val channelIds = mutableListOf<Int?>(null)
+            channelIds.addAll(_channels.value.map { it.id as Int? })
+            for (channelId in channelIds) {
+                if (channelId != activeId) {
+                    prefillBackgroundQueue(channelId)
+                }
+            }
+        }
+    }
+
+    private suspend fun prefillBackgroundQueue(channelId: Int?) {
+        val serverURL = apiService.activeServerURL
+        val apiKey = settingsManager.apiKey.value
+        if (serverURL.isBlank() || apiKey.isBlank()) return
+
+        try {
+            val existing = backgroundQueues[channelId] ?: mutableListOf()
+            val existingIds = existing.map { it.id }.toSet()
+
+            val request = SyncRequest(
+                played = emptyList(),
+                bufferCacheMb = settingsManager.bufferCacheMB.value,
+                nowPlaying = null,
+                channelId = channelId,
+            )
+            val result = apiService.sync(request)
+            val response = result.getOrNull() ?: return
+
+            val toAdd = response.download.filter { it.id !in existingIds }
+            if (toAdd.isNotEmpty()) {
+                val updated = (backgroundQueues[channelId] ?: mutableListOf()).also { it.addAll(toAdd) }
+                backgroundQueues[channelId] = updated
+            }
+
+            // Download on WiFi at full quality; skip on cellular
+            if (networkMonitor.isCellular.value) return
+            val all = backgroundQueues[channelId] ?: return
+            for (song in all) {
+                if (!cacheManager.hasCachedSong(song.id, song.fileExtension) &&
+                    !cacheManager.hasCachedSong(song.id, "mp3")
+                ) {
+                    withContext(Dispatchers.IO) {
+                        apiService.downloadSong(song.id).onSuccess { data ->
+                            cacheManager.saveSong(song.id, song.fileExtension, data)
+                        }
+                        downloadArtworkIfNeeded(song)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Background sync failures are non-fatal
         }
     }
 
     fun selectChannel(channelId: Int?) {
         if (selectedChannelId == channelId) return
+
+        // Save current queue (prepend current song so it resumes when we return)
+        val savedQueue = mutableListOf<SongItem>()
+        _currentSong.value?.let { savedQueue.add(it) }
+        savedQueue.addAll(_queue.value)
+        backgroundQueues[selectedChannelId] = savedQueue
+
         selectedChannelId = channelId
-        _queue.value = emptyList()
+
+        // Stop without deleting cache files
         stopPlayback()
+
+        // Restore pre-downloaded queue for the new channel
+        _queue.value = backgroundQueues[channelId]?.toList() ?: emptyList()
+
         triggerSync()
+
+        // Start immediately if a cached file is already waiting
+        if (_queue.value.isNotEmpty()) {
+            val hasCached = _queue.value.any { song ->
+                cacheManager.hasCachedSong(song.id, song.fileExtension) ||
+                    cacheManager.hasCachedSong(song.id, "mp3")
+            }
+            if (hasCached) playNext()
+        }
     }
 
     fun togglePlayPause() {
@@ -372,6 +454,10 @@ class RadioPlayer(
         }
 
             syncBackoffSeconds = 2.0
+
+            // Fire-and-forget: prefill every other channel's queue
+            scope.launch { syncBackgroundChannels() }
+
             return true
         } catch (e: Exception) {
             e.printStackTrace()

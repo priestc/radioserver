@@ -235,11 +235,6 @@ def client_sync(request):
             started_at=now_playing["started_at"],
         )
 
-    # If the client has switched channels, discard unplayed items from the old channel
-    first_unplayed = PlaylistItem.objects.filter(played_at__isnull=True).order_by("id").first()
-    if first_unplayed is not None and first_unplayed.channel != channel:
-        PlaylistItem.objects.filter(played_at__isnull=True).delete()
-
     # Auto-generate playlist for this channel if unplayed duration is under 1 hour
     from django.db.models import Sum
     unplayed_duration = (
