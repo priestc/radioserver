@@ -155,7 +155,6 @@ class AudioPlayer: ObservableObject {
         // Stop playback without deleting cache files
         player?.pause()
         removeObservers()
-        player = nil
         isPlaying = false
         currentSong = nil
         hasSyncedCurrentSong = false
@@ -367,10 +366,9 @@ class AudioPlayer: ObservableObject {
         } else if CacheManager.shared.hasCached(playlistItemId: song.id, ext: "mp3") {
             ext = "mp3"
         } else {
-            // Not cached yet — put back at front of queue and wait for download
+            // Not cached yet — put back at front of queue; download loop will play it
             queue.insert(song, at: 0)
             currentSong = nil
-            triggerSync()
             return
         }
         let fileURL = CacheManager.shared.fileURL(for: song.id, ext: ext)
@@ -446,8 +444,12 @@ class AudioPlayer: ObservableObject {
     }
 
     func play() {
-        if currentSong == nil && queue.isEmpty {
-            triggerSync()
+        if currentSong == nil {
+            if queue.isEmpty {
+                triggerSync()
+            } else {
+                playNext()
+            }
             return
         }
         player?.play()
