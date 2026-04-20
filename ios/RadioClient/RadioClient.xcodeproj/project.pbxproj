@@ -3,13 +3,10 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		93C7DDDC2F7B60DD007AF538 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93C7DDDB2F7B60DD007AF538 /* WidgetKit.framework */; };
-		93C7DDDE2F7B60DD007AF538 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93C7DDDD2F7B60DD007AF538 /* SwiftUI.framework */; };
-		93C7DDED2F7B60DF007AF538 /* SmartHomeWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93C7DDD92F7B60DD007AF538 /* SmartHomeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A10001 /* RadioClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* RadioClientApp.swift */; };
 		A10002 /* SongItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002 /* SongItem.swift */; };
 		A10003 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* APIService.swift */; };
@@ -24,16 +21,6 @@
 		A10012 /* ChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* ChannelsView.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		93C7DDEB2F7B60DF007AF538 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = H10001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 93C7DDD82F7B60DD007AF538;
-			remoteInfo = SmartHomeWidgetExtension;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXCopyFilesBuildPhase section */
 		93C7DDEE2F7B60DF007AF538 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -41,7 +28,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				93C7DDED2F7B60DF007AF538 /* SmartHomeWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -49,10 +35,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		93C7DDD92F7B60DD007AF538 /* SmartHomeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SmartHomeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		93C7DDDB2F7B60DD007AF538 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		93C7DDDD2F7B60DD007AF538 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		93C7DDF32F7B61E3007AF538 /* SmartHomeWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SmartHomeWidgetExtension.entitlements; sourceTree = "<group>"; };
 		B10001 /* RadioClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioClientApp.swift; sourceTree = "<group>"; };
 		B10002 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
 		B10003 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
@@ -70,30 +54,7 @@
 		C10001 /* RadioClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		93C7DDF12F7B60DF007AF538 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 93C7DDD82F7B60DD007AF538 /* SmartHomeWidgetExtension */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		93C7DDDF2F7B60DD007AF538 /* SmartHomeWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (93C7DDF12F7B60DF007AF538 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = SmartHomeWidget; sourceTree = "<group>"; };
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFrameworksBuildPhase section */
-		93C7DDD62F7B60DD007AF538 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				93C7DDDE2F7B60DD007AF538 /* SwiftUI.framework in Frameworks */,
-				93C7DDDC2F7B60DD007AF538 /* WidgetKit.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		D10001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -116,10 +77,8 @@
 		E10001 = {
 			isa = PBXGroup;
 			children = (
-				93C7DDF32F7B61E3007AF538 /* SmartHomeWidgetExtension.entitlements */,
 				E10002 /* RadioClient */,
 				B10011 /* RadioClient.entitlements */,
-				93C7DDDF2F7B60DD007AF538 /* SmartHomeWidget */,
 				93C7DDDA2F7B60DD007AF538 /* Frameworks */,
 				E10007 /* Products */,
 			);
@@ -181,7 +140,6 @@
 			isa = PBXGroup;
 			children = (
 				C10001 /* RadioClient.app */,
-				93C7DDD92F7B60DD007AF538 /* SmartHomeWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,28 +147,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		93C7DDD82F7B60DD007AF538 /* SmartHomeWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 93C7DDF22F7B60DF007AF538 /* Build configuration list for PBXNativeTarget "SmartHomeWidgetExtension" */;
-			buildPhases = (
-				93C7DDD52F7B60DD007AF538 /* Sources */,
-				93C7DDD62F7B60DD007AF538 /* Frameworks */,
-				93C7DDD72F7B60DD007AF538 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				93C7DDDF2F7B60DD007AF538 /* SmartHomeWidget */,
-			);
-			name = SmartHomeWidgetExtension;
-			packageProductDependencies = (
-			);
-			productName = SmartHomeWidgetExtension;
-			productReference = 93C7DDD92F7B60DD007AF538 /* SmartHomeWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		F10001 /* RadioClient */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = G10003 /* Build configuration list for PBXNativeTarget "RadioClient" */;
@@ -223,7 +159,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				93C7DDEC2F7B60DF007AF538 /* PBXTargetDependency */,
 			);
 			name = RadioClient;
 			productName = RadioClient;
@@ -239,11 +174,6 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 1540;
-				TargetAttributes = {
-					93C7DDD82F7B60DD007AF538 = {
-						CreatedOnToolsVersion = 26.4;
-					};
-				};
 			};
 			buildConfigurationList = G10001 /* Build configuration list for PBXProject "RadioClient" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -259,19 +189,11 @@
 			projectRoot = "";
 			targets = (
 				F10001 /* RadioClient */,
-				93C7DDD82F7B60DD007AF538 /* SmartHomeWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		93C7DDD72F7B60DD007AF538 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		F10003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -283,13 +205,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		93C7DDD52F7B60DD007AF538 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		F10002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -310,146 +225,7 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		93C7DDEC2F7B60DF007AF538 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 93C7DDD82F7B60DD007AF538 /* SmartHomeWidgetExtension */;
-			targetProxy = 93C7DDEB2F7B60DF007AF538 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
-		93C7DDEF2F7B60DF007AF538 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_ENTITLEMENTS = SmartHomeWidgetExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6V798W6LMZ;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SmartHomeWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SmartHomeWidget;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.radioserver.RadioClient.SmartHomeWidget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		93C7DDF02F7B60DF007AF538 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_ENTITLEMENTS = SmartHomeWidgetExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 6V798W6LMZ;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SmartHomeWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SmartHomeWidget;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.radioserver.RadioClient.SmartHomeWidget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		G10004 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -563,15 +339,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		93C7DDF22F7B60DF007AF538 /* Build configuration list for PBXNativeTarget "SmartHomeWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				93C7DDEF2F7B60DF007AF538 /* Debug */,
-				93C7DDF02F7B60DF007AF538 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		G10001 /* Build configuration list for PBXProject "RadioClient" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
