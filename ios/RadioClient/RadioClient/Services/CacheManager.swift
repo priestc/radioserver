@@ -42,6 +42,12 @@ class CacheManager {
         FileManager.default.fileExists(atPath: fileURL(for: playlistItemId, ext: ext).path)
     }
 
+    func fileSizeMB(for playlistItemId: Int, ext: String) -> Double {
+        let url = fileURL(for: playlistItemId, ext: ext)
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return 0 }
+        return Double(size) / (1024 * 1024)
+    }
+
     func totalCacheSizeMB() -> Double {
         dirSizeMB(cacheDir)
     }

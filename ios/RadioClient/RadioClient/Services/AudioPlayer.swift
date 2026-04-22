@@ -600,6 +600,41 @@ class AudioPlayer: ObservableObject {
         }
     }
 
+    /// Returns audio cache size in MB for each channel, sorted by name.
+    func cacheSizeMBPerChannel() -> [(name: String, sizeMB: Double)] {
+        // Active channel: current song + remaining queue
+        var activeItems = queue
+        if let song = currentSong { activeItems.insert(song, at: 0) }
+        let activeName = selectedChannel?.name ?? "All Music"
+
+        var channelItems: [(name: String, items: [SongItem])] = [
+            (name: activeName, items: activeItems)
+        ]
+
+        // Background channels
+        for (channelId, items) in backgroundQueues {
+            guard channelId != selectedChannel?.id else { continue }
+            let name: String
+            if let id = channelId, let ch = availableChannels.first(where: { $0.id == id }) {
+                name = ch.name
+            } else {
+                name = "All Music"
+            }
+            channelItems.append((name: name, items: items))
+        }
+
+        return channelItems.map { (name, items) in
+            let size = items.reduce(0.0) { total, item in
+                total
+                    + CacheManager.shared.fileSizeMB(for: item.id, ext: item.fileExtension)
+                    + (item.fileExtension != "mp3"
+                        ? CacheManager.shared.fileSizeMB(for: item.id, ext: "mp3")
+                        : 0)
+            }
+            return (name: name, sizeMB: size)
+        }.sorted { $0.name < $1.name }
+    }
+
     private func removeObservers() {
         if let obs = timeObserver {
             player?.removeTimeObserver(obs)

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var api: APIService
+    @EnvironmentObject var audioPlayer: AudioPlayer
     @State private var testResult: String?
     @State private var isTesting = false
     @State private var showScanner = false
@@ -71,20 +72,32 @@ struct SettingsView: View {
                             .frame(width: 80)
                     }
 
-                    let audioSize = CacheManager.shared.totalCacheSizeMB()
-                    HStack {
-                        Text("Audio Cache")
-                        Spacer()
-                        Text(String(format: "%.1f MB", audioSize))
-                            .foregroundColor(.secondary)
+                    let channelCaches = audioPlayer.cacheSizeMBPerChannel()
+                    ForEach(channelCaches, id: \.name) { entry in
+                        HStack {
+                            Text(entry.name)
+                            Spacer()
+                            Text(String(format: "%.1f MB", entry.sizeMB))
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     let artworkSize = CacheManager.shared.totalArtworkSizeMB()
                     HStack {
-                        Text("Artwork Cache")
+                        Text("Artwork")
                         Spacer()
                         Text(String(format: "%.1f MB", artworkSize))
                             .foregroundColor(.secondary)
+                    }
+
+                    let totalAudio = channelCaches.reduce(0.0) { $0 + $1.sizeMB }
+                    HStack {
+                        Text("Total Cache")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text(String(format: "%.1f MB", totalAudio + artworkSize))
+                            .foregroundColor(.secondary)
+                            .fontWeight(.semibold)
                     }
 
                     Button("Clear Cache", role: .destructive) {
