@@ -26,6 +26,15 @@ class AudioPlayer: ObservableObject {
     // Per-channel queues. Key is channel ID (nil = All Music).
     private var backgroundQueues: [Int?: [SongItem]] = [:]
 
+    // Pre-warmed AVPlayers for instant channel switching (like AM/FM tuning).
+    // Each background channel keeps a silent, buffered player for its first song.
+    private struct PrewarmedChannel {
+        let player: AVPlayer
+        let item: AVPlayerItem
+        let song: SongItem
+    }
+    private var prewarmedChannels: [Int?: PrewarmedChannel] = [:]
+
     // Sync state
     private var hasSyncedCurrentSong = false
     private var currentSongStartedAt: Date?
@@ -152,31 +161,46 @@ class AudioPlayer: ObservableObject {
         if let song = currentSong { savedQueue.insert(song, at: 0) }
         backgroundQueues[selectedChannel?.id] = savedQueue
 
-        // Stop playback without deleting cache files
+        // Stop current playback
         player?.pause()
         removeObservers()
         isPlaying = false
-        currentSong = nil
         hasSyncedCurrentSong = false
         currentSongStartedAt = nil
         currentTime = 0
         duration = 0
-        updateNowPlaying()
 
         selectedChannel = channel
-
-        // Restore whatever we already pre-downloaded for this channel
         queue = backgroundQueues[channel?.id] ?? []
 
-        triggerSync()
+        // Use the pre-warmed player if available — nearly zero silence
+        if let prewarmed = prewarmedChannels.removeValue(forKey: channel?.id) {
+            queue.removeAll { $0.id == prewarmed.song.id }
+            player = prewarmed.player
+            currentSong = prewarmed.song
+            currentSongStartedAt = Date()
+            hasSyncedCurrentSong = false
 
-        // Start immediately if a cached file is already waiting
-        if !queue.isEmpty {
-            let hasCached = queue.contains {
-                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
-                CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+            attachObservers(to: prewarmed.player, playerItem: prewarmed.item, song: prewarmed.song)
+            applyReplayGain(prewarmed.song, to: prewarmed.player)
+            prewarmed.player.play()
+            isPlaying = true
+            loadArtworkForCurrentSong()
+            updateNowPlaying()
+            triggerSync()
+        } else {
+            currentSong = nil
+            updateNowPlaying()
+            triggerSync()
+
+            // Fall back: start from cached queue if something is already downloaded
+            if !queue.isEmpty {
+                let hasCached = queue.contains {
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                }
+                if hasCached { playNext() }
             }
-            if hasCached { playNext() }
         }
     }
 
@@ -233,7 +257,6 @@ class AudioPlayer: ObservableObject {
 
             if onCellular {
                 // On cellular: keep at most 2 low-bitrate songs cached.
-                // Check the full queue (including songs re-queued after a cache miss).
                 let allQueued = await MainActor.run { self.queue }
                 let cachedCount = allQueued.filter {
                     CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") ||
@@ -248,7 +271,6 @@ class AudioPlayer: ObservableObject {
                         if let albumId = next.albumId {
                             await prefetchArtwork(albumId: albumId, api: api)
                         }
-                        // Trigger auto-start if player went idle waiting for this download
                         let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
                         if idle { await MainActor.run { self.playNext() } }
                     }
@@ -260,7 +282,6 @@ class AudioPlayer: ObservableObject {
                 for item in allItems {
                     if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
                         _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
-                        // Trigger auto-start if player went idle waiting for this download
                         let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
                         if idle { await MainActor.run { self.playNext() } }
                     }
@@ -282,7 +303,7 @@ class AudioPlayer: ObservableObject {
                 await MainActor.run { self.playNext() }
             }
 
-            // Fire-and-forget: prefill every other channel's queue
+            // Fire-and-forget: prefill every other channel's queue and pre-warm their players
             Task { await syncBackgroundChannels() }
 
             return true
@@ -326,6 +347,7 @@ class AudioPlayer: ObservableObject {
             // Download on WiFi at full quality; skip on cellular to save data
             let onCellular = await MainActor.run { isCellular }
             guard !onCellular else { return }
+
             let all = await MainActor.run { backgroundQueues[channelId] ?? [] }
             for item in all {
                 if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
@@ -335,9 +357,33 @@ class AudioPlayer: ObservableObject {
                     await prefetchArtwork(albumId: albumId, api: api)
                 }
             }
+
+            // Pre-warm a silent AVPlayer for the first cached song so channel switching is instant
+            let firstCached = await MainActor.run {
+                (backgroundQueues[channelId] ?? []).first {
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
+                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
+                }
+            }
+            if let song = firstCached {
+                let ext = CacheManager.shared.hasCached(playlistItemId: song.id, ext: song.fileExtension)
+                    ? song.fileExtension : "mp3"
+                await MainActor.run { self.prewarmIfNeeded(channelId: channelId, song: song, ext: ext) }
+            }
         } catch {
             // Background sync failures are non-fatal
         }
+    }
+
+    /// Creates a silent, buffered AVPlayer for a background channel so that switching to it is near-instant.
+    private func prewarmIfNeeded(channelId: Int?, song: SongItem, ext: String) {
+        // Don't replace an existing pre-warmed player
+        guard prewarmedChannels[channelId] == nil else { return }
+        let url = CacheManager.shared.fileURL(for: song.id, ext: ext)
+        let item = AVPlayerItem(url: url)
+        let p = AVPlayer(playerItem: item)
+        p.volume = 0  // Silent until activated on channel switch
+        prewarmedChannels[channelId] = PrewarmedChannel(player: p, item: item, song: song)
     }
 
     func playNext() {
@@ -351,7 +397,6 @@ class AudioPlayer: ObservableObject {
     }
 
     func playSong(_ song: SongItem) {
-        // Stop previous
         player?.pause()
         removeObservers()
 
@@ -374,23 +419,34 @@ class AudioPlayer: ObservableObject {
         let fileURL = CacheManager.shared.fileURL(for: song.id, ext: ext)
 
         let playerItem = AVPlayerItem(url: fileURL)
-        player = AVPlayer(playerItem: playerItem)
+        let avPlayer = AVPlayer(playerItem: playerItem)
+        player = avPlayer
 
-        // Time observer
-        timeObserver = player?.addPeriodicTimeObserver(
+        attachObservers(to: avPlayer, playerItem: playerItem, song: song)
+        applyReplayGain(song, to: avPlayer)
+
+        avPlayer.play()
+        isPlaying = true
+        loadArtworkForCurrentSong()
+        updateNowPlaying()
+    }
+
+    /// Attaches time and end-of-track observers to an AVPlayer instance.
+    private func attachObservers(to avPlayer: AVPlayer, playerItem: AVPlayerItem, song: SongItem) {
+        timeObserver = avPlayer.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             guard let self else { return }
             self.currentTime = time.seconds
-            if let dur = self.player?.currentItem?.duration.seconds, dur.isFinite {
+            if let dur = avPlayer.currentItem?.duration.seconds, dur.isFinite {
                 self.duration = dur
 
                 // Trigger sync at 50%
                 if !self.hasSyncedCurrentSong && time.seconds >= dur / 2 {
                     self.hasSyncedCurrentSong = true
-                    if let song = self.currentSong {
-                        let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
+                    if let current = self.currentSong {
+                        let played = PlayedSong(song: current, playedAt: Date(), skipped: false)
                         self.pendingPlayed.append(played)
                     }
                     self.triggerSync()
@@ -399,7 +455,6 @@ class AudioPlayer: ObservableObject {
             self.updateNowPlaying()
         }
 
-        // End observer
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
@@ -407,24 +462,18 @@ class AudioPlayer: ObservableObject {
         ) { [weak self] _ in
             self?.songDidFinish()
         }
+    }
 
-        // Apply ReplayGain volume adjustment
+    private func applyReplayGain(_ song: SongItem, to avPlayer: AVPlayer) {
         if let gainDB = song.replaygainTrackGain {
-            let linear = pow(10.0, gainDB / 20.0)
-            player?.volume = Float(min(linear, 1.0))
+            avPlayer.volume = Float(min(pow(10.0, gainDB / 20.0), 1.0))
         } else {
-            player?.volume = 1.0
+            avPlayer.volume = 1.0
         }
-
-        player?.play()
-        isPlaying = true
-        loadArtworkForCurrentSong()
-        updateNowPlaying()
     }
 
     private func songDidFinish() {
         guard let song = currentSong else { return }
-        // If we haven't synced yet (song was shorter than expected), add to pending
         if !hasSyncedCurrentSong {
             let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
             pendingPlayed.append(played)
@@ -432,7 +481,6 @@ class AudioPlayer: ObservableObject {
         playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
         removeCachedFiles(for: song)
         playNext()
-        // Sync to report the new song's start time
         triggerSync()
     }
 
@@ -477,7 +525,6 @@ class AudioPlayer: ObservableObject {
             removeCachedFiles(for: song)
         }
         playNext()
-        // Sync to report skip and the new song's start time
         triggerSync()
     }
 
@@ -528,7 +575,6 @@ class AudioPlayer: ObservableObject {
         let skip = await MainActor.run { self.artworkCache[albumId] != nil || self.artworkFailed.contains(albumId) }
         if skip { return }
 
-        // Check disk cache
         if let diskImage = CacheManager.shared.cachedArtwork(for: albumId) {
             await MainActor.run { self.artworkCache[albumId] = diskImage }
             return
