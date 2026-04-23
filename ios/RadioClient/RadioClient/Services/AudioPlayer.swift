@@ -35,6 +35,9 @@ class AudioPlayer: ObservableObject {
     }
     private var prewarmedChannels: [Int?: PrewarmedChannel] = [:]
 
+    // Saved playback position (seconds) per channel so switching back resumes mid-song
+    private var channelPlaybackPositions: [Int?: Double] = [:]
+
     // Sync state
     private var hasSyncedCurrentSong = false
     private var currentSongStartedAt: Date?
@@ -156,9 +159,14 @@ class AudioPlayer: ObservableObject {
     func selectChannel(_ channel: Channel?) {
         guard selectedChannel != channel else { return }
 
-        // Save current queue (prepend current song so it plays again when we return)
+        // Save current queue and playback position so we can resume mid-song on return
         var savedQueue = queue
-        if let song = currentSong { savedQueue.insert(song, at: 0) }
+        if let song = currentSong {
+            channelPlaybackPositions[selectedChannel?.id] = currentTime
+            savedQueue.insert(song, at: 0)
+        } else {
+            channelPlaybackPositions.removeValue(forKey: selectedChannel?.id)
+        }
         backgroundQueues[selectedChannel?.id] = savedQueue
 
         // Stop current playback
@@ -184,6 +192,12 @@ class AudioPlayer: ObservableObject {
             attachObservers(to: prewarmed.player, playerItem: prewarmed.item, song: prewarmed.song)
             applyReplayGain(prewarmed.song, to: prewarmed.player)
             prewarmed.player.play()
+
+            // Resume from saved position if returning mid-song
+            if let savedTime = channelPlaybackPositions.removeValue(forKey: channel?.id), savedTime > 1 {
+                prewarmed.player.seek(to: CMTime(seconds: savedTime, preferredTimescale: 600))
+            }
+
             isPlaying = true
             loadArtworkForCurrentSong()
             updateNowPlaying()
@@ -199,7 +213,13 @@ class AudioPlayer: ObservableObject {
                     CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension) ||
                     CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3")
                 }
-                if hasCached { playNext() }
+                if hasCached {
+                    playNext()
+                    // Resume from saved position if returning mid-song
+                    if let savedTime = channelPlaybackPositions.removeValue(forKey: channel?.id), savedTime > 1 {
+                        player?.seek(to: CMTime(seconds: savedTime, preferredTimescale: 600))
+                    }
+                }
             }
         }
     }
