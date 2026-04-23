@@ -600,30 +600,24 @@ class AudioPlayer: ObservableObject {
         }
     }
 
-    /// Returns audio cache size in MB for each channel, sorted by name.
+    /// Returns audio cache size in MB for every channel (including ones not yet background-synced).
     func cacheSizeMBPerChannel() -> [(name: String, sizeMB: Double)] {
-        // Active channel: current song + remaining queue
-        var activeItems = queue
-        if let song = currentSong { activeItems.insert(song, at: 0) }
-        let activeName = selectedChannel?.name ?? "All Music"
-
-        var channelItems: [(name: String, items: [SongItem])] = [
-            (name: activeName, items: activeItems)
-        ]
-
-        // Background channels
-        for (channelId, items) in backgroundQueues {
-            guard channelId != selectedChannel?.id else { continue }
-            let name: String
-            if let id = channelId, let ch = availableChannels.first(where: { $0.id == id }) {
-                name = ch.name
-            } else {
-                name = "All Music"
-            }
-            channelItems.append((name: name, items: items))
+        // Always enumerate all known channels so every row is visible even at 0 MB
+        var entries: [(name: String, channelId: Int?)] = [("All Music", nil)]
+        for ch in availableChannels {
+            entries.append((ch.name, Optional(ch.id)))
         }
 
-        return channelItems.map { (name, items) in
+        return entries.map { (name, channelId) in
+            let items: [SongItem]
+            if channelId == selectedChannel?.id {
+                // Active channel: current song + remaining queue
+                var active = queue
+                if let song = currentSong { active.insert(song, at: 0) }
+                items = active
+            } else {
+                items = backgroundQueues[channelId] ?? []
+            }
             let size = items.reduce(0.0) { total, item in
                 total
                     + CacheManager.shared.fileSizeMB(for: item.id, ext: item.fileExtension)
@@ -632,7 +626,7 @@ class AudioPlayer: ObservableObject {
                         : 0)
             }
             return (name: name, sizeMB: size)
-        }.sorted { $0.name < $1.name }
+        }
     }
 
     private func removeObservers() {
