@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import re
+import socket
 import subprocess
 
 from django.core.management.base import BaseCommand
+
+
+def resolve_hostname(ip: str) -> str:
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except OSError:
+        return ip
 
 # Matches gunicorn access log (with optional cl=<Content-Length> suffix):
 # 192.168.1.50 - - [01/Mar/2026:12:00:00 +0000] "GET /path HTTP/1.1" 200 12345 "ref" "ua" cl=54321
@@ -36,7 +44,6 @@ class Command(BaseCommand):
             "since",
             help='Time window passed to journalctl --since, e.g. "3 days ago".',
         )
-
     def handle(self, *args, **options):
         since = options["since"]
 
@@ -107,10 +114,12 @@ class Command(BaseCommand):
         # Bandwidth by IP
         self.stdout.write("\n=== Bandwidth by IP ===\n")
         sorted_ips = sorted(ip_stats.items(), key=lambda x: x[1][0], reverse=True)
-        ip_width = max(len(ip) for ip, _ in sorted_ips)
+        labels = {ip: resolve_hostname(ip) for ip, _ in sorted_ips}
+        label_width = max(len(label) for label in labels.values())
         for ip, (total, count) in sorted_ips:
+            label = labels[ip]
             self.stdout.write(
-                f"  {ip:<{ip_width}}  {humanize_bytes(total):>12}  {count:>6} requests"
+                f"  {label:<{label_width}}  {humanize_bytes(total):>12}  {count:>6} requests"
             )
 
         # Bandwidth by endpoint
