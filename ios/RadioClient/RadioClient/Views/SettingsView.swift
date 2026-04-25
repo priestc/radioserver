@@ -72,6 +72,8 @@ struct SettingsView: View {
                             .frame(width: 80)
                     }
 
+                    // cacheUpdateTick is read here so SwiftUI re-evaluates this body after downloads
+                    let _ = audioPlayer.cacheUpdateTick
                     let channelCaches = audioPlayer.cacheSizeMBPerChannel()
                     ForEach(channelCaches, id: \.name) { entry in
                         HStack {
@@ -99,6 +101,19 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .fontWeight(.semibold)
                     }
+
+                    Button {
+                        audioPlayer.fillAllCaches()
+                    } label: {
+                        HStack {
+                            Text("Fill All Caches")
+                            Spacer()
+                            if audioPlayer.isFillingCache {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(audioPlayer.isFillingCache)
 
                     Button("Clear Cache", role: .destructive) {
                         CacheManager.shared.clearCache()

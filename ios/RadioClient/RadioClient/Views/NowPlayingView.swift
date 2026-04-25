@@ -65,9 +65,15 @@ struct NowPlayingView: View {
                 .foregroundColor(.primary)
 
                 // Queue info
-                Text("\(formatQueueDuration()) in queue")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(formatQueueDuration()) in queue")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if player.isFillingCache {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    }
+                }
 
                 Spacer()
             }

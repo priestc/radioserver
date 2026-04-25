@@ -10,6 +10,8 @@ class AudioPlayer: ObservableObject {
     @Published var queue: [SongItem] = []
     @Published var playHistory: [PlayedSong] = []
     @Published var isPlaying = false
+    @Published var isFillingCache = false
+    @Published var cacheUpdateTick = 0
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var selectedChannel: Channel?
@@ -261,7 +263,10 @@ class AudioPlayer: ObservableObject {
             }
 
             let channelId = await MainActor.run { self.selectedChannel?.id }
-            let newItems = try await api.sync(played: played, bufferCacheMB: api.bufferCacheMB, nowPlaying: nowPlaying, channelId: channelId)
+            let onCellular = await MainActor.run { self.isCellular }
+            let isLocal = await MainActor.run { self.apiService?.isOnLocalNetwork ?? false }
+            let syncBuffer = (!onCellular && isLocal) ? max(api.bufferCacheMB, 500) : api.bufferCacheMB
+            let newItems = try await api.sync(played: played, bufferCacheMB: syncBuffer, nowPlaying: nowPlaying, channelId: channelId)
             await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
 
             // Add new items to queue (skip already queued)
@@ -273,7 +278,6 @@ class AudioPlayer: ObservableObject {
             }
 
             // Download songs and artwork in background
-            let onCellular = await MainActor.run { self.isCellular }
 
             if onCellular {
                 // On cellular: keep at most 2 low-bitrate songs cached.
@@ -309,6 +313,7 @@ class AudioPlayer: ObservableObject {
                         await prefetchArtwork(albumId: albumId, api: api)
                     }
                 }
+                await MainActor.run { self.cacheUpdateTick += 1 }
             }
 
             // Final auto-start check: only if a cached file is actually ready
@@ -343,15 +348,25 @@ class AudioPlayer: ObservableObject {
         }
     }
 
-    private func prefillBackgroundQueue(channelId: Int?, api: APIService) async {
+    private func prefillBackgroundQueue(channelId: Int?, api: APIService, bufferMB: Double? = nil, ignoreCellular: Bool = false) async {
         do {
             let existing = await MainActor.run { backgroundQueues[channelId] ?? [] }
             let existingIds = Set(existing.map { $0.id })
-            let bufferMB = api.bufferCacheMB
+
+            let onCellular = await MainActor.run { isCellular }
+            let isLocal = await MainActor.run { self.apiService?.isOnLocalNetwork ?? false }
+            let effectiveBuffer: Int
+            if let override = bufferMB {
+                effectiveBuffer = Int(override)
+            } else if !onCellular && isLocal {
+                effectiveBuffer = max(api.bufferCacheMB, 500)
+            } else {
+                effectiveBuffer = api.bufferCacheMB
+            }
 
             let newItems = try await api.sync(
                 played: [],
-                bufferCacheMB: bufferMB,
+                bufferCacheMB: effectiveBuffer,
                 nowPlaying: nil,
                 channelId: channelId
             )
@@ -364,9 +379,8 @@ class AudioPlayer: ObservableObject {
                 }
             }
 
-            // Download on WiFi at full quality; skip on cellular to save data
-            let onCellular = await MainActor.run { isCellular }
-            guard !onCellular else { return }
+            // Download on WiFi at full quality; skip on cellular unless explicitly requested
+            guard !onCellular || ignoreCellular else { return }
 
             let all = await MainActor.run { backgroundQueues[channelId] ?? [] }
             for item in all {
@@ -377,6 +391,7 @@ class AudioPlayer: ObservableObject {
                     await prefetchArtwork(albumId: albumId, api: api)
                 }
             }
+            await MainActor.run { self.cacheUpdateTick += 1 }
 
             // Pre-warm a silent AVPlayer for the first cached song so channel switching is instant
             let firstCached = await MainActor.run {
@@ -392,6 +407,27 @@ class AudioPlayer: ObservableObject {
             }
         } catch {
             // Background sync failures are non-fatal
+        }
+    }
+
+    func fillAllCaches() {
+        guard !isFillingCache else { return }
+        isFillingCache = true
+        Task {
+            guard let api = apiService, api.isConfigured else {
+                await MainActor.run { self.isFillingCache = false }
+                return
+            }
+            var channelIds: [Int?] = [nil]
+            let channels = await MainActor.run { availableChannels }
+            channelIds += channels.map { Optional($0.id) }
+            for channelId in channelIds {
+                await prefillBackgroundQueue(channelId: channelId, api: api, bufferMB: 2000, ignoreCellular: true)
+            }
+            await MainActor.run {
+                self.isFillingCache = false
+                self.cacheUpdateTick += 1
+            }
         }
     }
 
