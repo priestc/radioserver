@@ -415,13 +415,20 @@ class AudioPlayer: ObservableObject {
         isFillingCache = true
         Task {
             // Read APIService state on main thread to avoid data races with @Published properties
-            let (api, configured, channels) = await MainActor.run {
-                (self.apiService, self.apiService?.isConfigured ?? false, self.availableChannels)
+            let (api, configured) = await MainActor.run {
+                (self.apiService, self.apiService?.isConfigured ?? false)
             }
             guard let api, configured else {
                 await MainActor.run { self.isFillingCache = false }
                 return
             }
+
+            // Fetch channels fresh so we fill every channel even on first run
+            if let fetched = try? await api.fetchChannels() {
+                await MainActor.run { self.availableChannels = fetched }
+            }
+
+            let channels = await MainActor.run { self.availableChannels }
             var channelIds: [Int?] = [nil]
             channelIds += channels.map { Optional($0.id) }
             for channelId in channelIds {
@@ -435,7 +442,9 @@ class AudioPlayer: ObservableObject {
     }
 
     func refreshCacheStats() {
-        Task { await syncBackgroundChannels() }
+        // fetchChannels populates availableChannels then calls syncBackgroundChannels,
+        // which fills backgroundQueues and increments cacheUpdateTick for the UI.
+        fetchChannels()
     }
 
     /// Creates a silent, buffered AVPlayer for a background channel so that switching to it is near-instant.
@@ -674,10 +683,12 @@ class AudioPlayer: ObservableObject {
         return entries.map { (name, channelId) in
             let items: [SongItem]
             if channelId == selectedChannel?.id {
-                // Active channel: current song + remaining queue
+                // Active channel: live queue + any prefilled songs from fillAllCaches
                 var active = queue
                 if let song = currentSong { active.insert(song, at: 0) }
-                items = active
+                let activeIds = Set(active.map(\.id))
+                let prefilled = (backgroundQueues[channelId] ?? []).filter { !activeIds.contains($0.id) }
+                items = active + prefilled
             } else {
                 items = backgroundQueues[channelId] ?? []
             }
