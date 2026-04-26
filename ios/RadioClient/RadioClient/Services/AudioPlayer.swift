@@ -414,12 +414,15 @@ class AudioPlayer: ObservableObject {
         guard !isFillingCache else { return }
         isFillingCache = true
         Task {
-            guard let api = apiService, api.isConfigured else {
+            // Read APIService state on main thread to avoid data races with @Published properties
+            let (api, configured, channels) = await MainActor.run {
+                (self.apiService, self.apiService?.isConfigured ?? false, self.availableChannels)
+            }
+            guard let api, configured else {
                 await MainActor.run { self.isFillingCache = false }
                 return
             }
             var channelIds: [Int?] = [nil]
-            let channels = await MainActor.run { availableChannels }
             channelIds += channels.map { Optional($0.id) }
             for channelId in channelIds {
                 await prefillBackgroundQueue(channelId: channelId, api: api, bufferMB: 2000, ignoreCellular: true)
@@ -429,6 +432,10 @@ class AudioPlayer: ObservableObject {
                 self.cacheUpdateTick += 1
             }
         }
+    }
+
+    func refreshCacheStats() {
+        Task { await syncBackgroundChannels() }
     }
 
     /// Creates a silent, buffered AVPlayer for a background channel so that switching to it is near-instant.

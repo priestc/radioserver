@@ -120,6 +120,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .onAppear { audioPlayer.refreshCacheStats() }
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
