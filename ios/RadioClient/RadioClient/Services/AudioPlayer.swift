@@ -138,7 +138,11 @@ class AudioPlayer: ObservableObject {
             return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in
-            self?.skipToNext()
+            self?.selectNextChannel()
+            return .success
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            self?.selectPreviousChannel()
             return .success
         }
     }
@@ -156,6 +160,20 @@ class AudioPlayer: ObservableObject {
                 await syncBackgroundChannels()
             }
         }
+    }
+
+    func selectNextChannel() {
+        let allChannels: [Channel?] = [nil] + availableChannels
+        guard let currentIndex = allChannels.firstIndex(where: { $0 == selectedChannel }) else { return }
+        let nextIndex = (currentIndex + 1) % allChannels.count
+        selectChannel(allChannels[nextIndex])
+    }
+
+    func selectPreviousChannel() {
+        let allChannels: [Channel?] = [nil] + availableChannels
+        guard let currentIndex = allChannels.firstIndex(where: { $0 == selectedChannel }) else { return }
+        let prevIndex = (currentIndex - 1 + allChannels.count) % allChannels.count
+        selectChannel(allChannels[prevIndex])
     }
 
     func selectChannel(_ channel: Channel?) {
