@@ -50,6 +50,7 @@ struct ChannelsView: View {
     @ViewBuilder
     private func channelRow(channel: Channel?) -> some View {
         let isSelected = audioPlayer.selectedChannel == channel
+        let isExhausted = audioPlayer.exhaustedChannelIds.contains(channel?.id)
         Button {
             audioPlayer.selectChannel(channel)
         } label: {
@@ -60,8 +61,8 @@ struct ChannelsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(channel?.name ?? "All Music")
                         .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    Text(channel?.subtitle ?? "No filters — plays everything")
+                        .foregroundColor(isExhausted ? .secondary : .primary)
+                    Text(isExhausted ? "No songs available" : (channel?.subtitle ?? "No filters — plays everything"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -70,6 +71,7 @@ struct ChannelsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isExhausted)
     }
 
     private func loadChannels() async {

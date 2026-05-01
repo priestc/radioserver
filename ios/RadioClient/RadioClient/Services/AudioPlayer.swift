@@ -16,6 +16,7 @@ class AudioPlayer: ObservableObject {
     @Published var duration: Double = 0
     @Published var selectedChannel: Channel?
     @Published var availableChannels: [Channel] = []
+    @Published var exhaustedChannelIds: Set<Int?> = []
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -163,20 +164,23 @@ class AudioPlayer: ObservableObject {
     }
 
     func selectNextChannel() {
-        let allChannels: [Channel?] = [nil] + availableChannels
-        guard let currentIndex = allChannels.firstIndex(where: { $0 == selectedChannel }) else { return }
-        let nextIndex = (currentIndex + 1) % allChannels.count
-        selectChannel(allChannels[nextIndex])
+        let available: [Channel?] = ([nil] + availableChannels).filter { !exhaustedChannelIds.contains($0?.id) }
+        guard !available.isEmpty else { return }
+        let currentIndex = available.firstIndex(where: { $0 == selectedChannel }) ?? -1
+        let nextIndex = (currentIndex + 1) % available.count
+        selectChannel(available[nextIndex])
     }
 
     func selectPreviousChannel() {
-        let allChannels: [Channel?] = [nil] + availableChannels
-        guard let currentIndex = allChannels.firstIndex(where: { $0 == selectedChannel }) else { return }
-        let prevIndex = (currentIndex - 1 + allChannels.count) % allChannels.count
-        selectChannel(allChannels[prevIndex])
+        let available: [Channel?] = ([nil] + availableChannels).filter { !exhaustedChannelIds.contains($0?.id) }
+        guard !available.isEmpty else { return }
+        let currentIndex = available.firstIndex(where: { $0 == selectedChannel }) ?? available.count
+        let prevIndex = (currentIndex - 1 + available.count) % available.count
+        selectChannel(available[prevIndex])
     }
 
     func selectChannel(_ channel: Channel?) {
+        guard !exhaustedChannelIds.contains(channel?.id) else { return }
         guard selectedChannel != channel else { return }
 
         // Save current queue and playback position so we can resume mid-song on return
@@ -570,8 +574,22 @@ class AudioPlayer: ObservableObject {
         }
         playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
         removeCachedFiles(for: song)
-        playNext()
         triggerSync()
+        if queue.isEmpty {
+            exhaustedChannelIds.insert(selectedChannel?.id)
+            autoSwitchToAvailableChannel()
+        } else {
+            playNext()
+        }
+    }
+
+    private func autoSwitchToAvailableChannel() {
+        let allChannels: [Channel?] = [nil] + availableChannels
+        let available = allChannels.filter { !exhaustedChannelIds.contains($0?.id) }
+        if let next = available.first {
+            selectChannel(next)
+        }
+        // If every channel is exhausted, playback stops (currentSong is already nil)
     }
 
     private func removeCachedFiles(for song: SongItem) {

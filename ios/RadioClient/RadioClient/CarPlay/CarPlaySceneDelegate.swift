@@ -49,6 +49,11 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
             .store(in: &cancellables)
 
+        AudioPlayer.shared.$exhaustedChannelIds
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
+            .store(in: &cancellables)
+
         AudioPlayer.shared.$selectedChannel
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
@@ -84,33 +89,40 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private func makeChannelSection() -> CPListSection {
         let player = AudioPlayer.shared
         let channels = player.availableChannels
+        let exhausted = player.exhaustedChannelIds
 
         var items: [CPListItem] = []
 
         // "All Music" entry
+        let isAllExhausted = exhausted.contains(nil)
         let isAllActive = player.selectedChannel == nil
         let allItem = CPListItem(
             text: isAllActive ? "✓ All Music" : "All Music",
-            detailText: "Play everything"
+            detailText: isAllExhausted ? "No songs available" : "Play everything"
         )
-        allItem.handler = { [weak self] _, completion in
-            AudioPlayer.shared.selectChannel(nil)
-            self?.interfaceController?.popTemplate(animated: true, completion: nil)
-            completion()
+        if !isAllExhausted {
+            allItem.handler = { [weak self] _, completion in
+                AudioPlayer.shared.selectChannel(nil)
+                self?.interfaceController?.popTemplate(animated: true, completion: nil)
+                completion()
+            }
         }
         items.append(allItem)
 
         for channel in channels {
+            let isExhausted = exhausted.contains(channel.id)
             let isActive = player.selectedChannel?.id == channel.id
             let item = CPListItem(
                 text: isActive ? "✓ \(channel.name)" : channel.name,
-                detailText: channel.subtitle
+                detailText: isExhausted ? "No songs available" : channel.subtitle
             )
-            let captured = channel
-            item.handler = { [weak self] _, completion in
-                AudioPlayer.shared.selectChannel(captured)
-                self?.interfaceController?.popTemplate(animated: true, completion: nil)
-                completion()
+            if !isExhausted {
+                let captured = channel
+                item.handler = { [weak self] _, completion in
+                    AudioPlayer.shared.selectChannel(captured)
+                    self?.interfaceController?.popTemplate(animated: true, completion: nil)
+                    completion()
+                }
             }
             items.append(item)
         }
