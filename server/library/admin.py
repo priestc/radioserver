@@ -1177,23 +1177,25 @@ class VideoChannelAdmin(admin.ModelAdmin):
             if is_url:
                 tmp_dir = tempfile.mkdtemp()
                 try:
-                    subprocess.run(
+                    result = subprocess.run(
                         [
                             "yt-dlp",
                             "--merge-output-format", "mp4",
                             "-o", str(Path(tmp_dir) / "video.mp4"),
                             source,
                         ],
-                        check=True,
                         capture_output=True,
+                        text=True,
                     )
-                except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-                    self.message_user(request, f"yt-dlp failed: {exc}", level="error")
+                    if result.returncode != 0:
+                        self.message_user(request, f"yt-dlp failed (code {result.returncode}): {result.stderr[-500:]}", level="error")
+                        return
+                except FileNotFoundError:
+                    self.message_user(request, "yt-dlp not found on PATH", level="error")
                     return
-                matches = [f for f in Path(tmp_dir).iterdir() if f.is_file() and not f.suffix == ".part"]
+                matches = [f for f in Path(tmp_dir).iterdir() if f.is_file() and f.suffix != ".part"]
                 if not matches:
-                    all_files = [f.name for f in Path(tmp_dir).iterdir()]
-                    self.message_user(request, f"yt-dlp produced no output file. Dir contents: {all_files}", level="error")
+                    self.message_user(request, f"yt-dlp stdout: {result.stdout[-500:]} | stderr: {result.stderr[-500:]}", level="error")
                     return
                 video_path = matches[0]
                 label = source
