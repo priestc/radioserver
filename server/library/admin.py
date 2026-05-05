@@ -1180,8 +1180,8 @@ class VideoChannelAdmin(admin.ModelAdmin):
                     result = subprocess.run(
                         [
                             "yt-dlp",
-                            "--merge-output-format", "mp4",
-                            "-o", str(Path(tmp_dir) / "video.mp4"),
+                            "-f", "best",
+                            "-o", str(Path(tmp_dir) / "video.%(ext)s"),
                             source,
                         ],
                         capture_output=True,
