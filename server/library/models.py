@@ -290,7 +290,7 @@ class VideoChannel(models.Model):
     name = models.CharField(max_length=200, unique=True)
     video_file_path = models.CharField(
         max_length=1000, blank=True, default="",
-        help_text="Full path to the source video file. Save to extract 1-fps frames via ffmpeg.",
+        help_text="Full path to a local video file, or a YouTube URL. Save to extract 1-fps frames via ffmpeg.",
     )
     frame_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
