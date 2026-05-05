@@ -1192,7 +1192,8 @@ class VideoChannelAdmin(admin.ModelAdmin):
                     return
                 matches = [f for f in Path(tmp_dir).iterdir() if f.is_file() and not f.suffix == ".part"]
                 if not matches:
-                    self.message_user(request, "yt-dlp produced no output file", level="error")
+                    all_files = [f.name for f in Path(tmp_dir).iterdir()]
+                    self.message_user(request, f"yt-dlp produced no output file. Dir contents: {all_files}", level="error")
                     return
                 video_path = matches[0]
                 label = source
