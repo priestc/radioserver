@@ -138,6 +138,23 @@ class APIService: ObservableObject {
         return dest
     }
 
+    func fetchVideoChannels() async throws -> [VideoChannel] {
+        guard let base = baseURL else { throw APIError.invalidURL }
+        let url = base.appendingPathComponent("/library/api/video_channels/")
+        let request = authorizedRequest(url: url)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw APIError.serverError(code)
+        }
+        return try JSONDecoder().decode(VideoChannelsResponse.self, from: data).videoChannels
+    }
+
+    func videoFrameURL(channelId: Int, frameNumber: Int) -> URL? {
+        guard let base = baseURL else { return nil }
+        return base.appendingPathComponent("/library/video_frame/\(channelId)/\(frameNumber)/")
+    }
+
     func coverArtURL(albumId: Int) -> URL? {
         guard let base = baseURL else { return nil }
         return base.appendingPathComponent("/library/cover/\(albumId)/")

@@ -658,11 +658,15 @@ class AudioPlayer: ObservableObject {
             }
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
             info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-            if let artwork = currentArtwork {
+            if let artwork = currentArtwork, VideoChannelPlayer.shared.activeChannel == nil {
                 info[MPMediaItemPropertyArtwork] = artwork
             }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    func refreshNowPlaying() {
+        updateNowPlaying()
     }
 
     func loadArtworkForCurrentSong() {

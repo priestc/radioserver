@@ -22,6 +22,7 @@ from library.models import (
     PlaylistItem,
     PlaylistSettings,
     Track,
+    VideoChannel,
     YtdlDownload,
 )
 from library.views import has_cover, _nuke_cover_art
@@ -1145,6 +1146,51 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
             "album_id": dl.album_id,
         }
         return JsonResponse(data)
+
+
+@admin.register(VideoChannel)
+class VideoChannelAdmin(admin.ModelAdmin):
+    list_display = ["name", "frame_count", "created_at"]
+    readonly_fields = ["frame_count", "created_at"]
+    fields = ["name", "video_file_path", "frame_count", "created_at"]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.video_file_path:
+            self._extract_frames(request, obj)
+
+    def _extract_frames(self, request, obj):
+        import shutil
+        import subprocess
+
+        video_path = Path(obj.video_file_path)
+        if not video_path.is_file():
+            self.message_user(request, f"Video file not found: {video_path}", level="error")
+            return
+
+        frame_dir = obj.get_frame_dir()
+        if frame_dir.exists():
+            shutil.rmtree(frame_dir)
+        frame_dir.mkdir(parents=True)
+
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", str(video_path),
+                    "-vf", "fps=1",
+                    "-q:v", "3",
+                    str(frame_dir / "frame_%06d.jpg"),
+                ],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            self.message_user(request, f"ffmpeg failed: {exc}", level="error")
+            return
+
+        frame_count = len(list(frame_dir.glob("frame_*.jpg")))
+        VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count)
+        self.message_user(request, f"Extracted {frame_count} frames from {video_path.name}")
 
 
 @admin.register(AIServiceError)

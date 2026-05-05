@@ -14,4 +14,6 @@ urlpatterns = [
     path("api/channels/", views.list_channels, name="list_channels"),
     path("api/tracks/", views.search_tracks, name="search_tracks"),
     path("api/tracks/<int:track_id>/download/", views.download_track, name="download_track"),
+    path("api/video_channels/", views.list_video_channels, name="list_video_channels"),
+    path("video_frame/<int:video_channel_id>/<int:frame_number>/", views.video_frame, name="video_frame"),
 ]

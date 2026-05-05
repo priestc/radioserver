@@ -410,6 +410,37 @@ def cover_art(request, album_id):
     raise Http404
 
 
+@require_api_key
+@require_GET
+def list_video_channels(request):
+    from library.models import VideoChannel
+    channels = VideoChannel.objects.all()
+    return JsonResponse({
+        "video_channels": [
+            {"id": c.id, "name": c.name, "frame_count": c.frame_count}
+            for c in channels
+        ]
+    })
+
+
+@require_GET
+def video_frame(request, video_channel_id, frame_number):
+    from library.models import VideoChannel
+    try:
+        channel = VideoChannel.objects.get(pk=video_channel_id)
+    except VideoChannel.DoesNotExist:
+        raise Http404
+
+    if frame_number < 0 or frame_number >= channel.frame_count:
+        raise Http404
+
+    frame_path = channel.get_frame_dir() / f"frame_{frame_number:06d}.jpg"
+    if not frame_path.is_file():
+        raise Http404
+
+    return FileResponse(open(frame_path, "rb"), content_type="image/jpeg")
+
+
 @csrf_exempt
 @require_api_key
 @require_POST

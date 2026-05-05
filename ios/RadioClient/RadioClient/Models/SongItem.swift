@@ -70,3 +70,22 @@ struct Channel: Codable, Identifiable, Equatable {
 struct ChannelsResponse: Codable {
     let channels: [Channel]
 }
+
+struct VideoChannel: Codable, Identifiable, Equatable {
+    let id: Int
+    let name: String
+    let frameCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case frameCount = "frame_count"
+    }
+}
+
+struct VideoChannelsResponse: Codable {
+    let videoChannels: [VideoChannel]
+
+    enum CodingKeys: String, CodingKey {
+        case videoChannels = "video_channels"
+    }
+}

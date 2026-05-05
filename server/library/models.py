@@ -284,3 +284,24 @@ class ApiKey(models.Model):
 
     def __str__(self):
         return self.label or self.key[:12] + "…"
+
+
+class VideoChannel(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    video_file_path = models.CharField(
+        max_length=1000, blank=True, default="",
+        help_text="Full path to the source video file. Save to extract 1-fps frames via ffmpeg.",
+    )
+    frame_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def get_frame_dir(self):
+        from django.conf import settings
+        from pathlib import Path
+        return Path(settings.BASE_DIR) / "video_frames" / str(self.pk)

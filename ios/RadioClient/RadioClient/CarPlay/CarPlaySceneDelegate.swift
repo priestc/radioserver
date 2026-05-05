@@ -58,6 +58,16 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
             .store(in: &cancellables)
+
+        VideoChannelPlayer.shared.$availableChannels
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
+            .store(in: &cancellables)
+
+        VideoChannelPlayer.shared.$activeChannel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
+            .store(in: &cancellables)
     }
 
     private func refreshListTemplateIfVisible() {
@@ -79,11 +89,38 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private func makeAllSections() -> [CPListSection] {
         var sections: [CPListSection] = []
         sections.append(makeChannelSection())
+        let videoSection = makeVideoChannelSection()
+        if videoSection.items.count > 0 {
+            sections.append(videoSection)
+        }
         let queueSection = makeQueueSection(AudioPlayer.shared.queue)
-        if (queueSection.items.count) > 0 {
+        if queueSection.items.count > 0 {
             sections.append(queueSection)
         }
         return sections
+    }
+
+    private func makeVideoChannelSection() -> CPListSection {
+        let videoPlayer = VideoChannelPlayer.shared
+        let items: [CPListItem] = videoPlayer.availableChannels.map { channel in
+            let isActive = videoPlayer.activeChannel?.id == channel.id
+            let item = CPListItem(
+                text: isActive ? "■ \(channel.name)" : channel.name,
+                detailText: isActive ? "Tap to stop" : "\(channel.frameCount) frames"
+            )
+            let captured = channel
+            item.handler = { [weak self] _, completion in
+                if VideoChannelPlayer.shared.activeChannel?.id == captured.id {
+                    VideoChannelPlayer.shared.stopChannel()
+                } else {
+                    VideoChannelPlayer.shared.startChannel(captured)
+                }
+                self?.interfaceController?.popTemplate(animated: true, completion: nil)
+                completion()
+            }
+            return item
+        }
+        return CPListSection(items: items, header: "Video Channels", sectionIndexTitle: nil)
     }
 
     private func makeChannelSection() -> CPListSection {
