@@ -26,6 +26,7 @@ class VideoChannelPlayer: ObservableObject {
 
     @MainActor
     func startChannel(_ channel: VideoChannel) {
+        guard channel.frameCount > 0 else { return }
         stopChannel()
         activeChannel = channel
         currentFrameIndex = 0
@@ -49,7 +50,7 @@ class VideoChannelPlayer: ObservableObject {
 
     @MainActor
     private func advanceFrame() {
-        guard let channel = activeChannel else { return }
+        guard let channel = activeChannel, channel.frameCount > 0 else { return }
         currentFrameIndex = (currentFrameIndex + 1) % channel.frameCount
 
         if let prefetched = prefetchedImage {
