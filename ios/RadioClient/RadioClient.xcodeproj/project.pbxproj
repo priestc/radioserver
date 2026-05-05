@@ -19,6 +19,8 @@
 		A10010 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* QRScannerView.swift */; };
 		A10011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10013 /* Assets.xcassets */; };
 		A10012 /* ChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* ChannelsView.swift */; };
+		A10013 /* VideoChannelPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* VideoChannelPlayer.swift */; };
+		A10014 /* VideoChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016 /* VideoChannelsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -51,6 +53,8 @@
 		B10012 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		B10013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10014 /* ChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsView.swift; sourceTree = "<group>"; };
+		B10015 /* VideoChannelPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelPlayer.swift; sourceTree = "<group>"; };
+		B10016 /* VideoChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelsView.swift; sourceTree = "<group>"; };
 		C10001 /* RadioClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -112,6 +116,7 @@
 				B10003 /* APIService.swift */,
 				B10004 /* AudioPlayer.swift */,
 				B10005 /* CacheManager.swift */,
+				B10015 /* VideoChannelPlayer.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -124,6 +129,7 @@
 				B10008 /* SettingsView.swift */,
 				B10012 /* QRScannerView.swift */,
 				B10014 /* ChannelsView.swift */,
+				B10016 /* VideoChannelsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -220,6 +226,8 @@
 				A10009 /* CarPlaySceneDelegate.swift in Sources */,
 				A10010 /* QRScannerView.swift in Sources */,
 				A10012 /* ChannelsView.swift in Sources */,
+				A10013 /* VideoChannelPlayer.swift in Sources */,
+				A10014 /* VideoChannelsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
