@@ -1162,7 +1162,6 @@ class VideoChannelAdmin(admin.ModelAdmin):
     def _extract_frames(self, request, obj):
         import shutil
         import subprocess
-        import tempfile
 
         source = obj.video_file_path.strip()
         is_url = source.startswith("http://") or source.startswith("https://")
@@ -1172,40 +1171,44 @@ class VideoChannelAdmin(admin.ModelAdmin):
             shutil.rmtree(frame_dir)
         frame_dir.mkdir(parents=True)
 
-        tmp_dir = None
-        try:
-            if is_url:
-                tmp_dir = tempfile.mkdtemp()
-                try:
-                    result = subprocess.run(
-                        [
-                            "yt-dlp",
-                            "-f", "best",
-                            "-o", str(Path(tmp_dir) / "video.%(ext)s"),
-                            source,
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-                    if result.returncode != 0:
-                        self.message_user(request, f"yt-dlp failed (code {result.returncode}): {result.stderr[-500:]}", level="error")
-                        return
-                except FileNotFoundError:
-                    self.message_user(request, "yt-dlp not found on PATH", level="error")
-                    return
-                matches = [f for f in Path(tmp_dir).iterdir() if f.is_file() and f.suffix != ".part"]
-                if not matches:
-                    self.message_user(request, f"yt-dlp stdout: {result.stdout[-500:]} | stderr: {result.stderr[-500:]}", level="error")
-                    return
-                video_path = matches[0]
-                label = source
-            else:
-                video_path = Path(source)
-                if not video_path.is_file():
-                    self.message_user(request, f"Video file not found: {video_path}", level="error")
-                    return
-                label = video_path.name
+        if is_url:
+            try:
+                yt_dlp_proc = subprocess.Popen(
+                    ["yt-dlp", "-f", "best", "-o", "-", "--quiet", source],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError:
+                self.message_user(request, "yt-dlp not found on PATH", level="error")
+                return
+            try:
+                ffmpeg_result = subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-i", "pipe:0",
+                        "-vf", "fps=1",
+                        "-q:v", "3",
+                        str(frame_dir / "frame_%06d.jpg"),
+                    ],
+                    stdin=yt_dlp_proc.stdout,
+                    capture_output=True,
+                )
+            finally:
+                yt_dlp_proc.stdout.close()
+                _, yt_dlp_stderr = yt_dlp_proc.communicate()
+                yt_dlp_returncode = yt_dlp_proc.wait()
 
+            if yt_dlp_returncode != 0:
+                self.message_user(request, f"yt-dlp failed: {yt_dlp_stderr.decode()[-300:]}", level="error")
+                return
+            if ffmpeg_result.returncode != 0:
+                self.message_user(request, f"ffmpeg failed: {ffmpeg_result.stderr.decode()[-300:]}", level="error")
+                return
+            label = source
+        else:
+            video_path = Path(source)
+            if not video_path.is_file():
+                self.message_user(request, f"Video file not found: {video_path}", level="error")
+                return
             try:
                 subprocess.run(
                     [
@@ -1220,13 +1223,11 @@ class VideoChannelAdmin(admin.ModelAdmin):
             except (subprocess.CalledProcessError, FileNotFoundError) as exc:
                 self.message_user(request, f"ffmpeg failed: {exc}", level="error")
                 return
+            label = video_path.name
 
-            frame_count = len(list(frame_dir.glob("frame_*.jpg")))
-            VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count)
-            self.message_user(request, f"Extracted {frame_count} frames from {label}")
-        finally:
-            if tmp_dir:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+        frame_count = len(list(frame_dir.glob("frame_*.jpg")))
+        VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count)
+        self.message_user(request, f"Extracted {frame_count} frames from {label}")
 
 
 @admin.register(AIServiceError)
