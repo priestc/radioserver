@@ -75,10 +75,12 @@ struct VideoChannel: Codable, Identifiable, Equatable {
     let id: Int
     let name: String
     let frameCount: Int
+    let framesPerSecond: Double
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case frameCount = "frame_count"
+        case framesPerSecond = "frames_per_second"
     }
 }
 

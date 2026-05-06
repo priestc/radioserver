@@ -106,7 +106,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             let isActive = videoPlayer.activeChannel?.id == channel.id
             let item = CPListItem(
                 text: isActive ? "■ \(channel.name)" : channel.name,
-                detailText: isActive ? "Tap to stop" : "\(channel.frameCount) frames"
+                detailText: isActive ? "Tap to stop" : "\(channel.frameCount) frames · \(channel.framesPerSecond, specifier: "%.4g") fps"
             )
             let captured = channel
             item.handler = { [weak self] _, completion in

@@ -31,7 +31,8 @@ class VideoChannelPlayer: ObservableObject {
         activeChannel = channel
         currentFrameIndex = 0
         Task { await self.loadFrame(index: 0) }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let interval = 1.0 / channel.framesPerSecond
+        frameTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.advanceFrame() }
         }
     }

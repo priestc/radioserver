@@ -43,7 +43,7 @@ struct VideoChannelsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(channel.name)
                                             .fontWeight(isActive ? .semibold : .regular)
-                                        Text("\(channel.frameCount) frames")
+                                        Text("\(channel.frameCount) frames · \(channel.framesPerSecond, specifier: "%.4g") fps")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }

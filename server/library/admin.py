@@ -1150,9 +1150,9 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
 
 @admin.register(VideoChannel)
 class VideoChannelAdmin(admin.ModelAdmin):
-    list_display = ["name", "frame_count", "created_at"]
+    list_display = ["name", "frames_per_second", "frame_count", "created_at"]
     readonly_fields = ["frame_count", "created_at"]
-    fields = ["name", "video_file_path", "frame_count", "created_at"]
+    fields = ["name", "video_file_path", "frames_per_second", "frame_count", "created_at"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -1185,7 +1185,7 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 ffmpeg_result = subprocess.run(
                     [
                         "ffmpeg", "-y", "-i", "pipe:0",
-                        "-vf", "fps=1",
+                        "-vf", f"fps={obj.frames_per_second}",
                         "-q:v", "3",
                         str(frame_dir / "frame_%06d.jpg"),
                     ],
@@ -1213,7 +1213,7 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 subprocess.run(
                     [
                         "ffmpeg", "-y", "-i", str(video_path),
-                        "-vf", "fps=1",
+                        "-vf", f"fps={obj.frames_per_second}",
                         "-q:v", "3",
                         str(frame_dir / "frame_%06d.jpg"),
                     ],
