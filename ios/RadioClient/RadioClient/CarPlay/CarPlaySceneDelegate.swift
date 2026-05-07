@@ -72,7 +72,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             }
             .store(in: &cancellables)
 
-        VideoChannelPlayer.shared.$frameStep
+        VideoChannelPlayer.shared.$displayFps
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateVideoSpeedButtons() }
             .store(in: &cancellables)
@@ -84,10 +84,10 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             return
         }
         let slower = CPNowPlayingImageButton(image: UIImage(systemName: "minus.circle")!) { _ in
-            VideoChannelPlayer.shared.decreaseFrameStep()
+            VideoChannelPlayer.shared.decreaseDisplayFps()
         }
         let faster = CPNowPlayingImageButton(image: UIImage(systemName: "plus.circle")!) { _ in
-            VideoChannelPlayer.shared.increaseFrameStep()
+            VideoChannelPlayer.shared.increaseDisplayFps()
         }
         CPNowPlayingTemplate.shared.updateNowPlayingButtons([slower, faster])
     }
@@ -128,7 +128,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             let isActive = videoPlayer.activeChannel?.id == channel.id
             let item = CPListItem(
                 text: isActive ? "■ \(channel.name)" : channel.name,
-                detailText: isActive ? "Step \(VideoChannelPlayer.shared.frameStep)× — tap to stop" : "\(channel.frameCount) frames"
+                detailText: isActive ? "\(VideoChannelPlayer.shared.displayFps) fps — tap to stop" : "\(channel.frameCount) frames"
             )
             let captured = channel
             item.handler = { [weak self] _, completion in

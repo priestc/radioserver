@@ -40,24 +40,24 @@ struct VideoChannelsView: View {
                         } else if videoPlayer.activeChannel != nil {
                             HStack(spacing: 32) {
                                 Button {
-                                    videoPlayer.decreaseFrameStep()
+                                    videoPlayer.decreaseDisplayFps()
                                 } label: {
                                     Image(systemName: "minus.circle.fill")
                                         .font(.system(size: 36))
                                 }
-                                .disabled(videoPlayer.frameStep <= 1)
+                                .disabled(videoPlayer.displayFps <= 1)
 
-                                Text("Step \(videoPlayer.frameStep)×")
+                                Text("\(videoPlayer.displayFps) fps")
                                     .font(.title2.monospacedDigit())
                                     .frame(minWidth: 90)
 
                                 Button {
-                                    videoPlayer.increaseFrameStep()
+                                    videoPlayer.increaseDisplayFps()
                                 } label: {
                                     Image(systemName: "plus.circle.fill")
                                         .font(.system(size: 36))
                                 }
-                                .disabled(videoPlayer.frameStep >= 60)
+                                .disabled(videoPlayer.displayFps >= Int((videoPlayer.activeChannel?.nativeFps ?? 1).rounded()))
                             }
                             .padding(.vertical, 12)
                         }

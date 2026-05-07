@@ -9,7 +9,7 @@ class VideoChannelPlayer: ObservableObject {
     @Published var currentFrameImage: UIImage?
     @Published var availableChannels: [VideoChannel] = []
     @Published var fetchError: String?
-    @Published var frameStep: Int = 1
+    @Published var displayFps: Int = 1
     @Published var isBuffering = false
 
     private var currentFrameIndex = 0
@@ -19,7 +19,13 @@ class VideoChannelPlayer: ObservableObject {
     private var audioPlayer: AVPlayer?
     private var wasRadioPlaying = false
 
-    private let preBufferCount = 10
+    private let preBufferTicks = 10
+
+    // Frames to skip per timer tick so video always advances at real-time speed.
+    private var computedFrameStep: Int {
+        guard let channel = activeChannel else { return 1 }
+        return max(1, Int((channel.nativeFps / Double(displayFps)).rounded()))
+    }
 
     func fetchChannels() async {
         await MainActor.run { self.fetchError = nil }
@@ -41,11 +47,11 @@ class VideoChannelPlayer: ObservableObject {
 
         activeChannel = channel
         currentFrameIndex = 0
-        frameStep = channel.defaultStep
+        displayFps = 1
         frameCache = [:]
         isBuffering = true
 
-        updateNowPlayingChannelInfo()
+        updateNowPlayingInfo()
 
         Task {
             await self.fillBuffer(channel: channel, from: 0)
@@ -64,7 +70,7 @@ class VideoChannelPlayer: ObservableObject {
         activeChannel = nil
         currentFrameImage = nil
         frameCache = [:]
-        frameStep = 1
+        displayFps = 1
         isBuffering = false
 
         if wasRadioPlaying {
@@ -75,17 +81,21 @@ class VideoChannelPlayer: ObservableObject {
     }
 
     @MainActor
-    func increaseFrameStep() {
-        frameStep = min(frameStep + 1, 60)
-        rebuffer()
-        updateNowPlayingStepInfo()
+    func increaseDisplayFps() {
+        guard let channel = activeChannel else { return }
+        let maxFps = max(1, Int(channel.nativeFps.rounded()))
+        guard displayFps < maxFps else { return }
+        displayFps += 1
+        restartTimer()
+        updateNowPlayingInfo()
     }
 
     @MainActor
-    func decreaseFrameStep() {
-        frameStep = max(1, frameStep - 1)
-        rebuffer()
-        updateNowPlayingStepInfo()
+    func decreaseDisplayFps() {
+        guard displayFps > 1 else { return }
+        displayFps -= 1
+        restartTimer()
+        updateNowPlayingInfo()
     }
 
     // MARK: - Private
@@ -100,21 +110,37 @@ class VideoChannelPlayer: ObservableObject {
             updateNowPlayingArtwork(image)
         }
 
-        // Audio starts in sync with first frame
         if let audioURL = APIService.shared.videoAudioURL(channelId: channel.id) {
             audioPlayer = AVPlayer(url: audioURL)
             audioPlayer?.play()
         }
 
-        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        startTimer()
+    }
+
+    @MainActor
+    private func startTimer() {
+        frameTimer?.invalidate()
+        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / Double(displayFps), repeats: true) { [weak self] _ in
             Task { @MainActor in self?.advanceFrame() }
         }
     }
 
     @MainActor
+    private func restartTimer() {
+        frameCache = [:]
+        prefetchTask?.cancel()
+        startTimer()
+        guard let channel = activeChannel else { return }
+        let from = currentFrameIndex
+        prefetchTask = Task { await self.fillBuffer(channel: channel, from: from) }
+    }
+
+    @MainActor
     private func advanceFrame() {
         guard let channel = activeChannel, channel.frameCount > 0 else { return }
-        currentFrameIndex = (currentFrameIndex + frameStep) % channel.frameCount
+        let step = computedFrameStep
+        currentFrameIndex = (currentFrameIndex + step) % channel.frameCount
 
         if let image = frameCache[currentFrameIndex] {
             currentFrameImage = image
@@ -122,25 +148,22 @@ class VideoChannelPlayer: ObservableObject {
             frameCache.removeValue(forKey: currentFrameIndex)
         }
 
-        // Replenish the cache one window ahead
-        let fetchIdx = (currentFrameIndex + preBufferCount * frameStep) % channel.frameCount
+        // Refill lookahead window
         let cid = channel.id
-        Task { await self.fetchIntoCache(index: fetchIdx, channelId: cid) }
-    }
-
-    @MainActor
-    private func rebuffer() {
-        frameCache = [:]
-        prefetchTask?.cancel()
-        guard let channel = activeChannel else { return }
-        let from = currentFrameIndex
-        prefetchTask = Task { await self.fillBuffer(channel: channel, from: from) }
+        let fc = channel.frameCount
+        for i in 1...preBufferTicks {
+            let idx = (currentFrameIndex + i * step) % fc
+            if frameCache[idx] == nil {
+                Task { await self.fetchIntoCache(index: idx, channelId: cid) }
+            }
+        }
     }
 
     private func fillBuffer(channel: VideoChannel, from startIndex: Int) async {
+        let step = await MainActor.run { self.computedFrameStep }
         await withTaskGroup(of: (Int, UIImage?).self) { group in
-            for i in 0..<preBufferCount {
-                let idx = (startIndex + i * (await MainActor.run { self.frameStep })) % channel.frameCount
+            for i in 0..<preBufferTicks {
+                let idx = (startIndex + i * step) % channel.frameCount
                 group.addTask { [self] in
                     await (idx, self.fetchImage(channelId: channel.id, index: idx))
                 }
@@ -172,16 +195,10 @@ class VideoChannelPlayer: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    private func updateNowPlayingChannelInfo() {
+    private func updateNowPlayingInfo() {
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         info[MPMediaItemPropertyTitle] = activeChannel?.name ?? "Video"
-        info[MPMediaItemPropertyArtist] = "Step: \(frameStep)x"
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-
-    private func updateNowPlayingStepInfo() {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPMediaItemPropertyArtist] = "Step: \(frameStep)x"
+        info[MPMediaItemPropertyArtist] = "\(displayFps) fps"
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
