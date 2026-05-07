@@ -83,19 +83,24 @@ class VideoChannelPlayer: ObservableObject {
     @MainActor
     func increaseDisplayFps() {
         guard let channel = activeChannel else { return }
-        let maxFps = max(1, Int(channel.nativeFps.rounded()))
-        guard displayFps < maxFps else { return }
-        displayFps += 1
+        guard let next = validFpsValues(for: channel).first(where: { $0 > displayFps }) else { return }
+        displayFps = next
         restartTimer()
         updateNowPlayingInfo()
     }
 
     @MainActor
     func decreaseDisplayFps() {
-        guard displayFps > 1 else { return }
-        displayFps -= 1
+        guard let channel = activeChannel else { return }
+        guard let prev = validFpsValues(for: channel).last(where: { $0 < displayFps }) else { return }
+        displayFps = prev
         restartTimer()
         updateNowPlayingInfo()
+    }
+
+    private func validFpsValues(for channel: VideoChannel) -> [Int] {
+        let n = max(1, Int(channel.nativeFps.rounded()))
+        return (1...n).filter { n % $0 == 0 }
     }
 
     // MARK: - Private
