@@ -166,9 +166,17 @@ class APIService: ObservableObject {
     }
 
     func testConnection() async -> Result<Int, Error> {
+        guard let base = baseURL else { return .failure(APIError.invalidURL) }
+        let url = base.appendingPathComponent("/library/api/channels/")
+        var request = authorizedRequest(url: url)
+        request.timeoutInterval = 5
         do {
-            let items = try await sync(played: [], bufferCacheMB: 0)
-            return .success(items.count)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                return .failure(APIError.serverError(code))
+            }
+            return .success(http.statusCode)
         } catch {
             return .failure(error)
         }
