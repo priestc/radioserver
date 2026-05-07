@@ -417,10 +417,23 @@ def list_video_channels(request):
     channels = VideoChannel.objects.all()
     return JsonResponse({
         "video_channels": [
-            {"id": c.id, "name": c.name, "frame_count": c.frame_count, "frames_per_second": c.frames_per_second}
+            {"id": c.id, "name": c.name, "frame_count": c.frame_count}
             for c in channels
         ]
     })
+
+
+@require_GET
+def video_audio(request, video_channel_id):
+    from library.models import VideoChannel
+    try:
+        channel = VideoChannel.objects.get(pk=video_channel_id)
+    except VideoChannel.DoesNotExist:
+        raise Http404
+    audio_path = channel.get_frame_dir() / "audio.mp3"
+    if not audio_path.is_file():
+        raise Http404
+    return FileResponse(open(audio_path, "rb"), content_type="audio/mpeg")
 
 
 @require_GET

@@ -30,6 +30,31 @@ struct VideoChannelsView: View {
                                 .padding()
                         }
 
+                        if videoPlayer.activeChannel != nil {
+                            HStack(spacing: 32) {
+                                Button {
+                                    videoPlayer.decreaseFrameStep()
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 36))
+                                }
+                                .disabled(videoPlayer.frameStep <= 1)
+
+                                Text("Step \(videoPlayer.frameStep)×")
+                                    .font(.title2.monospacedDigit())
+                                    .frame(minWidth: 90)
+
+                                Button {
+                                    videoPlayer.increaseFrameStep()
+                                } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 36))
+                                }
+                                .disabled(videoPlayer.frameStep >= 60)
+                            }
+                            .padding(.vertical, 12)
+                        }
+
                         List(videoPlayer.availableChannels) { channel in
                             let isActive = videoPlayer.activeChannel?.id == channel.id
                             Button {
@@ -43,7 +68,7 @@ struct VideoChannelsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(channel.name)
                                             .fontWeight(isActive ? .semibold : .regular)
-                                        Text("\(channel.frameCount) frames · \(channel.framesPerSecond, specifier: "%.4g") fps")
+                                        Text("\(channel.frameCount) frames")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }

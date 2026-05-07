@@ -292,10 +292,6 @@ class VideoChannel(models.Model):
         max_length=1000, blank=True, default="",
         help_text="Full path to a local video file, or a YouTube URL. Save to extract frames via ffmpeg.",
     )
-    frames_per_second = models.FloatField(
-        default=1.0,
-        help_text="How many frames per second to extract and display (e.g. 1, 2, 5).",
-    )
     frame_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

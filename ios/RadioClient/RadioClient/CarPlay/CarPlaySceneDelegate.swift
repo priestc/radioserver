@@ -66,8 +66,30 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
         VideoChannelPlayer.shared.$activeChannel
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refreshListTemplateIfVisible() }
+            .sink { [weak self] _ in
+                self?.refreshListTemplateIfVisible()
+                self?.updateVideoSpeedButtons()
+            }
             .store(in: &cancellables)
+
+        VideoChannelPlayer.shared.$frameStep
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateVideoSpeedButtons() }
+            .store(in: &cancellables)
+    }
+
+    private func updateVideoSpeedButtons() {
+        guard VideoChannelPlayer.shared.activeChannel != nil else {
+            CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
+            return
+        }
+        let slower = CPNowPlayingImageButton(image: UIImage(systemName: "minus.circle")!) { _ in
+            VideoChannelPlayer.shared.decreaseFrameStep()
+        }
+        let faster = CPNowPlayingImageButton(image: UIImage(systemName: "plus.circle")!) { _ in
+            VideoChannelPlayer.shared.increaseFrameStep()
+        }
+        CPNowPlayingTemplate.shared.updateNowPlayingButtons([slower, faster])
     }
 
     private func refreshListTemplateIfVisible() {
@@ -106,7 +128,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             let isActive = videoPlayer.activeChannel?.id == channel.id
             let item = CPListItem(
                 text: isActive ? "■ \(channel.name)" : channel.name,
-                detailText: isActive ? "Tap to stop" : "\(channel.frameCount) frames · \(channel.framesPerSecond, specifier: "%.4g") fps"
+                detailText: isActive ? "Step \(VideoChannelPlayer.shared.frameStep)× — tap to stop" : "\(channel.frameCount) frames"
             )
             let captured = channel
             item.handler = { [weak self] _, completion in

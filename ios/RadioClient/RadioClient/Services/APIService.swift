@@ -155,6 +155,11 @@ class APIService: ObservableObject {
         return base.appendingPathComponent("/library/video_frame/\(channelId)/\(frameNumber)/")
     }
 
+    func videoAudioURL(channelId: Int) -> URL? {
+        guard let base = baseURL else { return nil }
+        return base.appendingPathComponent("/library/video_audio/\(channelId)/")
+    }
+
     func coverArtURL(albumId: Int) -> URL? {
         guard let base = baseURL else { return nil }
         return base.appendingPathComponent("/library/cover/\(albumId)/")

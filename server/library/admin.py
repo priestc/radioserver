@@ -1150,9 +1150,9 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
 
 @admin.register(VideoChannel)
 class VideoChannelAdmin(admin.ModelAdmin):
-    list_display = ["name", "frames_per_second", "frame_count", "created_at"]
+    list_display = ["name", "frame_count", "created_at"]
     readonly_fields = ["frame_count", "created_at"]
-    fields = ["name", "video_file_path", "frames_per_second", "frame_count", "created_at"]
+    fields = ["name", "video_file_path", "frame_count", "created_at"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -1183,12 +1183,8 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 return
             try:
                 ffmpeg_result = subprocess.run(
-                    [
-                        "ffmpeg", "-y", "-i", "pipe:0",
-                        "-vf", f"fps={obj.frames_per_second}",
-                        "-q:v", "3",
-                        str(frame_dir / "frame_%06d.jpg"),
-                    ],
+                    ["ffmpeg", "-y", "-i", "pipe:0", "-q:v", "3",
+                     str(frame_dir / "frame_%06d.jpg")],
                     stdin=yt_dlp_proc.stdout,
                     capture_output=True,
                 )
@@ -1201,8 +1197,10 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 self.message_user(request, f"yt-dlp failed: {yt_dlp_stderr.decode()[-300:]}", level="error")
                 return
             if ffmpeg_result.returncode != 0:
-                self.message_user(request, f"ffmpeg failed: {ffmpeg_result.stderr.decode()[-300:]}", level="error")
+                self.message_user(request, f"ffmpeg (frames) failed: {ffmpeg_result.stderr.decode()[-300:]}", level="error")
                 return
+
+            self._extract_audio_url(request, source, frame_dir)
             label = source
         else:
             video_path = Path(source)
@@ -1211,23 +1209,51 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 return
             try:
                 subprocess.run(
-                    [
-                        "ffmpeg", "-y", "-i", str(video_path),
-                        "-vf", f"fps={obj.frames_per_second}",
-                        "-q:v", "3",
-                        str(frame_dir / "frame_%06d.jpg"),
-                    ],
+                    ["ffmpeg", "-y", "-i", str(video_path), "-q:v", "3",
+                     str(frame_dir / "frame_%06d.jpg")],
                     check=True,
                     capture_output=True,
                 )
             except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-                self.message_user(request, f"ffmpeg failed: {exc}", level="error")
+                self.message_user(request, f"ffmpeg (frames) failed: {exc}", level="error")
                 return
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(video_path), "-vn",
+                     "-acodec", "libmp3lame", "-q:a", "4",
+                     str(frame_dir / "audio.mp3")],
+                    check=True,
+                    capture_output=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
             label = video_path.name
 
         frame_count = len(list(frame_dir.glob("frame_*.jpg")))
         VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count)
         self.message_user(request, f"Extracted {frame_count} frames from {label}")
+
+    def _extract_audio_url(self, request, source, frame_dir):
+        import subprocess
+        try:
+            yt_dlp_audio = subprocess.Popen(
+                ["yt-dlp", "-f", "bestaudio", "-o", "-", "--quiet", source],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", "pipe:0", "-vn",
+                 "-acodec", "libmp3lame", "-q:a", "4",
+                 str(frame_dir / "audio.mp3")],
+                stdin=yt_dlp_audio.stdout,
+                capture_output=True,
+            )
+            yt_dlp_audio.stdout.close()
+            yt_dlp_audio.wait()
+            if result.returncode != 0:
+                self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
+        except Exception:
+            self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
 
 
 @admin.register(AIServiceError)
