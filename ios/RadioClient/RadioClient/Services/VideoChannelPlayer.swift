@@ -10,13 +10,16 @@ class VideoChannelPlayer: ObservableObject {
     @Published var availableChannels: [VideoChannel] = []
     @Published var fetchError: String?
     @Published var frameStep: Int = 1
+    @Published var isBuffering = false
 
     private var currentFrameIndex = 0
     private var frameTimer: Timer?
-    private var prefetchedImage: UIImage?
     private var prefetchTask: Task<Void, Never>?
+    private var frameCache: [Int: UIImage] = [:]
     private var audioPlayer: AVPlayer?
     private var wasRadioPlaying = false
+
+    private let preBufferCount = 10
 
     func fetchChannels() async {
         await MainActor.run { self.fetchError = nil }
@@ -39,16 +42,14 @@ class VideoChannelPlayer: ObservableObject {
         activeChannel = channel
         currentFrameIndex = 0
         frameStep = 1
-
-        if let audioURL = APIService.shared.videoAudioURL(channelId: channel.id) {
-            audioPlayer = AVPlayer(url: audioURL)
-            audioPlayer?.play()
-        }
+        frameCache = [:]
+        isBuffering = true
 
         updateNowPlayingChannelInfo()
-        Task { await self.loadFrame(index: 0) }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.advanceFrame() }
+
+        Task {
+            await self.fillBuffer(channel: channel, from: 0)
+            await MainActor.run { self.beginPlayback(channel: channel) }
         }
     }
 
@@ -62,8 +63,9 @@ class VideoChannelPlayer: ObservableObject {
         audioPlayer = nil
         activeChannel = nil
         currentFrameImage = nil
-        prefetchedImage = nil
+        frameCache = [:]
         frameStep = 1
+        isBuffering = false
 
         if wasRadioPlaying {
             AudioPlayer.shared.play()
@@ -75,13 +77,38 @@ class VideoChannelPlayer: ObservableObject {
     @MainActor
     func increaseFrameStep() {
         frameStep = min(frameStep + 1, 60)
+        rebuffer()
         updateNowPlayingStepInfo()
     }
 
     @MainActor
     func decreaseFrameStep() {
         frameStep = max(1, frameStep - 1)
+        rebuffer()
         updateNowPlayingStepInfo()
+    }
+
+    // MARK: - Private
+
+    @MainActor
+    private func beginPlayback(channel: VideoChannel) {
+        guard activeChannel?.id == channel.id else { return }
+        isBuffering = false
+
+        if let image = frameCache[0] {
+            currentFrameImage = image
+            updateNowPlayingArtwork(image)
+        }
+
+        // Audio starts in sync with first frame
+        if let audioURL = APIService.shared.videoAudioURL(channelId: channel.id) {
+            audioPlayer = AVPlayer(url: audioURL)
+            audioPlayer?.play()
+        }
+
+        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.advanceFrame() }
+        }
     }
 
     @MainActor
@@ -89,41 +116,54 @@ class VideoChannelPlayer: ObservableObject {
         guard let channel = activeChannel, channel.frameCount > 0 else { return }
         currentFrameIndex = (currentFrameIndex + frameStep) % channel.frameCount
 
-        if let prefetched = prefetchedImage {
-            currentFrameImage = prefetched
-            updateNowPlayingArtwork(prefetched)
-            prefetchedImage = nil
-        } else {
-            Task { await self.loadFrame(index: currentFrameIndex) }
+        if let image = frameCache[currentFrameIndex] {
+            currentFrameImage = image
+            updateNowPlayingArtwork(image)
+            frameCache.removeValue(forKey: currentFrameIndex)
         }
 
-        let nextIndex = (currentFrameIndex + frameStep) % channel.frameCount
+        // Replenish the cache one window ahead
+        let fetchIdx = (currentFrameIndex + preBufferCount * frameStep) % channel.frameCount
+        let cid = channel.id
+        Task { await self.fetchIntoCache(index: fetchIdx, channelId: cid) }
+    }
+
+    @MainActor
+    private func rebuffer() {
+        frameCache = [:]
         prefetchTask?.cancel()
-        prefetchTask = Task { await self.prefetchFrame(index: nextIndex) }
+        guard let channel = activeChannel else { return }
+        let from = currentFrameIndex
+        prefetchTask = Task { await self.fillBuffer(channel: channel, from: from) }
     }
 
-    private func loadFrame(index: Int) async {
-        guard let channel = await MainActor.run(body: { self.activeChannel }),
-              let url = APIService.shared.videoFrameURL(channelId: channel.id, frameNumber: index) else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = UIImage(data: data) else { return }
-            await MainActor.run {
-                self.currentFrameImage = image
-                self.updateNowPlayingArtwork(image)
+    private func fillBuffer(channel: VideoChannel, from startIndex: Int) async {
+        await withTaskGroup(of: (Int, UIImage?).self) { group in
+            for i in 0..<preBufferCount {
+                let idx = (startIndex + i * (await MainActor.run { self.frameStep })) % channel.frameCount
+                group.addTask { [self] in
+                    await (idx, self.fetchImage(channelId: channel.id, index: idx))
+                }
             }
-        } catch {}
+            for await (idx, image) in group {
+                if let image = image {
+                    await MainActor.run { self.frameCache[idx] = image }
+                }
+            }
+        }
     }
 
-    private func prefetchFrame(index: Int) async {
-        guard let channel = await MainActor.run(body: { self.activeChannel }),
-              let url = APIService.shared.videoFrameURL(channelId: channel.id, frameNumber: index) else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            if let image = UIImage(data: data) {
-                await MainActor.run { self.prefetchedImage = image }
-            }
-        } catch {}
+    private func fetchIntoCache(index: Int, channelId: Int) async {
+        if await MainActor.run(body: { self.frameCache[index] != nil }) { return }
+        if let image = await fetchImage(channelId: channelId, index: index) {
+            await MainActor.run { self.frameCache[index] = image }
+        }
+    }
+
+    private func fetchImage(channelId: Int, index: Int) async -> UIImage? {
+        guard let url = APIService.shared.videoFrameURL(channelId: channelId, frameNumber: index) else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return UIImage(data: data)
     }
 
     private func updateNowPlayingArtwork(_ image: UIImage) {

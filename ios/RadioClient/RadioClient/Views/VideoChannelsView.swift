@@ -30,7 +30,14 @@ struct VideoChannelsView: View {
                                 .padding()
                         }
 
-                        if videoPlayer.activeChannel != nil {
+                        if videoPlayer.isBuffering {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Buffering…")
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 12)
+                        } else if videoPlayer.activeChannel != nil {
                             HStack(spacing: 32) {
                                 Button {
                                     videoPlayer.decreaseFrameStep()
