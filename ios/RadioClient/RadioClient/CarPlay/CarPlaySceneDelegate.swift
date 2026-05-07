@@ -9,6 +9,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         _ templateApplicationScene: CPTemplateApplicationScene,
         didConnect interfaceController: CPInterfaceController
     ) {
+        print("[CarPlay] didConnect")
         self.interfaceController = interfaceController
 
         let player = AudioPlayer.shared
@@ -79,6 +80,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     }
 
     private func updateVideoSpeedButtons() {
+        print("[CarPlay] updateVideoSpeedButtons, activeChannel: \(VideoChannelPlayer.shared.activeChannel?.name ?? "nil")")
         guard VideoChannelPlayer.shared.activeChannel != nil else {
             CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
             return

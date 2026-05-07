@@ -40,9 +40,11 @@ class VideoChannelPlayer: ObservableObject {
     @MainActor
     func startChannel(_ channel: VideoChannel) {
         guard channel.frameCount > 0 else { return }
+        print("[VideoPlayer] startChannel: \(channel.name)")
         stopChannel()
 
         wasRadioPlaying = AudioPlayer.shared.isPlaying
+        print("[VideoPlayer] wasRadioPlaying: \(wasRadioPlaying)")
         if wasRadioPlaying { AudioPlayer.shared.pause() }
 
         activeChannel = channel
@@ -61,6 +63,7 @@ class VideoChannelPlayer: ObservableObject {
 
     @MainActor
     func stopChannel() {
+        print("[VideoPlayer] stopChannel, wasRadioPlaying: \(wasRadioPlaying)")
         frameTimer?.invalidate()
         frameTimer = nil
         prefetchTask?.cancel()
@@ -74,6 +77,8 @@ class VideoChannelPlayer: ObservableObject {
         isBuffering = false
 
         if wasRadioPlaying {
+            print("[VideoPlayer] restoring audio session and resuming radio")
+            try? AVAudioSession.sharedInstance().setActive(true)
             AudioPlayer.shared.play()
             wasRadioPlaying = false
         }
