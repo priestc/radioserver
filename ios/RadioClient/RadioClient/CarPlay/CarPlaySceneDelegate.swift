@@ -18,6 +18,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             player.startSyncTimer()
         }
         player.fetchChannels()
+        Task { await VideoChannelPlayer.shared.fetchChannels() }
 
         let nowPlaying = CPNowPlayingTemplate.shared
         nowPlaying.isUpNextButtonEnabled = true
