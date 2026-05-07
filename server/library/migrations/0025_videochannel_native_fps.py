@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("library", "0024_remove_videochannel_fps.py"),
+        ("library", "0024_remove_videochannel_fps"),
     ]
 
     operations = [
