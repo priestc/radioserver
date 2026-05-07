@@ -1150,9 +1150,9 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
 
 @admin.register(VideoChannel)
 class VideoChannelAdmin(admin.ModelAdmin):
-    list_display = ["name", "frame_count", "created_at"]
-    readonly_fields = ["frame_count", "created_at"]
-    fields = ["name", "video_file_path", "frame_count", "created_at"]
+    list_display = ["name", "native_fps", "frame_count", "created_at"]
+    readonly_fields = ["native_fps", "frame_count", "created_at"]
+    fields = ["name", "video_file_path", "native_fps", "frame_count", "created_at"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -1208,14 +1208,16 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Video file not found: {video_path}", level="error")
                 return
             try:
-                subprocess.run(
+                ffmpeg_result = subprocess.run(
                     ["ffmpeg", "-y", "-i", str(video_path), "-q:v", "3",
                      str(frame_dir / "frame_%06d.jpg")],
-                    check=True,
                     capture_output=True,
                 )
-            except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-                self.message_user(request, f"ffmpeg (frames) failed: {exc}", level="error")
+                if ffmpeg_result.returncode != 0:
+                    self.message_user(request, f"ffmpeg (frames) failed: {ffmpeg_result.stderr.decode()[-300:]}", level="error")
+                    return
+            except FileNotFoundError as exc:
+                self.message_user(request, f"ffmpeg not found: {exc}", level="error")
                 return
             try:
                 subprocess.run(
@@ -1229,9 +1231,15 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
             label = video_path.name
 
+        import re
         frame_count = len(list(frame_dir.glob("frame_*.jpg")))
-        VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count)
-        self.message_user(request, f"Extracted {frame_count} frames from {label}")
+        native_fps = 30.0
+        stderr_text = ffmpeg_result.stderr.decode(errors="replace")
+        fps_match = re.search(r", (\d+(?:\.\d+)?) fps", stderr_text)
+        if fps_match:
+            native_fps = float(fps_match.group(1))
+        VideoChannel.objects.filter(pk=obj.pk).update(frame_count=frame_count, native_fps=native_fps)
+        self.message_user(request, f"Extracted {frame_count} frames at {native_fps} fps from {label}")
 
     def _extract_audio_url(self, request, source, frame_dir):
         import subprocess

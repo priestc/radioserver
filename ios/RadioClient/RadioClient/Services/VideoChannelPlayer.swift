@@ -41,7 +41,7 @@ class VideoChannelPlayer: ObservableObject {
 
         activeChannel = channel
         currentFrameIndex = 0
-        frameStep = 1
+        frameStep = channel.defaultStep
         frameCache = [:]
         isBuffering = true
 

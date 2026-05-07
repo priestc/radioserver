@@ -417,7 +417,7 @@ def list_video_channels(request):
     channels = VideoChannel.objects.all()
     return JsonResponse({
         "video_channels": [
-            {"id": c.id, "name": c.name, "frame_count": c.frame_count}
+            {"id": c.id, "name": c.name, "frame_count": c.frame_count, "native_fps": c.native_fps}
             for c in channels
         ]
     })
