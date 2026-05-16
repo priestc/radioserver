@@ -59,6 +59,21 @@ def generate_playlist(target_seconds: float, channel=None) -> tuple[int, float]:
         if channel.artist is not None:
             qs = qs.filter(artists=channel.artist)
 
+    # Exclude tracks already in the unplayed queue for this channel
+    already_queued = PlaylistItem.objects.filter(
+        played_at__isnull=True, channel=channel
+    ).values_list("track_id", flat=True)
+    qs = qs.exclude(id__in=already_queued)
+
+    # Exclude tracks played recently for this channel (within 30 days)
+    from django.utils import timezone
+    from datetime import timedelta
+    recently_played = PlaylistItem.objects.filter(
+        channel=channel,
+        played_at__gte=timezone.now() - timedelta(days=30),
+    ).values_list("track_id", flat=True)
+    qs = qs.exclude(id__in=recently_played)
+
     tracks = list(qs.select_related("album").prefetch_related("artists"))
     if not tracks:
         return 0, 0.0
