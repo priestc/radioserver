@@ -24,11 +24,18 @@ struct SongItem: Codable, Identifiable, Equatable {
     }
 }
 
-struct PlayedSong: Identifiable {
-    let id = UUID()
+struct PlayedSong: Identifiable, Codable {
+    let id: UUID
     let song: SongItem
     let playedAt: Date
     let skipped: Bool
+
+    init(song: SongItem, playedAt: Date, skipped: Bool) {
+        self.id = UUID()
+        self.song = song
+        self.playedAt = playedAt
+        self.skipped = skipped
+    }
 }
 
 struct SyncResponse: Codable {

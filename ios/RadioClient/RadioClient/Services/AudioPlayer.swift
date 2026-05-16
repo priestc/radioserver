@@ -58,6 +58,7 @@ class AudioPlayer: ObservableObject {
         setupRemoteCommands()
         startNetworkMonitor()
         setupAudioSessionObservers()
+        loadPendingPlayed()
     }
 
     private func startNetworkMonitor() {
@@ -289,7 +290,10 @@ class AudioPlayer: ObservableObject {
             let isLocal = await MainActor.run { self.apiService?.isOnLocalNetwork ?? false }
             let syncBuffer = (!onCellular && isLocal) ? max(api.bufferCacheMB, 500) : api.bufferCacheMB
             let newItems = try await api.sync(played: played, bufferCacheMB: syncBuffer, nowPlaying: nowPlaying, channelId: channelId)
-            await MainActor.run { pendingPlayed.removeAll { p in played.contains { $0.id == p.id } } }
+            await MainActor.run {
+                pendingPlayed.removeAll { p in played.contains { $0.id == p.id } }
+                savePendingPlayed()
+            }
 
             // Add new items to queue (skip already queued)
             let existingIds = Set(await MainActor.run { self.queue.map(\.id) })
@@ -542,6 +546,7 @@ class AudioPlayer: ObservableObject {
                     if let current = self.currentSong {
                         let played = PlayedSong(song: current, playedAt: Date(), skipped: false)
                         self.pendingPlayed.append(played)
+                        self.savePendingPlayed()
                     }
                     self.triggerSync()
                 }
@@ -571,6 +576,7 @@ class AudioPlayer: ObservableObject {
         if !hasSyncedCurrentSong {
             let played = PlayedSong(song: song, playedAt: Date(), skipped: false)
             pendingPlayed.append(played)
+            savePendingPlayed()
         }
         playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
         removeCachedFiles(for: song)
@@ -628,6 +634,7 @@ class AudioPlayer: ObservableObject {
             let played = PlayedSong(song: song, playedAt: Date(), skipped: true)
             if !hasSyncedCurrentSong {
                 pendingPlayed.append(played)
+                savePendingPlayed()
             }
             playHistory.insert(played, at: 0)
             removeCachedFiles(for: song)
@@ -751,6 +758,27 @@ class AudioPlayer: ObservableObject {
         if let obs = endObserver {
             NotificationCenter.default.removeObserver(obs)
             endObserver = nil
+        }
+    }
+
+    // MARK: - Pending played persistence
+
+    private static let pendingPlayedKey = "pendingPlayedSongs"
+
+    func savePendingPlayed() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(pendingPlayed) {
+            UserDefaults.standard.set(data, forKey: Self.pendingPlayedKey)
+        }
+    }
+
+    func loadPendingPlayed() {
+        guard let data = UserDefaults.standard.data(forKey: Self.pendingPlayedKey) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let saved = try? decoder.decode([PlayedSong].self, from: data) {
+            pendingPlayed = saved
         }
     }
 

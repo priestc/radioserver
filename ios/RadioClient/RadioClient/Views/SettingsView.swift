@@ -92,7 +92,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
 
-                    let totalAudio = channelCaches.reduce(0.0) { $0 + $1.sizeMB }
+                    let totalAudio = CacheManager.shared.totalCacheSizeMB()
                     HStack {
                         Text("Total Cache")
                             .fontWeight(.semibold)
