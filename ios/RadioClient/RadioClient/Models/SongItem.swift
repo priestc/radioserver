@@ -78,25 +78,3 @@ struct ChannelsResponse: Codable {
     let channels: [Channel]
 }
 
-struct VideoChannel: Codable, Identifiable, Equatable {
-    let id: Int
-    let name: String
-    let frameCount: Int
-    let nativeFps: Double
-
-    enum CodingKeys: String, CodingKey {
-        case id, name
-        case frameCount = "frame_count"
-        case nativeFps = "native_fps"
-    }
-
-    var defaultStep: Int { max(1, Int(nativeFps.rounded())) }
-}
-
-struct VideoChannelsResponse: Codable {
-    let videoChannels: [VideoChannel]
-
-    enum CodingKeys: String, CodingKey {
-        case videoChannels = "video_channels"
-    }
-}

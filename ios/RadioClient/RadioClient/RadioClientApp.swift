@@ -23,11 +23,6 @@ struct RadioClientApp: App {
                         Label("History", systemImage: "clock")
                     }
 
-                VideoChannelsView()
-                    .tabItem {
-                        Label("Video", systemImage: "film")
-                    }
-
                 SettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gear")
@@ -39,7 +34,6 @@ struct RadioClientApp: App {
                 audioPlayer.apiService = apiService
                 audioPlayer.startSyncTimer()
                 audioPlayer.fetchChannels()
-                Task { await VideoChannelPlayer.shared.fetchChannels() }
             }
         }
     }

@@ -170,39 +170,6 @@ class APIService: ObservableObject {
         }
     }
 
-    func fetchVideoChannels() async throws -> [VideoChannel] {
-        guard let base = baseURL else { throw APIError.invalidURL }
-        let url = base.appendingPathComponent("/library/api/video_channels/")
-        let request = authorizedRequest(url: url)
-        AppLogger.shared.log(.apiRequest, "GET /library/api/video_channels/")
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET /library/api/video_channels/ → \(code)")
-                throw APIError.serverError(code)
-            }
-            let channels = try JSONDecoder().decode(VideoChannelsResponse.self, from: data).videoChannels
-            AppLogger.shared.log(.apiSuccess, "GET /library/api/video_channels/ → 200 (\(channels.count) channels)")
-            return channels
-        } catch let err as APIError {
-            throw err
-        } catch {
-            AppLogger.shared.log(.apiFailure, "GET /library/api/video_channels/ → \(error.localizedDescription)")
-            throw error
-        }
-    }
-
-    func videoFrameURL(channelId: Int, frameNumber: Int) -> URL? {
-        guard let base = baseURL else { return nil }
-        return base.appendingPathComponent("/library/video_frame/\(channelId)/\(frameNumber)/")
-    }
-
-    func videoAudioURL(channelId: Int) -> URL? {
-        guard let base = baseURL else { return nil }
-        return base.appendingPathComponent("/library/video_audio/\(channelId)/")
-    }
-
     func coverArtURL(albumId: Int) -> URL? {
         guard let base = baseURL else { return nil }
         return base.appendingPathComponent("/library/cover/\(albumId)/")
