@@ -19,6 +19,12 @@ class APIService: ObservableObject {
 
     private let networkMonitor = NWPathMonitor()
 
+    // URLSession that re-adds the Authorization header when the server redirects,
+    // which URLSession.shared strips by default as a security measure.
+    private lazy var downloadSession: URLSession = {
+        URLSession(configuration: .default, delegate: RedirectPreservingAuth(), delegateQueue: nil)
+    }()
+
     init() {
         // Migrate old serverURL to localURL
         if let old = UserDefaults.standard.string(forKey: "serverURL"), !old.isEmpty {
@@ -71,6 +77,12 @@ class APIService: ObservableObject {
         return request
     }
 
+    private func bodySnippet(_ data: Data) -> String {
+        let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else { return "" }
+        return " — " + (text.count > 200 ? String(text.prefix(200)) + "…" : text)
+    }
+
     func fetchChannels() async throws -> [Channel] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/channels/")
@@ -80,7 +92,7 @@ class APIService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)")
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)\(bodySnippet(data))")
                 throw APIError.serverError(code)
             }
             let channels = try JSONDecoder().decode(ChannelsResponse.self, from: data).channels
@@ -122,7 +134,7 @@ class APIService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(code)")
+                AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(code)\(bodySnippet(data))")
                 throw APIError.serverError(code)
             }
             let syncResponse = try JSONDecoder().decode(SyncResponse.self, from: data)
@@ -150,10 +162,11 @@ class APIService: ObservableObject {
 
         AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString)")
         do {
-            let (tempURL, response) = try await URLSession.shared.download(for: request)
+            let (tempURL, response) = try await downloadSession.download(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)")
+                let body = (try? Data(contentsOf: tempURL)).map { bodySnippet($0) } ?? ""
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)\(body)")
                 throw APIError.serverError(code)
             }
 
@@ -182,10 +195,10 @@ class APIService: ObservableObject {
         request.timeoutInterval = 5
         AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString) (connection test)")
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) (connection test) → \(code)")
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) (connection test) → \(code)\(bodySnippet(data))")
                 return .failure(APIError.serverError(code))
             }
             AppLogger.shared.log(.apiSuccess, "GET \(url.absoluteString) (connection test) → 200")
@@ -198,6 +211,22 @@ class APIService: ObservableObject {
 
     deinit {
         networkMonitor.cancel()
+    }
+}
+
+private class RedirectPreservingAuth: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        var updated = request
+        if let auth = task.originalRequest?.value(forHTTPHeaderField: "Authorization") {
+            updated.setValue(auth, forHTTPHeaderField: "Authorization")
+        }
+        completionHandler(updated)
     }
 }
 
