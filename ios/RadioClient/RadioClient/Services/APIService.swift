@@ -75,12 +75,23 @@ class APIService: ObservableObject {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/channels/")
         let request = authorizedRequest(url: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw APIError.serverError(code)
+        AppLogger.shared.log(.apiRequest, "GET /library/api/channels/")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ → \(code)")
+                throw APIError.serverError(code)
+            }
+            let channels = try JSONDecoder().decode(ChannelsResponse.self, from: data).channels
+            AppLogger.shared.log(.apiSuccess, "GET /library/api/channels/ → 200 (\(channels.count) channels)")
+            return channels
+        } catch let err as APIError {
+            throw err
+        } catch {
+            AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ → \(error.localizedDescription)")
+            throw error
         }
-        return try JSONDecoder().decode(ChannelsResponse.self, from: data).channels
     }
 
     func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil, channelId: Int? = nil) async throws -> [SongItem] {
@@ -105,13 +116,24 @@ class APIService: ObservableObject {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw APIError.serverError(code)
+        let playedDesc = played.isEmpty ? "" : " (\(played.count) played)"
+        AppLogger.shared.log(.apiRequest, "POST /library/api/client_sync/\(playedDesc)")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "POST /library/api/client_sync/ → \(code)")
+                throw APIError.serverError(code)
+            }
+            let syncResponse = try JSONDecoder().decode(SyncResponse.self, from: data)
+            AppLogger.shared.log(.apiSuccess, "POST /library/api/client_sync/ → 200 (\(syncResponse.download.count) to download)")
+            return syncResponse.download
+        } catch let err as APIError {
+            throw err
+        } catch {
+            AppLogger.shared.log(.apiFailure, "POST /library/api/client_sync/ → \(error.localizedDescription)")
+            throw error
         }
-        let syncResponse = try JSONDecoder().decode(SyncResponse.self, from: data)
-        return syncResponse.download
     }
 
     func downloadSong(playlistItemId: Int, fileExtension: String = "mp3", lowBitrate: Bool = false) async throws -> URL {
@@ -126,28 +148,49 @@ class APIService: ObservableObject {
         let url = base.appendingPathComponent("/library/api/\(endpoint)/\(playlistItemId)/")
         let request = authorizedRequest(url: url)
 
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw APIError.serverError(code)
-        }
+        AppLogger.shared.log(.apiRequest, "GET /library/api/\(endpoint)/\(playlistItemId)/")
+        do {
+            let (tempURL, response) = try await URLSession.shared.download(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "GET /library/api/\(endpoint)/\(playlistItemId)/ → \(code)")
+                throw APIError.serverError(code)
+            }
 
-        let dest = cache.fileURL(for: playlistItemId, ext: ext)
-        try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.moveItem(at: tempURL, to: dest)
-        return dest
+            let dest = cache.fileURL(for: playlistItemId, ext: ext)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: tempURL, to: dest)
+            AppLogger.shared.log(.apiSuccess, "GET /library/api/\(endpoint)/\(playlistItemId)/ → 200")
+            return dest
+        } catch let err as APIError {
+            throw err
+        } catch {
+            AppLogger.shared.log(.apiFailure, "GET /library/api/\(endpoint)/\(playlistItemId)/ → \(error.localizedDescription)")
+            throw error
+        }
     }
 
     func fetchVideoChannels() async throws -> [VideoChannel] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/video_channels/")
         let request = authorizedRequest(url: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw APIError.serverError(code)
+        AppLogger.shared.log(.apiRequest, "GET /library/api/video_channels/")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "GET /library/api/video_channels/ → \(code)")
+                throw APIError.serverError(code)
+            }
+            let channels = try JSONDecoder().decode(VideoChannelsResponse.self, from: data).videoChannels
+            AppLogger.shared.log(.apiSuccess, "GET /library/api/video_channels/ → 200 (\(channels.count) channels)")
+            return channels
+        } catch let err as APIError {
+            throw err
+        } catch {
+            AppLogger.shared.log(.apiFailure, "GET /library/api/video_channels/ → \(error.localizedDescription)")
+            throw error
         }
-        return try JSONDecoder().decode(VideoChannelsResponse.self, from: data).videoChannels
     }
 
     func videoFrameURL(channelId: Int, frameNumber: Int) -> URL? {
@@ -170,14 +213,18 @@ class APIService: ObservableObject {
         let url = base.appendingPathComponent("/library/api/channels/")
         var request = authorizedRequest(url: url)
         request.timeoutInterval = 5
+        AppLogger.shared.log(.apiRequest, "GET /library/api/channels/ (connection test)")
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ (connection test) → \(code)")
                 return .failure(APIError.serverError(code))
             }
+            AppLogger.shared.log(.apiSuccess, "GET /library/api/channels/ (connection test) → 200")
             return .success(http.statusCode)
         } catch {
+            AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ (connection test) → \(error.localizedDescription)")
             return .failure(error)
         }
     }

@@ -8,7 +8,6 @@ class AudioPlayer: ObservableObject {
     static let shared = AudioPlayer()
     @Published var currentSong: SongItem?
     @Published var queue: [SongItem] = []
-    @Published var playHistory: [PlayedSong] = []
     @Published var isPlaying = false
     @Published var isFillingCache = false
     @Published var cacheUpdateTick = 0
@@ -59,6 +58,7 @@ class AudioPlayer: ObservableObject {
         startNetworkMonitor()
         setupAudioSessionObservers()
         loadPendingPlayed()
+        AppLogger.shared.log(.startup, "App started")
     }
 
     private func startNetworkMonitor() {
@@ -317,7 +317,12 @@ class AudioPlayer: ObservableObject {
                         !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") &&
                         !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
                     }) {
-                        _ = try? await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
+                        do {
+                            _ = try await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
+                            AppLogger.shared.log(.downloadSuccess, "Cached: \"\(next.title)\" by \(next.artist) (low bitrate)")
+                        } catch {
+                            AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(next.title)\" by \(next.artist): \(error.localizedDescription)")
+                        }
                         if let albumId = next.albumId {
                             await prefetchArtwork(albumId: albumId, api: api)
                         }
@@ -331,7 +336,12 @@ class AudioPlayer: ObservableObject {
                 let allItems = newItems + queued.filter { !newIds.contains($0.id) }
                 for item in allItems {
                     if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
-                        _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                        do {
+                            _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                            AppLogger.shared.log(.downloadSuccess, "Cached: \"\(item.title)\" by \(item.artist)")
+                        } catch {
+                            AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
+                        }
                         let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
                         if idle { await MainActor.run { self.playNext() } }
                     }
@@ -411,7 +421,12 @@ class AudioPlayer: ObservableObject {
             let all = await MainActor.run { backgroundQueues[channelId] ?? [] }
             for item in all {
                 if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
-                    _ = try? await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                    do {
+                        _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                        AppLogger.shared.log(.downloadSuccess, "Cached (bg): \"\(item.title)\" by \(item.artist)")
+                    } catch {
+                        AppLogger.shared.log(.downloadFailure, "Failed to cache (bg) \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
+                    }
                 }
                 if let albumId = item.albumId {
                     await prefetchArtwork(albumId: albumId, api: api)
@@ -578,7 +593,7 @@ class AudioPlayer: ObservableObject {
             pendingPlayed.append(played)
             savePendingPlayed()
         }
-        playHistory.insert(PlayedSong(song: song, playedAt: Date(), skipped: false), at: 0)
+        AppLogger.shared.log(.trackPlayed, "Played: \"\(song.title)\" by \(song.artist)")
         removeCachedFiles(for: song)
         triggerSync()
         if queue.isEmpty {
@@ -636,7 +651,7 @@ class AudioPlayer: ObservableObject {
                 pendingPlayed.append(played)
                 savePendingPlayed()
             }
-            playHistory.insert(played, at: 0)
+            AppLogger.shared.log(.trackSkipped, "Skipped: \"\(song.title)\" by \(song.artist)")
             removeCachedFiles(for: song)
         }
         playNext()

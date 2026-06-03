@@ -3,251 +3,228 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10001 /* RadioClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* RadioClientApp.swift */; };
-		A10002 /* SongItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002 /* SongItem.swift */; };
-		A10003 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* APIService.swift */; };
-		A10004 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004 /* AudioPlayer.swift */; };
-		A10005 /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005 /* CacheManager.swift */; };
-		A10006 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006 /* NowPlayingView.swift */; };
-		A10007 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* HistoryView.swift */; };
-		A10008 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008 /* SettingsView.swift */; };
-		A10009 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009 /* CarPlaySceneDelegate.swift */; };
-		A10010 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* QRScannerView.swift */; };
-		A10011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10013 /* Assets.xcassets */; };
-		A10012 /* ChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* ChannelsView.swift */; };
-		A10013 /* VideoChannelPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* VideoChannelPlayer.swift */; };
-		A10014 /* VideoChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016 /* VideoChannelsView.swift */; };
+		2A88754979A093DBA10BD02B /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E2E4075C8B4B602DDAA82C /* APIService.swift */; };
+		3824CC05C4906C17EE7A4E63 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6583E122D8359A1E53E08748 /* QRScannerView.swift */; };
+		4DA57E92DAE4AFAB284F031D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426C78E748A8B3A599B622A6 /* SettingsView.swift */; };
+		4E4AD55B609F2061AB078727 /* VideoChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7BEDCAB5D4A1F74F3733446 /* VideoChannelsView.swift */; };
+		54D5303D16532CEC9BB6C1BD /* VideoChannelPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA05FF6CFF90DFC37FF2BE6A /* VideoChannelPlayer.swift */; };
+		91F51E72877215E03C8692B8 /* RadioClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */; };
+		92349102C18EC5A1DEFC844A /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469098CCFCEE845A96A0E131 /* CacheManager.swift */; };
+		9FC28EA4FAF7906EB72B20D5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6E5600B1C334D13C861760C /* Assets.xcassets */; };
+		A41BF52570935C4D5C6F3C64 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D53D0E61830D9ADE744582 /* AppLogger.swift */; };
+		C89F1E994DF33F8456C6AAD0 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E9968882875943AAE4F854 /* HistoryView.swift */; };
+		DBEA955A23AEA029F1312735 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA49438693716D89CF1730B5 /* AudioPlayer.swift */; };
+		DC5705B88A0FD49F572A7FC9 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A110F8149BA55740342D0E2 /* CarPlaySceneDelegate.swift */; };
+		EB688FB54A02EC62C844CA16 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D261975A38A191E21C4742 /* NowPlayingView.swift */; };
+		F61E91C30EB0DF7C95BC7B8C /* SongItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F1EEB734572E252ABDA3F5 /* SongItem.swift */; };
+		FC1397C43F8C8A04E8A4E18B /* ChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B0A93580DCFA441554FD3E /* ChannelsView.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		93C7DDEE2F7B60DF007AF538 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
-		93C7DDDB2F7B60DD007AF538 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
-		93C7DDDD2F7B60DD007AF538 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		B10001 /* RadioClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioClientApp.swift; sourceTree = "<group>"; };
-		B10002 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
-		B10003 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
-		B10004 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
-		B10005 /* CacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheManager.swift; sourceTree = "<group>"; };
-		B10006 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
-		B10007 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
-		B10008 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		B10009 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
-		B10010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		B10011 /* RadioClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RadioClient.entitlements; sourceTree = "<group>"; };
-		B10012 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
-		B10013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		B10014 /* ChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsView.swift; sourceTree = "<group>"; };
-		B10015 /* VideoChannelPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelPlayer.swift; sourceTree = "<group>"; };
-		B10016 /* VideoChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelsView.swift; sourceTree = "<group>"; };
-		C10001 /* RadioClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		00E2E4075C8B4B602DDAA82C /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
+		1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioClientApp.swift; sourceTree = "<group>"; };
+		27E9968882875943AAE4F854 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		3794BDB5BBD0B61F07F811EC /* RadioClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		41074D8D095FD70AC4411512 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		426C78E748A8B3A599B622A6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		469098CCFCEE845A96A0E131 /* CacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheManager.swift; sourceTree = "<group>"; };
+		46B0A93580DCFA441554FD3E /* ChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsView.swift; sourceTree = "<group>"; };
+		5A110F8149BA55740342D0E2 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		6583E122D8359A1E53E08748 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		90F1EEB734572E252ABDA3F5 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
+		AA49438693716D89CF1730B5 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
+		B4D261975A38A191E21C4742 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
+		C7BEDCAB5D4A1F74F3733446 /* VideoChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelsView.swift; sourceTree = "<group>"; };
+		D6E5600B1C334D13C861760C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EA05FF6CFF90DFC37FF2BE6A /* VideoChannelPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoChannelPlayer.swift; sourceTree = "<group>"; };
+		F0D53D0E61830D9ADE744582 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFrameworksBuildPhase section */
-		D10001 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
 /* Begin PBXGroup section */
-		93C7DDDA2F7B60DD007AF538 /* Frameworks */ = {
+		0B7A90D8BC7FE8F9019856EE /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				93C7DDDB2F7B60DD007AF538 /* WidgetKit.framework */,
-				93C7DDDD2F7B60DD007AF538 /* SwiftUI.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		E10001 = {
-			isa = PBXGroup;
-			children = (
-				E10002 /* RadioClient */,
-				B10011 /* RadioClient.entitlements */,
-				93C7DDDA2F7B60DD007AF538 /* Frameworks */,
-				E10007 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		E10002 /* RadioClient */ = {
-			isa = PBXGroup;
-			children = (
-				B10001 /* RadioClientApp.swift */,
-				B10010 /* Info.plist */,
-				B10013 /* Assets.xcassets */,
-				E10003 /* Models */,
-				E10004 /* Services */,
-				E10005 /* Views */,
-				E10006 /* CarPlay */,
-			);
-			path = RadioClient;
-			sourceTree = "<group>";
-		};
-		E10003 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				B10002 /* SongItem.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		E10004 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				B10003 /* APIService.swift */,
-				B10004 /* AudioPlayer.swift */,
-				B10005 /* CacheManager.swift */,
-				B10015 /* VideoChannelPlayer.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
-		E10005 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				B10006 /* NowPlayingView.swift */,
-				B10007 /* HistoryView.swift */,
-				B10008 /* SettingsView.swift */,
-				B10012 /* QRScannerView.swift */,
-				B10014 /* ChannelsView.swift */,
-				B10016 /* VideoChannelsView.swift */,
+				46B0A93580DCFA441554FD3E /* ChannelsView.swift */,
+				27E9968882875943AAE4F854 /* HistoryView.swift */,
+				B4D261975A38A191E21C4742 /* NowPlayingView.swift */,
+				6583E122D8359A1E53E08748 /* QRScannerView.swift */,
+				426C78E748A8B3A599B622A6 /* SettingsView.swift */,
+				C7BEDCAB5D4A1F74F3733446 /* VideoChannelsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
 		};
-		E10006 /* CarPlay */ = {
+		3CD60E776DD2B646512F871A /* CarPlay */ = {
 			isa = PBXGroup;
 			children = (
-				B10009 /* CarPlaySceneDelegate.swift */,
+				5A110F8149BA55740342D0E2 /* CarPlaySceneDelegate.swift */,
 			);
 			path = CarPlay;
 			sourceTree = "<group>";
 		};
-		E10007 /* Products */ = {
+		42E0D606C5EA690FA3567B04 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				C10001 /* RadioClient.app */,
+				90F1EEB734572E252ABDA3F5 /* SongItem.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		855739A964FCD22D38E33603 = {
+			isa = PBXGroup;
+			children = (
+				BFEA34159842D98C16B5C36F /* RadioClient */,
+				B73A2C92CB7BC370201A8885 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B73A2C92CB7BC370201A8885 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3794BDB5BBD0B61F07F811EC /* RadioClient.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BFEA34159842D98C16B5C36F /* RadioClient */ = {
+			isa = PBXGroup;
+			children = (
+				D6E5600B1C334D13C861760C /* Assets.xcassets */,
+				41074D8D095FD70AC4411512 /* Info.plist */,
+				1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */,
+				3CD60E776DD2B646512F871A /* CarPlay */,
+				42E0D606C5EA690FA3567B04 /* Models */,
+				EE3C6F43F5D8B1BFFC68BAFF /* Services */,
+				0B7A90D8BC7FE8F9019856EE /* Views */,
+			);
+			path = RadioClient;
+			sourceTree = "<group>";
+		};
+		EE3C6F43F5D8B1BFFC68BAFF /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				00E2E4075C8B4B602DDAA82C /* APIService.swift */,
+				F0D53D0E61830D9ADE744582 /* AppLogger.swift */,
+				AA49438693716D89CF1730B5 /* AudioPlayer.swift */,
+				469098CCFCEE845A96A0E131 /* CacheManager.swift */,
+				EA05FF6CFF90DFC37FF2BE6A /* VideoChannelPlayer.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F10001 /* RadioClient */ = {
+		655AD036D373C199B7800D47 /* RadioClient */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = G10003 /* Build configuration list for PBXNativeTarget "RadioClient" */;
+			buildConfigurationList = 57885067A20CCD6D8383DDB2 /* Build configuration list for PBXNativeTarget "RadioClient" */;
 			buildPhases = (
-				F10002 /* Sources */,
-				D10001 /* Frameworks */,
-				F10003 /* Resources */,
-				93C7DDEE2F7B60DF007AF538 /* Embed Foundation Extensions */,
+				DC613B9C7BEC488267E1C0B6 /* Sources */,
+				1C0A84FF66AC0EEBFC0F7AE9 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = RadioClient;
+			packageProductDependencies = (
+			);
 			productName = RadioClient;
-			productReference = C10001 /* RadioClient.app */;
+			productReference = 3794BDB5BBD0B61F07F811EC /* RadioClient.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		H10001 /* Project object */ = {
+		4162FA7D46E6E96BC4B3464A /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
-				LastUpgradeCheck = 2640;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					655AD036D373C199B7800D47 = {
+						DevelopmentTeam = 6V798W6LMZ;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
-			buildConfigurationList = G10001 /* Build configuration list for PBXProject "RadioClient" */;
-			compatibilityVersion = "Xcode 14.0";
+			buildConfigurationList = 03C548051937DE2A5F753607 /* Build configuration list for PBXProject "RadioClient" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
 				Base,
+				en,
 			);
-			mainGroup = E10001;
-			productRefGroup = E10007 /* Products */;
+			mainGroup = 855739A964FCD22D38E33603;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B73A2C92CB7BC370201A8885 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F10001 /* RadioClient */,
+				655AD036D373C199B7800D47 /* RadioClient */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		F10003 /* Resources */ = {
+		1C0A84FF66AC0EEBFC0F7AE9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10011 /* Assets.xcassets in Resources */,
+				9FC28EA4FAF7906EB72B20D5 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		F10002 /* Sources */ = {
+		DC613B9C7BEC488267E1C0B6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001 /* RadioClientApp.swift in Sources */,
-				A10002 /* SongItem.swift in Sources */,
-				A10003 /* APIService.swift in Sources */,
-				A10004 /* AudioPlayer.swift in Sources */,
-				A10005 /* CacheManager.swift in Sources */,
-				A10006 /* NowPlayingView.swift in Sources */,
-				A10007 /* HistoryView.swift in Sources */,
-				A10008 /* SettingsView.swift in Sources */,
-				A10009 /* CarPlaySceneDelegate.swift in Sources */,
-				A10010 /* QRScannerView.swift in Sources */,
-				A10012 /* ChannelsView.swift in Sources */,
-				A10013 /* VideoChannelPlayer.swift in Sources */,
-				A10014 /* VideoChannelsView.swift in Sources */,
+				2A88754979A093DBA10BD02B /* APIService.swift in Sources */,
+				A41BF52570935C4D5C6F3C64 /* AppLogger.swift in Sources */,
+				DBEA955A23AEA029F1312735 /* AudioPlayer.swift in Sources */,
+				92349102C18EC5A1DEFC844A /* CacheManager.swift in Sources */,
+				DC5705B88A0FD49F572A7FC9 /* CarPlaySceneDelegate.swift in Sources */,
+				FC1397C43F8C8A04E8A4E18B /* ChannelsView.swift in Sources */,
+				C89F1E994DF33F8456C6AAD0 /* HistoryView.swift in Sources */,
+				EB688FB54A02EC62C844CA16 /* NowPlayingView.swift in Sources */,
+				3824CC05C4906C17EE7A4E63 /* QRScannerView.swift in Sources */,
+				91F51E72877215E03C8692B8 /* RadioClientApp.swift in Sources */,
+				4DA57E92DAE4AFAB284F031D /* SettingsView.swift in Sources */,
+				F61E91C30EB0DF7C95BC7B8C /* SongItem.swift in Sources */,
+				54D5303D16532CEC9BB6C1BD /* VideoChannelPlayer.swift in Sources */,
+				4E4AD55B609F2061AB078727 /* VideoChannelsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		G10004 /* Debug */ = {
+		17A8D86C864C8ACAF5F8BF23 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
@@ -255,24 +232,25 @@
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 6V798W6LMZ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
 					"$(inherited)",
+					"DEBUG=1",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -282,28 +260,66 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
-		G10005 /* Release */ = {
+		5FE89A1C3DA4E10004569933 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = RadioClient.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6V798W6LMZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RadioClient/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RadioClient;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.radioserver.RadioClient;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D8F59C1DE6C666742F49DBFF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
@@ -311,18 +327,19 @@
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 6V798W6LMZ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -331,20 +348,26 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
-				VALIDATE_PRODUCT = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		G10006 /* Debug */ = {
+		F52AA7426CD40430AC1FED8B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_ENTITLEMENTS = RadioClient.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6V798W6LMZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadioClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RadioClient;
@@ -359,63 +382,36 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.radioserver.RadioClient;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		G10007 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = RadioClient.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = RadioClient/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = RadioClient;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.radioserver.RadioClient;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		G10001 /* Build configuration list for PBXProject "RadioClient" */ = {
+		03C548051937DE2A5F753607 /* Build configuration list for PBXProject "RadioClient" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				G10004 /* Debug */,
-				G10005 /* Release */,
+				17A8D86C864C8ACAF5F8BF23 /* Debug */,
+				D8F59C1DE6C666742F49DBFF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
-		G10003 /* Build configuration list for PBXNativeTarget "RadioClient" */ = {
+		57885067A20CCD6D8383DDB2 /* Build configuration list for PBXNativeTarget "RadioClient" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				G10006 /* Debug */,
-				G10007 /* Release */,
+				F52AA7426CD40430AC1FED8B /* Debug */,
+				5FE89A1C3DA4E10004569933 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = H10001 /* Project object */;
+	rootObject = 4162FA7D46E6E96BC4B3464A /* Project object */;
 }
