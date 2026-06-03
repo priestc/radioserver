@@ -75,21 +75,21 @@ class APIService: ObservableObject {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/channels/")
         let request = authorizedRequest(url: url)
-        AppLogger.shared.log(.apiRequest, "GET /library/api/channels/")
+        AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ → \(code)")
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)")
                 throw APIError.serverError(code)
             }
             let channels = try JSONDecoder().decode(ChannelsResponse.self, from: data).channels
-            AppLogger.shared.log(.apiSuccess, "GET /library/api/channels/ → 200 (\(channels.count) channels)")
+            AppLogger.shared.log(.apiSuccess, "GET \(url.absoluteString) → 200 (\(channels.count) channels)")
             return channels
         } catch let err as APIError {
             throw err
         } catch {
-            AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ → \(error.localizedDescription)")
+            AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(error.localizedDescription)")
             throw error
         }
     }
@@ -117,21 +117,21 @@ class APIService: ObservableObject {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let playedDesc = played.isEmpty ? "" : " (\(played.count) played)"
-        AppLogger.shared.log(.apiRequest, "POST /library/api/client_sync/\(playedDesc)")
+        AppLogger.shared.log(.apiRequest, "POST \(url.absoluteString)\(playedDesc)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "POST /library/api/client_sync/ → \(code)")
+                AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(code)")
                 throw APIError.serverError(code)
             }
             let syncResponse = try JSONDecoder().decode(SyncResponse.self, from: data)
-            AppLogger.shared.log(.apiSuccess, "POST /library/api/client_sync/ → 200 (\(syncResponse.download.count) to download)")
+            AppLogger.shared.log(.apiSuccess, "POST \(url.absoluteString) → 200 (\(syncResponse.download.count) to download)")
             return syncResponse.download
         } catch let err as APIError {
             throw err
         } catch {
-            AppLogger.shared.log(.apiFailure, "POST /library/api/client_sync/ → \(error.localizedDescription)")
+            AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(error.localizedDescription)")
             throw error
         }
     }
@@ -148,24 +148,24 @@ class APIService: ObservableObject {
         let url = base.appendingPathComponent("/library/api/\(endpoint)/\(playlistItemId)/")
         let request = authorizedRequest(url: url)
 
-        AppLogger.shared.log(.apiRequest, "GET /library/api/\(endpoint)/\(playlistItemId)/")
+        AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString)")
         do {
             let (tempURL, response) = try await URLSession.shared.download(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET /library/api/\(endpoint)/\(playlistItemId)/ → \(code)")
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(code)")
                 throw APIError.serverError(code)
             }
 
             let dest = cache.fileURL(for: playlistItemId, ext: ext)
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.moveItem(at: tempURL, to: dest)
-            AppLogger.shared.log(.apiSuccess, "GET /library/api/\(endpoint)/\(playlistItemId)/ → 200")
+            AppLogger.shared.log(.apiSuccess, "GET \(url.absoluteString) → 200")
             return dest
         } catch let err as APIError {
             throw err
         } catch {
-            AppLogger.shared.log(.apiFailure, "GET /library/api/\(endpoint)/\(playlistItemId)/ → \(error.localizedDescription)")
+            AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) → \(error.localizedDescription)")
             throw error
         }
     }
@@ -180,18 +180,18 @@ class APIService: ObservableObject {
         let url = base.appendingPathComponent("/library/api/channels/")
         var request = authorizedRequest(url: url)
         request.timeoutInterval = 5
-        AppLogger.shared.log(.apiRequest, "GET /library/api/channels/ (connection test)")
+        AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString) (connection test)")
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ (connection test) → \(code)")
+                AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) (connection test) → \(code)")
                 return .failure(APIError.serverError(code))
             }
-            AppLogger.shared.log(.apiSuccess, "GET /library/api/channels/ (connection test) → 200")
+            AppLogger.shared.log(.apiSuccess, "GET \(url.absoluteString) (connection test) → 200")
             return .success(http.statusCode)
         } catch {
-            AppLogger.shared.log(.apiFailure, "GET /library/api/channels/ (connection test) → \(error.localizedDescription)")
+            AppLogger.shared.log(.apiFailure, "GET \(url.absoluteString) (connection test) → \(error.localizedDescription)")
             return .failure(error)
         }
     }
