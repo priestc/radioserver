@@ -890,7 +890,8 @@ class ChannelAdmin(admin.ModelAdmin):
 
 @admin.register(PlaylistItem)
 class PlaylistItemAdmin(admin.ModelAdmin):
-    list_display = ["id", "track", "duration", "played_at"]
+    list_display = ["id", "channel", "track", "duration", "played_at"]
+    list_filter = ["channel"]
     ordering = ["-id"]
     raw_id_fields = ["track"]
 
