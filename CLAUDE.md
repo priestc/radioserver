@@ -10,6 +10,43 @@ Then deploy to tank2 with:
 pipx install --force git+https://github.com/priestc/radioserver.git && ~/.local/bin/radioserver migrate && sudo systemctl restart radioserver
 ```
 
+`sudo systemctl restart radioserver` does not require a password on tank2 — it is configured in sudoers to allow this without prompting.
+
+## Creating new iOS apps
+
+Always use **xcodegen** to create Xcode projects. Never manually edit `project.pbxproj` or click through the Xcode new-project UI.
+
+Workflow:
+1. Create the directory structure and all Swift source files
+2. Write a `project.yml` in the project root
+3. Run `xcodegen generate` to produce the `.xcodeproj`
+4. Tell the user to open the `.xcodeproj` in Xcode
+
+`xcodegen` is installed at `/opt/homebrew/bin/xcodegen`. A typical `project.yml` for a SwiftUI iOS app:
+
+```yaml
+name: MyApp
+options:
+  bundleIdPrefix: com.chrispriest
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  MyApp:
+    type: application
+    platform: iOS
+    sources: [MyApp]
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.chrispriest.MyApp
+    info:
+      path: MyApp/Info.plist
+      properties:
+        UILaunchScreen: {}
+```
+
+Add `entitlements`, `dependencies`, extra `info` properties, and build settings as needed for the specific app.
+
 ## Error handling principle
 
 Never silently swallow errors. Whenever something goes wrong — a failed network request, an unexpected API response, a caught exception — always surface it visibly in the UI so the user knows what's happening. This applies to:
