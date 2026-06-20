@@ -1,13 +1,19 @@
 # Claude Instructions
 
-## After every commit
+## Deployment rules
+
+Server-side code (anything under `server/`) runs exclusively on tank2, never locally on the Mac Mini. Every server-side change must be committed, pushed to GitHub, and deployed to tank2 before it can be tested. There is no local server to test against.
+
+iOS app changes that have no server-side component do not need a commit/deploy cycle — they are tested directly from Xcode on the Mac Mini.
+
+## After every server-side commit
 
 Always push every commit immediately after creating it.
 
-Then deploy to tank2 with:
+Then deploy to tank2 by SSHing in and running:
 
 ```
-pipx install --force git+https://github.com/priestc/radioserver.git && ~/.local/bin/radioserver migrate && sudo systemctl restart radioserver
+ssh tank2 "pipx install --force git+https://github.com/priestc/radioserver.git && ~/.local/bin/radioserver migrate && sudo systemctl restart radioserver"
 ```
 
 `sudo systemctl restart radioserver` does not require a password on tank2 — it is configured in sudoers to allow this without prompting.
