@@ -18,6 +18,8 @@ from library.models import (
     ApiKey,
     Artist,
     Channel,
+    Decade,
+    DecadeStation,
     GenreGroup,
     PlaylistItem,
     PlaylistSettings,
@@ -1263,6 +1265,58 @@ class VideoChannelAdmin(admin.ModelAdmin):
                 self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
         except Exception:
             self.message_user(request, "Audio extraction failed (frames still extracted)", level="warning")
+
+
+class DecadeStationInline(admin.TabularInline):
+    model = DecadeStation
+    extra = 1
+    fields = ["name", "slug", "genres", "genre_group", "artist", "track_count_display"]
+    readonly_fields = ["track_count_display"]
+    prepopulated_fields = {"slug": ("name",)}
+
+    @admin.display(description="Matching tracks")
+    def track_count_display(self, obj):
+        if not obj.pk:
+            return "—"
+        qs = Track.objects.filter(
+            exclude_from_playlist=False,
+            year__gte=obj.decade.year_min,
+            year__lte=obj.decade.year_max,
+        ).exclude(duration__isnull=True)
+        genre_list = obj.genre_list()
+        if genre_list:
+            qs = qs.filter(genre__in=genre_list)
+        if obj.artist:
+            qs = qs.filter(artists=obj.artist)
+        count = qs.count()
+        total = Track.objects.filter(
+            exclude_from_playlist=False,
+            year__gte=obj.decade.year_min,
+            year__lte=obj.decade.year_max,
+        ).exclude(duration__isnull=True).count()
+        pct = (count / total * 100) if total else 0
+        return f"{count} ({pct:.1f}% of decade)"
+
+
+@admin.register(Decade)
+class DecadeAdmin(admin.ModelAdmin):
+    list_display = ["name", "year_min", "year_max", "station_count", "decade_track_count"]
+    prepopulated_fields = {"slug": ("name",)}
+    fields = ["name", "slug", "year_min", "year_max"]
+    inlines = [DecadeStationInline]
+
+    @admin.display(description="Stations")
+    def station_count(self, obj):
+        return obj.stations.count()
+
+    @admin.display(description="Total tracks in decade")
+    def decade_track_count(self, obj):
+        count = Track.objects.filter(
+            exclude_from_playlist=False,
+            year__gte=obj.year_min,
+            year__lte=obj.year_max,
+        ).exclude(duration__isnull=True).count()
+        return count
 
 
 @admin.register(AIServiceError)

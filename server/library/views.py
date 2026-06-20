@@ -280,6 +280,198 @@ def client_sync(request):
 
 @require_api_key
 @require_GET
+def decade_stations(request, decade_slug):
+    from library.models import Decade
+    try:
+        decade = Decade.objects.prefetch_related("stations__genre_group", "stations__artist").get(slug=decade_slug)
+    except Decade.DoesNotExist:
+        return JsonResponse({"error": f"Decade '{decade_slug}' not found"}, status=404)
+
+    return JsonResponse({
+        "decade": decade.name,
+        "slug": decade.slug,
+        "year_min": decade.year_min,
+        "year_max": decade.year_max,
+        "stations": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "slug": s.slug,
+                "genres": s.genre_list(),
+                "artist": s.artist.name if s.artist else None,
+            }
+            for s in decade.stations.all()
+        ],
+    })
+
+
+@csrf_exempt
+@require_api_key
+@require_POST
+def decade_station_sync(request, decade_slug, station_slug):
+    from library.models import Decade, DecadeStation
+
+    try:
+        decade = Decade.objects.get(slug=decade_slug)
+    except Decade.DoesNotExist:
+        return JsonResponse({"error": f"Decade '{decade_slug}' not found"}, status=404)
+
+    try:
+        station = DecadeStation.objects.select_related("genre_group", "artist").get(
+            decade=decade, slug=station_slug
+        )
+    except DecadeStation.DoesNotExist:
+        return JsonResponse({"error": f"Station '{station_slug}' not found in {decade.name}"}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    # Mark played items
+    for entry in body.get("played", []):
+        PlaylistItem.objects.filter(pk=entry["id"]).update(
+            played_at=entry["played_at"],
+            skipped=entry.get("skipped", False),
+        )
+
+    # Record now-playing start time
+    now_playing = body.get("now_playing")
+    if now_playing:
+        PlaylistItem.objects.filter(pk=now_playing["id"]).update(
+            started_at=now_playing["started_at"],
+        )
+
+    # Auto-fill queue if unplayed duration is under 1 hour
+    from django.db.models import Sum
+    unplayed_duration = (
+        PlaylistItem.objects.filter(played_at__isnull=True, station=station)
+        .aggregate(total=Sum("track__duration"))["total"]
+    ) or 0
+    if unplayed_duration < 3600:
+        _generate_station_playlist(3600, station=station, decade=decade)
+
+    # Return songs to buffer
+    buffer_bytes = body.get("buffer_cache_mb", 50) * 1024 * 1024
+    unplayed = (
+        PlaylistItem.objects.filter(played_at__isnull=True, station=station)
+        .select_related("track", "track__album", "track__album__artist")
+        .prefetch_related("track__artists")
+        .order_by("id")
+    )
+
+    download = []
+    total = 0
+    for item in unplayed:
+        track = item.track
+        size = track.file_size or 0
+        if total + size > buffer_bytes and download:
+            break
+        from library.tags import read_replaygain
+        download.append({
+            "id": item.id,
+            "title": track.title,
+            "artist": track.display_artist,
+            "album": track.album.title if track.album else None,
+            "album_id": track.album_id,
+            "year": track.year,
+            "duration": track.duration,
+            "file_format": track.format,
+            "replaygain_track_gain": read_replaygain(track.file_path),
+            "download_url": f"/library/api/download_song/{item.id}/",
+        })
+        total += size
+        if total >= buffer_bytes:
+            break
+
+    return JsonResponse({"download": download})
+
+
+def _generate_station_playlist(target_seconds: float, *, station, decade) -> None:
+    """Fill the station's queue with tracks up to target_seconds of audio."""
+    import random
+    from collections import deque
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from library.models import GenreGroup, PlaylistSettings, Track
+
+    settings, _ = PlaylistSettings.objects.get_or_create(pk=1)
+
+    qs = Track.objects.filter(exclude_from_playlist=False).exclude(duration__isnull=True)
+
+    # Apply decade year bounds
+    qs = qs.filter(year__gte=decade.year_min, year__lte=decade.year_max)
+
+    # Apply station genre filter
+    genre_list = station.genre_list()
+    if genre_list:
+        qs = qs.filter(genre__in=genre_list)
+
+    # Apply station artist filter
+    if station.artist:
+        qs = qs.filter(artists=station.artist)
+
+    # Exclude already queued and recently played
+    already_queued = PlaylistItem.objects.filter(
+        played_at__isnull=True, station=station
+    ).values_list("track_id", flat=True)
+    recently_played = PlaylistItem.objects.filter(
+        station=station,
+        played_at__gte=timezone.now() - timedelta(days=30),
+    ).values_list("track_id", flat=True)
+    qs = qs.exclude(id__in=already_queued).exclude(id__in=recently_played)
+
+    tracks = list(qs.select_related("album").prefetch_related("artists"))
+    if not tracks:
+        return
+
+    for t in tracks:
+        t._artist_ids = set(a.id for a in t.artists.all())
+
+    genre_to_group: dict[str, str] = {}
+    for gg in GenreGroup.objects.all():
+        for g in gg.genre_list():
+            genre_to_group[g] = gg.name
+
+    def get_genre_group(track):
+        return genre_to_group.get(track.genre)
+
+    recent_artists: deque = deque(maxlen=settings.artist_skip)
+    recent_genres: deque = deque(maxlen=settings.genre_skip)
+    total_duration = 0.0
+
+    while total_duration < target_seconds:
+        for relaxation in range(3):
+            candidates = [
+                t for t in tracks
+                if _station_passes(t, recent_artists, recent_genres, get_genre_group, relaxation)
+            ]
+            if candidates:
+                break
+        if not candidates:
+            break
+        pick = random.choice(candidates)
+        PlaylistItem.objects.create(track=pick, station=station)
+        total_duration += pick.duration
+        recent_artists.append(pick._artist_ids)
+        recent_genres.append(get_genre_group(pick))
+
+
+def _station_passes(track, recent_artists, recent_genres, get_genre_group, relaxation):
+    if relaxation < 2:
+        if any(track._artist_ids & s for s in recent_artists):
+            return False
+    if relaxation < 1:
+        group = get_genre_group(track)
+        if group is not None and group in recent_genres:
+            return False
+    return True
+
+
+@require_api_key
+@require_GET
 def list_channels(request):
     from library.models import Channel
     channels = Channel.objects.select_related("genre_group", "artist").all()

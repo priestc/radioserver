@@ -195,10 +195,59 @@ class Channel(models.Model):
         return self.name
 
 
+class Decade(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(unique=True)
+    year_min = models.IntegerField()
+    year_max = models.IntegerField()
+
+    class Meta:
+        ordering = ["year_min"]
+
+    def __str__(self):
+        return self.name
+
+
+class DecadeStation(models.Model):
+    decade = models.ForeignKey(Decade, on_delete=models.CASCADE, related_name="stations")
+    name = models.CharField(max_length=100)
+    slug = models.SlugField()
+    genres = models.TextField(
+        blank=True, default="",
+        help_text="Comma-separated genre tags (exact match). Leave blank to include all genres.",
+    )
+    genre_group = models.ForeignKey(
+        GenreGroup, null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="Genre group to match. Takes precedence over the genres field if set.",
+    )
+    artist = models.ForeignKey(
+        Artist, null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="Restrict to a specific artist (e.g. for an 'Elvis' station).",
+    )
+
+    class Meta:
+        unique_together = [("decade", "slug")]
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.decade.name} — {self.name}"
+
+    def genre_list(self):
+        if self.genre_group:
+            return self.genre_group.genre_list()
+        if self.genres:
+            return [g.strip() for g in self.genres.split(",") if g.strip()]
+        return []
+
+
 class PlaylistItem(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="playlist_items")
     channel = models.ForeignKey(
         Channel, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="playlist_items",
+    )
+    station = models.ForeignKey(
+        DecadeStation, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="playlist_items",
     )
     started_at = models.DateTimeField(null=True, blank=True)
