@@ -196,16 +196,36 @@ class Channel(models.Model):
 
 
 class Decade(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-    slug = models.SlugField(unique=True)
-    year_min = models.IntegerField()
-    year_max = models.IntegerField()
+    name = models.CharField(
+        max_length=5, unique=True,
+        help_text="Must be 4 digits followed by 's', e.g. '1950s'.",
+    )
 
     class Meta:
-        ordering = ["year_min"]
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        import re
+        from django.core.exceptions import ValidationError
+        if not re.match(r"^\d{4}s$", self.name or ""):
+            raise ValidationError(
+                {"name": "Decade name must be 4 digits followed by lowercase 's' (e.g. '1950s')."}
+            )
+
+    @property
+    def slug(self):
+        return self.name
+
+    @property
+    def year_min(self):
+        return int(self.name[:4])
+
+    @property
+    def year_max(self):
+        return int(self.name[:4]) + 9
 
 
 class DecadeStation(models.Model):

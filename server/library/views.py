@@ -283,7 +283,7 @@ def client_sync(request):
 def decade_stations(request, decade_slug):
     from library.models import Decade
     try:
-        decade = Decade.objects.prefetch_related("stations__genre_group", "stations__artist").get(slug=decade_slug)
+        decade = Decade.objects.prefetch_related("stations__genre_group", "stations__artist").get(name=decade_slug)
     except Decade.DoesNotExist:
         return JsonResponse({"error": f"Decade '{decade_slug}' not found"}, status=404)
 
@@ -312,7 +312,7 @@ def decade_station_sync(request, decade_slug, station_slug):
     from library.models import Decade, DecadeStation
 
     try:
-        decade = Decade.objects.get(slug=decade_slug)
+        decade = Decade.objects.get(name=decade_slug)
     except Decade.DoesNotExist:
         return JsonResponse({"error": f"Decade '{decade_slug}' not found"}, status=404)
 

@@ -1301,8 +1301,7 @@ class DecadeStationInline(admin.TabularInline):
 @admin.register(Decade)
 class DecadeAdmin(admin.ModelAdmin):
     list_display = ["name", "year_min", "year_max", "station_count", "decade_track_count"]
-    prepopulated_fields = {"slug": ("name",)}
-    fields = ["name", "slug", "year_min", "year_max"]
+    fields = ["name"]
     inlines = [DecadeStationInline]
 
     @admin.display(description="Stations")
