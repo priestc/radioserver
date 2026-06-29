@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var testResult: String?
     @State private var isTesting = false
     @State private var showScanner = false
+    @State private var cacheCleared = false
 
     var body: some View {
         NavigationStack {
@@ -117,10 +118,20 @@ struct SettingsView: View {
 
                     Button("Clear Cache", role: .destructive) {
                         CacheManager.shared.clearCache()
+                        audioPlayer.cacheUpdateTick += 1
+                        cacheCleared = true
+                    }
+                    if cacheCleared {
+                        Text("Cache cleared.")
+                            .font(.caption)
+                            .foregroundColor(.green)
                     }
                 }
             }
-            .onAppear { audioPlayer.refreshCacheStats() }
+            .onAppear {
+                cacheCleared = false
+                audioPlayer.refreshCacheStats()
+            }
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {

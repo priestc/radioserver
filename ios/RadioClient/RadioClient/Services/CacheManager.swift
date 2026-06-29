@@ -48,6 +48,10 @@ class CacheManager {
         return Double(size) / (1024 * 1024)
     }
 
+    func cacheFileCount() -> Int {
+        (try? FileManager.default.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil))?.count ?? 0
+    }
+
     func totalCacheSizeMB() -> Double {
         dirSizeMB(cacheDir)
     }

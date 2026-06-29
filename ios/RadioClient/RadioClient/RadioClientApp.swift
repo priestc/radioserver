@@ -4,6 +4,7 @@ import SwiftUI
 struct RadioClientApp: App {
     @StateObject private var apiService = APIService.shared
     @StateObject private var audioPlayer = AudioPlayer.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -34,6 +35,13 @@ struct RadioClientApp: App {
                 audioPlayer.apiService = apiService
                 audioPlayer.startSyncTimer()
                 audioPlayer.fetchChannels()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                // Flush pendingPlayed immediately whenever the app becomes active
+                // so plays recorded while offline are reported to the server promptly.
+                audioPlayer.triggerSync()
             }
         }
     }

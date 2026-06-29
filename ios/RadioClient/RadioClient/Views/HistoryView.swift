@@ -55,6 +55,7 @@ extension LogKind {
         case .apiSuccess:      return "checkmark.circle.fill"
         case .apiFailure:      return "xmark.circle.fill"
         case .startup:         return "power.circle.fill"
+        case .cacheState:      return "internaldrive.fill"
         }
     }
 
@@ -68,6 +69,7 @@ extension LogKind {
         case .apiSuccess:      return .green
         case .apiFailure:      return .red
         case .startup:         return .purple
+        case .cacheState:      return .teal
         }
     }
 

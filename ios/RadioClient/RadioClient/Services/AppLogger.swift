@@ -9,6 +9,7 @@ enum LogKind: String, Codable {
     case apiSuccess
     case apiFailure
     case startup
+    case cacheState
 }
 
 struct LogEntry: Identifiable, Codable {

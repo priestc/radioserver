@@ -49,6 +49,7 @@ class AudioPlayer: ObservableObject {
     // Network monitoring
     private let networkMonitor = NWPathMonitor()
     private(set) var isCellular = false
+    private var wasNetworkConnected = false
 
     var apiService: APIService?
 
@@ -63,8 +64,15 @@ class AudioPlayer: ObservableObject {
 
     private func startNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
+            let isConnected = path.status == .satisfied
             DispatchQueue.main.async {
-                self?.isCellular = path.usesInterfaceType(.cellular)
+                guard let self else { return }
+                self.isCellular = path.usesInterfaceType(.cellular)
+                if isConnected && !self.wasNetworkConnected {
+                    // Network just came back — flush pendingPlayed immediately
+                    self.triggerSync()
+                }
+                self.wasNetworkConnected = isConnected
             }
         }
         networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
@@ -159,7 +167,9 @@ class AudioPlayer: ObservableObject {
         Task {
             if let channels = try? await api.fetchChannels() {
                 await MainActor.run { self.availableChannels = channels }
-                await syncBackgroundChannels()
+                // Do NOT call syncBackgroundChannels() here — background syncs
+                // must only run after an active sync has sent pendingPlayed,
+                // otherwise the server returns already-played songs for background channels.
             }
         }
     }
@@ -254,7 +264,7 @@ class AudioPlayer: ObservableObject {
         syncRetryTask = nil
     }
 
-    private func triggerSync() {
+    func triggerSync() {
         syncRetryTask?.cancel()
         syncBackoffSeconds = 2
         syncRetryTask = Task { await performSyncWithRetry() }
@@ -320,6 +330,7 @@ class AudioPlayer: ObservableObject {
                         do {
                             _ = try await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
                             AppLogger.shared.log(.downloadSuccess, "Cached: \"\(next.title)\" by \(next.artist) (low bitrate)")
+                            await logCacheState()
                         } catch {
                             AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(next.title)\" by \(next.artist): \(error.localizedDescription)")
                         }
@@ -339,6 +350,7 @@ class AudioPlayer: ObservableObject {
                         do {
                             _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
                             AppLogger.shared.log(.downloadSuccess, "Cached: \"\(item.title)\" by \(item.artist)")
+                            await logCacheState()
                         } catch {
                             AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
                         }
@@ -424,6 +436,7 @@ class AudioPlayer: ObservableObject {
                     do {
                         _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
                         AppLogger.shared.log(.downloadSuccess, "Cached (bg): \"\(item.title)\" by \(item.artist)")
+                        await logCacheState()
                     } catch {
                         AppLogger.shared.log(.downloadFailure, "Failed to cache (bg) \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
                     }
@@ -483,9 +496,9 @@ class AudioPlayer: ObservableObject {
     }
 
     func refreshCacheStats() {
-        // fetchChannels populates availableChannels then calls syncBackgroundChannels,
-        // which fills backgroundQueues and increments cacheUpdateTick for the UI.
-        fetchChannels()
+        // triggerSync flushes pendingPlayed first, then syncs background channels
+        // and increments cacheUpdateTick so the Settings cache display updates.
+        triggerSync()
     }
 
     /// Creates a silent, buffered AVPlayer for a background channel so that switching to it is near-instant.
@@ -710,7 +723,10 @@ class AudioPlayer: ObservableObject {
         if skip { return }
 
         if let diskImage = CacheManager.shared.cachedArtwork(for: albumId) {
-            await MainActor.run { self.artworkCache[albumId] = diskImage }
+            await MainActor.run {
+                self.artworkCache[albumId] = diskImage
+                if self.currentSong?.albumId == albumId { self.loadArtworkForCurrentSong() }
+            }
             return
         }
 
@@ -725,13 +741,55 @@ class AudioPlayer: ObservableObject {
             }
             if let image = UIImage(data: data) {
                 CacheManager.shared.saveArtwork(image, for: albumId)
-                await MainActor.run { self.artworkCache[albumId] = image }
+                await MainActor.run {
+                    self.artworkCache[albumId] = image
+                    if self.currentSong?.albumId == albumId { self.loadArtworkForCurrentSong() }
+                }
             } else {
                 await MainActor.run { self.artworkFailed.insert(albumId) }
             }
         } catch {
             // Network error — don't mark as failed so it can retry next sync
         }
+    }
+
+    private func logCacheState() async {
+        let count = CacheManager.shared.cacheFileCount()
+        let sizeMB = CacheManager.shared.totalCacheSizeMB()
+
+        let (allQueue, allBg, current) = await MainActor.run {
+            (self.queue, self.backgroundQueues, self.currentSong)
+        }
+
+        var seen = Set<Int>()
+        var runtimeSeconds = 0.0
+        let allItems = allQueue + allBg.values.flatMap { $0 } + [current].compactMap { $0 }
+        for item in allItems {
+            guard seen.insert(item.id).inserted else { continue }
+            let cached = CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) ||
+                         CacheManager.shared.hasCached(playlistItemId: item.id, ext: "mp3")
+            if cached, let d = item.duration {
+                runtimeSeconds += d
+            }
+        }
+
+        let hours = Int(runtimeSeconds) / 3600
+        let minutes = (Int(runtimeSeconds) % 3600) / 60
+        let seconds = Int(runtimeSeconds) % 60
+        let runtimeStr: String
+        if hours > 0 {
+            runtimeStr = "\(hours)h \(minutes)m"
+        } else if minutes > 0 {
+            runtimeStr = "\(minutes)m \(seconds)s"
+        } else {
+            runtimeStr = "\(seconds)s"
+        }
+
+        let sizeStr = sizeMB >= 1024
+            ? String(format: "%.1f GB", sizeMB / 1024)
+            : String(format: "%.0f MB", sizeMB)
+
+        AppLogger.shared.log(.cacheState, "Cache: \(count) songs · \(runtimeStr) · \(sizeStr)")
     }
 
     /// Returns audio cache size in MB for every channel (including ones not yet background-synced).
