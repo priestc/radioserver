@@ -13,7 +13,7 @@ struct HistoryView: View {
                         description: Text("App events will appear here.")
                     )
                 } else {
-                    List(logger.entries) { entry in
+                    List(logger.entries.filter { !$0.kind.isRequest }) { entry in
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: entry.kind.iconName)
                                 .foregroundColor(entry.kind.iconColor)
@@ -21,7 +21,6 @@ struct HistoryView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.message)
                                     .font(.caption)
-                                    .foregroundColor(entry.kind.isRequest ? .secondary : .primary)
                                 Text(entry.timestamp, style: .relative)
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
@@ -51,7 +50,7 @@ extension LogKind {
         case .trackSkipped:    return "forward.fill"
         case .downloadSuccess: return "arrow.down.circle.fill"
         case .downloadFailure: return "exclamationmark.circle.fill"
-        case .apiRequest:      return "arrow.up.circle"
+        case .apiRequest:      return ""
         case .apiSuccess:      return "checkmark.circle.fill"
         case .apiFailure:      return "xmark.circle.fill"
         case .startup:         return "power.circle.fill"
