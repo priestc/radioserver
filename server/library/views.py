@@ -235,10 +235,21 @@ def client_sync(request):
             started_at=now_playing["started_at"],
         )
 
+    # Never serve items with an ID at or below the highest ID already played.
+    # This prevents stale queued-but-never-reported songs from replaying after
+    # higher-ID songs have been played (e.g. after an offline session).
+    from django.db.models import Max
+    max_played_id = (
+        PlaylistItem.objects.filter(played_at__isnull=False, channel=channel)
+        .aggregate(max_id=Max("id"))["max_id"]
+    ) or 0
+    if now_playing:
+        max_played_id = max(max_played_id, now_playing["id"])
+
     # Auto-generate playlist for this channel if unplayed duration is under 1 hour
     from django.db.models import Sum
     unplayed_duration = (
-        PlaylistItem.objects.filter(played_at__isnull=True, channel=channel)
+        PlaylistItem.objects.filter(played_at__isnull=True, channel=channel, id__gt=max_played_id)
         .aggregate(total=Sum("track__duration"))["total"]
     ) or 0
     if unplayed_duration < 3600:
@@ -247,7 +258,9 @@ def client_sync(request):
 
     # Determine items to download
     buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
-    unplayed = PlaylistItem.objects.filter(played_at__isnull=True, channel=channel).select_related("track").order_by("id")
+    unplayed = PlaylistItem.objects.filter(
+        played_at__isnull=True, channel=channel, id__gt=max_played_id
+    ).select_related("track").order_by("id")
 
     unplayed = unplayed.select_related("track__album", "track__album__artist").prefetch_related("track__artists")
 
