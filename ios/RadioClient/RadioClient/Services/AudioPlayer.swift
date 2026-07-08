@@ -87,6 +87,10 @@ class AudioPlayer: ObservableObject {
         }
     }
 
+    func reactivateAudioSession() {
+        setupAudioSession()
+    }
+
     private func setupAudioSessionObservers() {
         NotificationCenter.default.addObserver(
             self,
@@ -634,6 +638,8 @@ class AudioPlayer: ObservableObject {
     }
 
     func play() {
+        // Re-activate audio session in case iOS deactivated it while the app was backgrounded
+        try? AVAudioSession.sharedInstance().setActive(true)
         if currentSong == nil {
             if queue.isEmpty {
                 triggerSync()

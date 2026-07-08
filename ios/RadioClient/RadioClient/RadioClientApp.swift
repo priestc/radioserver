@@ -39,6 +39,8 @@ struct RadioClientApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                // Re-activate audio session in case iOS deactivated it while backgrounded
+                audioPlayer.reactivateAudioSession()
                 // Flush pendingPlayed immediately whenever the app becomes active
                 // so plays recorded while offline are reported to the server promptly.
                 audioPlayer.triggerSync()
