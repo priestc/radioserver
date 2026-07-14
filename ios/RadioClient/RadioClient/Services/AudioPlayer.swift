@@ -20,6 +20,7 @@ class AudioPlayer: ObservableObject {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var statusObserver: NSKeyValueObservation?
     private var pendingPlayed: [PlayedSong] = []
     var artworkCache: [Int: UIImage] = [:]  // albumId -> image
     private var artworkFailed: Set<Int> = []  // albumIds with no artwork
@@ -89,6 +90,14 @@ class AudioPlayer: ObservableObject {
 
     func reactivateAudioSession() {
         setupAudioSession()
+        // If the player item failed while in the background, recreate it now so
+        // the user doesn't have to press play on a broken instance.
+        if let song = currentSong,
+           let item = player?.currentItem,
+           item.status == .failed {
+            AppLogger.shared.log(.playbackError, "Player item failed in background for \"\(song.title)\" — recreating on foreground")
+            playSong(song)
+        }
     }
 
     private func setupAudioSessionObservers() {
@@ -597,6 +606,13 @@ class AudioPlayer: ObservableObject {
         ) { [weak self] _ in
             self?.songDidFinish()
         }
+
+        statusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+            if item.status == .failed {
+                let desc = item.error?.localizedDescription ?? "unknown error"
+                AppLogger.shared.log(.playbackError, "Player item failed for \"\(song.title)\": \(desc)")
+            }
+        }
     }
 
     private func applyReplayGain(_ song: SongItem, to avPlayer: AVPlayer) {
@@ -660,6 +676,16 @@ class AudioPlayer: ObservableObject {
             AppLogger.shared.log(.playbackError, "Play tapped — player is nil for \"\(currentSong?.title ?? "?")\"")
             currentSong = nil
             triggerSync()
+            return
+        }
+        // If the player item has failed (can happen after a long background session),
+        // recreate the player for the current song rather than calling play() on a broken instance.
+        if let item = player.currentItem, item.status == .failed {
+            let desc = item.error?.localizedDescription ?? "unknown"
+            AppLogger.shared.log(.playbackError, "Recreating failed player for \"\(currentSong?.title ?? "?")\": \(desc)")
+            if let song = currentSong {
+                playSong(song)
+            }
             return
         }
         player.play()
@@ -852,6 +878,8 @@ class AudioPlayer: ObservableObject {
             NotificationCenter.default.removeObserver(obs)
             endObserver = nil
         }
+        statusObserver?.invalidate()
+        statusObserver = nil
     }
 
     // MARK: - Pending played persistence
