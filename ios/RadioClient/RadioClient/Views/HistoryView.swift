@@ -55,6 +55,7 @@ extension LogKind {
         case .apiFailure:      return "xmark.circle.fill"
         case .startup:         return "power.circle.fill"
         case .cacheState:      return "internaldrive.fill"
+        case .playbackError:   return "exclamationmark.triangle.fill"
         }
     }
 
@@ -69,6 +70,7 @@ extension LogKind {
         case .apiFailure:      return .red
         case .startup:         return .purple
         case .cacheState:      return .teal
+        case .playbackError:   return .red
         }
     }
 

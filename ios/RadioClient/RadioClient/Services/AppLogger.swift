@@ -10,6 +10,7 @@ enum LogKind: String, Codable {
     case apiFailure
     case startup
     case cacheState
+    case playbackError
 }
 
 struct LogEntry: Identifiable, Codable {

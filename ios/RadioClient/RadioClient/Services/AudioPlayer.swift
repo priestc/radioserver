@@ -287,7 +287,10 @@ class AudioPlayer: ObservableObject {
     }
 
     private func performSync() async -> Bool {
-        guard let api = apiService, api.isConfigured else { return false }
+        guard let api = apiService, api.isConfigured else {
+            AppLogger.shared.log(.playbackError, "Sync skipped — API not configured")
+            return false
+        }
 
         do {
             let played = pendingPlayed
@@ -385,7 +388,7 @@ class AudioPlayer: ObservableObject {
 
             return true
         } catch {
-            print("Sync failed: \(error)")
+            AppLogger.shared.log(.apiFailure, "Sync failed: \(error.localizedDescription)")
             return false
         }
     }
@@ -544,6 +547,7 @@ class AudioPlayer: ObservableObject {
             // Not cached yet — put back at front of queue; download loop will play it
             queue.insert(song, at: 0)
             currentSong = nil
+            AppLogger.shared.log(.playbackError, "Can't play \"\(song.title)\" — not cached yet")
             return
         }
         let fileURL = CacheManager.shared.fileURL(for: song.id, ext: ext)
@@ -638,17 +642,27 @@ class AudioPlayer: ObservableObject {
     }
 
     func play() {
-        // Re-activate audio session in case iOS deactivated it while the app was backgrounded
-        try? AVAudioSession.sharedInstance().setActive(true)
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            AppLogger.shared.log(.playbackError, "Audio session activation failed: \(error.localizedDescription)")
+        }
         if currentSong == nil {
             if queue.isEmpty {
+                AppLogger.shared.log(.playbackError, "Play tapped — queue empty, waiting for sync")
                 triggerSync()
             } else {
                 playNext()
             }
             return
         }
-        player?.play()
+        guard let player else {
+            AppLogger.shared.log(.playbackError, "Play tapped — player is nil for \"\(currentSong?.title ?? "?")\"")
+            currentSong = nil
+            triggerSync()
+            return
+        }
+        player.play()
         isPlaying = true
         updateNowPlaying()
     }
