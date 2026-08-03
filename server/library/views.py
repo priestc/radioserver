@@ -866,6 +866,49 @@ def autocomplete_artists(request):
     return JsonResponse({"suggestions": suggestions})
 
 
+def _ranked_track_suggestions(queryset, q, limit):
+    """Like _ranked_distinct_values, but for the Titles autocomplete: returns
+    up to `limit` full track dicts (id/artist/title/year/format/duration —
+    see docs/inspiration-server-autocomplete-api.md) instead of bare title
+    strings, so the client can add the exact track picked with no secondary
+    by-name lookup. Prefix title matches rank first, then alphabetically by
+    title; deduplicated by title (case-insensitive) — if more than one track
+    genuinely shares a title (e.g. a studio and a live version), either one
+    is a fine representative."""
+    from django.db.models import Case, IntegerField, Value, When
+
+    tracks = (
+        queryset
+        .annotate(_rank=Case(
+            When(title__istartswith=q, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ))
+        .order_by("_rank", "title")
+        .select_related("album", "album__artist")
+        .prefetch_related("artists")
+    )
+
+    suggestions = []
+    seen = set()
+    for t in tracks:
+        key = t.title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append({
+            "id": t.id,
+            "artist": t.display_artist,
+            "title": t.title,
+            "year": t.year,
+            "format": t.format,
+            "duration": t.duration,
+        })
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
 @require_api_key
 @require_GET
 def autocomplete_titles(request):
@@ -884,5 +927,5 @@ def autocomplete_titles(request):
             Q(artists__name__iexact=artist) | Q(album__artist__name__iexact=artist)
         )
 
-    suggestions = _ranked_distinct_values(qs, "title", q, limit)
+    suggestions = _ranked_track_suggestions(qs, q, limit)
     return JsonResponse({"suggestions": suggestions})
