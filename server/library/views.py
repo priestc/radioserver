@@ -9,7 +9,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from library.models import Album, ApiKey, GenreGroup, PlaylistItem, Track
+from library.models import Album, ApiKey, Artist, GenreGroup, PlaylistItem, Track
 
 
 def _file_response(path: Path) -> FileResponse:
@@ -792,3 +792,97 @@ def download_track(request, track_id):
         raise Http404
 
     return _file_response(path)
+
+
+AUTOCOMPLETE_DEFAULT_LIMIT = 10
+AUTOCOMPLETE_MAX_LIMIT = 25
+AUTOCOMPLETE_MIN_QUERY_LENGTH = 2
+
+
+def _parse_autocomplete_params(request):
+    """Parse and validate the shared `q`/`limit` query params.
+
+    Returns (q, limit, error_response); error_response is a JsonResponse
+    to return immediately if not None.
+    """
+    q = request.GET.get("q", "")
+    if not isinstance(q, str):
+        return None, None, JsonResponse({"error": "'q' must be a string"}, status=400)
+
+    limit = AUTOCOMPLETE_DEFAULT_LIMIT
+    limit_param = request.GET.get("limit")
+    if limit_param is not None:
+        try:
+            limit = int(limit_param)
+        except ValueError:
+            return None, None, JsonResponse({"error": "'limit' must be a positive integer"}, status=400)
+        if limit <= 0:
+            return None, None, JsonResponse({"error": "'limit' must be a positive integer"}, status=400)
+    limit = min(limit, AUTOCOMPLETE_MAX_LIMIT)
+
+    return q.strip(), limit, None
+
+
+def _ranked_distinct_values(queryset, field, q, limit):
+    """Return up to `limit` distinct values of `field`, prefix matches first,
+    then alphabetically within each group."""
+    from django.db.models import Case, IntegerField, Value, When
+
+    values = (
+        queryset
+        .annotate(_rank=Case(
+            When(**{f"{field}__istartswith": q}, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ))
+        .order_by("_rank", field)
+        .values_list(field, flat=True)
+    )
+
+    suggestions = []
+    seen = set()
+    for value in values:
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(value)
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
+@require_api_key
+@require_GET
+def autocomplete_artists(request):
+    q, limit, error = _parse_autocomplete_params(request)
+    if error:
+        return error
+    if len(q) < AUTOCOMPLETE_MIN_QUERY_LENGTH:
+        return JsonResponse({"suggestions": []})
+
+    qs = Artist.objects.filter(name__icontains=q)
+    suggestions = _ranked_distinct_values(qs, "name", q, limit)
+    return JsonResponse({"suggestions": suggestions})
+
+
+@require_api_key
+@require_GET
+def autocomplete_titles(request):
+    q, limit, error = _parse_autocomplete_params(request)
+    if error:
+        return error
+    if len(q) < AUTOCOMPLETE_MIN_QUERY_LENGTH:
+        return JsonResponse({"suggestions": []})
+
+    qs = Track.objects.filter(title__icontains=q)
+
+    artist = request.GET.get("artist")
+    if artist:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(artists__name__iexact=artist) | Q(album__artist__name__iexact=artist)
+        )
+
+    suggestions = _ranked_distinct_values(qs, "title", q, limit)
+    return JsonResponse({"suggestions": suggestions})
