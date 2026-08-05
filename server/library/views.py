@@ -1094,6 +1094,7 @@ def browse_artist_detail(request, artist_id):
 
 
 GENRE_COLLAGE_POOL = 6
+GENRE_MIN_ALBUMS = 3
 
 
 @require_GET
@@ -1120,22 +1121,24 @@ def browse_genres(request):
     for genre_name, album_id in genre_album_pairs:
         album_ids_by_genre.setdefault(genre_name, []).append(album_id)
 
-    return JsonResponse({
-        "genres": [
-            {
-                "name": g["genre"],
-                "count": g["count"],
-                # Random sample rather than a deterministic low-id-first pick —
-                # otherwise large genres consistently show the same handful of
-                # (often art-less, bulk-imported) low-id albums.
-                "album_ids": random.sample(
-                    album_ids_by_genre.get(g["genre"], []),
-                    min(len(album_ids_by_genre.get(g["genre"], [])), GENRE_COLLAGE_POOL),
-                ),
-            }
-            for g in genres
-        ]
-    })
+    result = []
+    for g in genres:
+        pool = album_ids_by_genre.get(g["genre"], [])
+        # Genres backed by only a couple of albums are usually mis-tagged
+        # one-off tracks rather than a real genre, and can't make a decent
+        # collage anyway — leave them off the genre browse page.
+        if len(pool) < GENRE_MIN_ALBUMS:
+            continue
+        result.append({
+            "name": g["genre"],
+            "count": g["count"],
+            # Random sample rather than a deterministic low-id-first pick —
+            # otherwise large genres consistently show the same handful of
+            # (often art-less, bulk-imported) low-id albums.
+            "album_ids": random.sample(pool, min(len(pool), GENRE_COLLAGE_POOL)),
+        })
+
+    return JsonResponse({"genres": result})
 
 
 GENRE_MIX_LIMIT = 100
