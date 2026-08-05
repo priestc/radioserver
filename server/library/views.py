@@ -1160,6 +1160,7 @@ def browse_genre_mix(request, genre):
                 "id": t.id,
                 "title": t.title,
                 "artist": t.display_artist,
+                "year": t.year,
                 "album": t.album.title if t.album else None,
                 "album_id": t.album_id,
                 "duration": t.duration,

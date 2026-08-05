@@ -96,7 +96,7 @@
     background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s; z-index: 50;
   }
   .card:hover .art .play-overlay { opacity: 1; }
-  .card .art.collage img.piece {
+  .art.collage img.piece {
     position: absolute; width: 58%; height: 58%; object-fit: cover;
     border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.65);
     border: 2px solid rgba(0,0,0,.35); background: #1e1e21;
@@ -120,7 +120,9 @@
 
   .detail-header { display: flex; gap: 24px; align-items: flex-end; margin-bottom: 24px; }
   .detail-header .art { width: 180px; height: 180px; border-radius: 8px; background: #1e1e21 center/cover no-repeat;
-    box-shadow: 0 8px 24px rgba(0,0,0,.4); flex: none; }
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); flex: none; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; }
+  .detail-header .art svg { width: 34%; height: 34%; opacity: .3; }
   .detail-header .meta .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); }
   .detail-header .meta h1 { font-size: 34px; margin: 6px 0; }
   .detail-header .meta .sub { color: var(--text-dim); font-size: 13px; }
@@ -435,9 +437,12 @@
     opts = opts || {};
     return '<div class="row-list">' + tracks.map(function (t, i) {
       var sub = opts.showAlbum ? (t.album || "") : (t.artist || "");
+      var main = opts.titleWithMeta
+        ? [t.artist, t.year, t.title].filter(Boolean).join(" - ")
+        : t.title;
       return '<div class="row-item" data-idx="' + i + '">' +
         '<div class="idx">' + (t.track_number || (i + 1)) + "</div>" +
-        '<div class="r-title">' + escapeHtml(t.title) + "</div>" +
+        '<div class="r-title">' + escapeHtml(main) + "</div>" +
         '<div class="r-sub">' + escapeHtml(sub) + "</div>" +
         '<div class="r-dur">' + formatDuration(t.duration) + "</div>" +
       "</div>";
@@ -516,19 +521,11 @@
     });
   }
 
-  function genreArtHtml(g) {
-    var ids = g.album_ids || [];
-    if (!ids.length) {
-      return '<div class="art">' + svgNote + '<div class="play-overlay">▶</div></div>';
-    }
-    if (ids.length === 1) {
-      return '<div class="art" style="background-image:url(\'' + COVER(ids[0]) + '\')">' +
-        '<div class="play-overlay">▶</div></div>';
-    }
-    // Scatter the covers haphazardly, like records tossed on a bed, rather
-    // than a strict grid. Each piece hides itself on load failure so a
-    // missing/invalid cover just quietly drops out of the pile.
-    var pieces = ids.map(function (id, i) {
+  // Scatter covers haphazardly, like records tossed on a bed, rather than a
+  // strict grid. Each piece hides itself on load failure so a missing/
+  // invalid cover just quietly drops out of the pile.
+  function scatterPiecesHtml(ids) {
+    return ids.map(function (id, i) {
       var angle = (Math.random() * 32 - 16).toFixed(1);
       var top = (Math.random() * 40).toFixed(1);
       var left = (Math.random() * 40).toFixed(1);
@@ -537,7 +534,38 @@
       return '<img class="piece" src="' + COVER(id) + '" style="' + style + '" ' +
         'loading="lazy" onerror="this.style.display=\'none\'">';
     }).join("");
-    return '<div class="art collage">' + pieces + '<div class="play-overlay">▶</div></div>';
+  }
+
+  function collageArtHtml(ids, extraInner) {
+    extraInner = extraInner || "";
+    if (!ids.length) {
+      return '<div class="art">' + svgNote + extraInner + "</div>";
+    }
+    if (ids.length === 1) {
+      return '<div class="art" style="background-image:url(\'' + COVER(ids[0]) + '\')">' +
+        extraInner + "</div>";
+    }
+    return '<div class="art collage">' + scatterPiecesHtml(ids) + extraInner + "</div>";
+  }
+
+  function genreArtHtml(g) {
+    return collageArtHtml(g.album_ids || [], '<div class="play-overlay">▶</div>');
+  }
+
+  function albumIdsFromTracks(tracks, limit) {
+    var ids = [];
+    var seen = {};
+    tracks.forEach(function (t) {
+      if (t.album_id && !seen[t.album_id]) {
+        seen[t.album_id] = true;
+        ids.push(t.album_id);
+      }
+    });
+    for (var i = ids.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+    }
+    return ids.slice(0, limit || 6);
   }
 
   function renderGenreList(genres) {
@@ -558,9 +586,10 @@
   }
 
   function renderGenreMix(genre, tracks) {
+    var headerAlbumIds = albumIdsFromTracks(tracks, 6);
     content.innerHTML =
       '<div class="detail-header">' +
-        '<div class="art">' + svgNote + "</div>" +
+        collageArtHtml(headerAlbumIds) +
         '<div class="meta">' +
           '<div class="kind">Genre Mix</div>' +
           "<h1>" + escapeHtml(genre) + "</h1>" +
@@ -568,7 +597,7 @@
           '<button class="play-btn" id="mix-play">▶</button>' +
         "</div>" +
       "</div>" +
-      trackRowsHtml(tracks, { showAlbum: true });
+      trackRowsHtml(tracks, { showAlbum: true, titleWithMeta: true });
 
     var listEl = content.querySelector(".row-list");
     function play(i) {
