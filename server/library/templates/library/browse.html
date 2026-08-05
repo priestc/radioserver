@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music</title>
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --bg-elevated: #161618;
+    --bg-hover: #232326;
+    --border: #2a2a2e;
+    --text: #f2f2f3;
+    --text-dim: #9a9a9e;
+    --accent: #1db954;
+    --sidebar-w: 200px;
+    --player-h: 86px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  #layout { display: flex; height: 100vh; }
+
+  #sidebar {
+    width: var(--sidebar-w); flex: none;
+    background: #000; padding: 20px 0; overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  #sidebar .brand {
+    font-size: 15px; font-weight: 700; letter-spacing: .02em;
+    padding: 0 20px 18px; color: var(--text);
+  }
+  #sidebar nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 20px; color: var(--text-dim); font-weight: 600; font-size: 13px;
+    border-left: 3px solid transparent;
+  }
+  #sidebar nav a.active { color: var(--text); border-left-color: var(--accent); background: var(--bg-elevated); }
+  #sidebar nav a:hover { color: var(--text); }
+  #sidebar .section-label {
+    padding: 18px 20px 6px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--text-dim);
+  }
+  #genre-list a { font-size: 12.5px; padding: 6px 20px; }
+  #genre-list .count { color: var(--text-dim); font-size: 11px; }
+
+  #main {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+  }
+  #topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  #topbar h1 { font-size: 20px; margin: 0; flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #search {
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 20px;
+    padding: 8px 14px; color: var(--text); font-size: 13px; width: 220px; outline: none;
+  }
+  #search:focus { border-color: var(--accent); }
+
+  #content { flex: 1; overflow-y: auto; padding: 24px 28px; padding-bottom: calc(var(--player-h) + 24px); }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px;
+  }
+  .card {
+    background: var(--bg-elevated); border-radius: 8px; padding: 12px; cursor: pointer;
+    transition: background .15s;
+  }
+  .card:hover { background: var(--bg-hover); }
+  .card .art {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; margin-bottom: 10px;
+    background: #1e1e21 center/cover no-repeat; position: relative;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .card .art svg { width: 34%; height: 34%; opacity: .3; }
+  .card .art .play-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s;
+  }
+  .card:hover .art .play-overlay { opacity: 1; }
+  .card .title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .sub { color: var(--text-dim); font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .row-list { display: flex; flex-direction: column; }
+  .row-item {
+    display: flex; align-items: center; gap: 14px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .row-item:hover { background: var(--bg-elevated); }
+  .row-item.playing { color: var(--accent); }
+  .row-item .idx { width: 22px; color: var(--text-dim); font-size: 12px; text-align: right; flex: none; }
+  .row-item .r-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-item .r-sub { color: var(--text-dim); font-size: 12px; flex: none; width: 160px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-item .r-dur { color: var(--text-dim); font-size: 12px; flex: none; width: 44px; text-align: right; }
+
+  .detail-header { display: flex; gap: 24px; align-items: flex-end; margin-bottom: 24px; }
+  .detail-header .art { width: 180px; height: 180px; border-radius: 8px; background: #1e1e21 center/cover no-repeat;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); flex: none; }
+  .detail-header .meta .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); }
+  .detail-header .meta h1 { font-size: 34px; margin: 6px 0; }
+  .detail-header .meta .sub { color: var(--text-dim); font-size: 13px; }
+  .play-btn {
+    background: var(--accent); color: #04240f; border: none; border-radius: 999px;
+    width: 48px; height: 48px; font-size: 18px; display: flex; align-items: center; justify-content: center;
+    margin-top: 14px;
+  }
+  .play-btn:hover { transform: scale(1.05); }
+
+  .empty-state { color: var(--text-dim); padding: 60px 0; text-align: center; }
+
+  #player {
+    height: var(--player-h); flex: none; border-top: 1px solid var(--border);
+    background: var(--bg-elevated); display: flex; align-items: center; gap: 18px;
+    padding: 0 20px; position: fixed; left: var(--sidebar-w); right: 0; bottom: 0;
+  }
+  #player .p-track { display: flex; align-items: center; gap: 12px; width: 260px; flex: none; min-width: 0; }
+  #player .p-art { width: 52px; height: 52px; border-radius: 5px; background: #1e1e21 center/cover no-repeat; flex: none; }
+  #player .p-meta { min-width: 0; }
+  #player .p-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #player .p-artist { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #player .p-center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; max-width: 640px; margin: 0 auto; }
+  #player .p-controls { display: flex; align-items: center; gap: 18px; }
+  #player .p-controls button { background: none; border: none; color: var(--text); font-size: 16px; }
+  #player .p-controls button:hover { color: var(--accent); }
+  #player .p-play { width: 32px; height: 32px; border-radius: 999px; background: var(--text); color: #000;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  #player .p-play:hover { color: #000; transform: scale(1.06); }
+  #player .p-seek-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+  #player .p-time { font-size: 11px; color: var(--text-dim); width: 36px; flex: none; }
+  #player .p-time.end { text-align: right; }
+  #player input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px;
+    background: var(--border); outline: none; }
+  #player input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--text); cursor: pointer; }
+  #player .p-volume { display: flex; align-items: center; gap: 8px; width: 140px; flex: none; justify-content: flex-end; }
+  #player .p-volume input[type=range] { width: 90px; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #2e2e32; border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<div id="layout">
+  <div id="sidebar">
+    <div class="brand">♪ Music</div>
+    <nav>
+      <a href="#/albums" data-route="albums">Albums</a>
+      <a href="#/artists" data-route="artists">Artists</a>
+      <a href="#/genres" data-route="genres">Genres</a>
+    </nav>
+    <div class="section-label">Genre Mixes</div>
+    <div id="genre-list"></div>
+  </div>
+
+  <div id="main">
+    <div id="topbar">
+      <h1 id="page-title">Albums</h1>
+      <input id="search" type="text" placeholder="Filter…">
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<div id="player">
+  <div class="p-track">
+    <div class="p-art" id="p-art"></div>
+    <div class="p-meta">
+      <div class="p-title" id="p-title">Nothing playing</div>
+      <div class="p-artist" id="p-artist">&nbsp;</div>
+    </div>
+  </div>
+  <div class="p-center">
+    <div class="p-controls">
+      <button id="p-prev" title="Previous">⏮</button>
+      <button class="p-play" id="p-playpause" title="Play/Pause">▶</button>
+      <button id="p-next" title="Next">⏭</button>
+    </div>
+    <div class="p-seek-row">
+      <span class="p-time" id="p-cur">0:00</span>
+      <input type="range" id="p-seek" min="0" max="1000" value="0">
+      <span class="p-time end" id="p-dur">0:00</span>
+    </div>
+  </div>
+  <div class="p-volume">
+    <span>🔊</span>
+    <input type="range" id="p-volume" min="0" max="100" value="100">
+  </div>
+</div>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script>
+(function () {
+  "use strict";
+
+  var API = "/library/api/browse/";
+  var COVER = function (albumId) { return "/library/cover/" + albumId + "/"; };
+  var STREAM = function (trackId) { return API + "stream/" + trackId + "/"; };
+
+  var content = document.getElementById("content");
+  var pageTitle = document.getElementById("page-title");
+  var searchBox = document.getElementById("search");
+  var genreListEl = document.getElementById("genre-list");
+
+  var svgNote = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+
+  // -------------------- data cache --------------------
+  var cache = { albums: null, artists: null, genres: null };
+
+  function fetchJSON(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("Request failed: " + url + " (" + r.status + ")");
+      return r.json();
+    });
+  }
+
+  function showError(msg) {
+    content.innerHTML = '<div class="empty-state">Failed to load: ' + escapeHtml(msg) + "</div>";
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function formatDuration(sec) {
+    if (sec == null || isNaN(sec)) return "--:--";
+    sec = Math.floor(sec);
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  // -------------------- player --------------------
+  var Player = (function () {
+    var audio = document.getElementById("audio");
+    var queue = [];
+    var index = -1;
+    var playBtn = document.getElementById("p-playpause");
+    var seek = document.getElementById("p-seek");
+    var curEl = document.getElementById("p-cur");
+    var durEl = document.getElementById("p-dur");
+    var titleEl = document.getElementById("p-title");
+    var artistEl = document.getElementById("p-artist");
+    var artEl = document.getElementById("p-art");
+    var volume = document.getElementById("p-volume");
+    var seeking = false;
+    var onQueueChange = null;
+
+    function trackCoverUrl(t) {
+      return t.album_id ? COVER(t.album_id) : "";
+    }
+
+    function load(i, autoplay) {
+      if (i < 0 || i >= queue.length) return;
+      index = i;
+      var t = queue[index];
+      audio.src = STREAM(t.id);
+      titleEl.textContent = t.title;
+      artistEl.textContent = t.artist || "";
+      var cover = trackCoverUrl(t);
+      artEl.style.backgroundImage = cover ? "url('" + cover + "')" : "none";
+      if (autoplay !== false) {
+        audio.play().catch(function () {});
+      }
+      if (onQueueChange) onQueueChange();
+    }
+
+    function playQueue(tracks, startIndex) {
+      queue = tracks.slice();
+      load(startIndex || 0, true);
+    }
+
+    function togglePlay() {
+      if (index === -1) return;
+      if (audio.paused) audio.play().catch(function () {});
+      else audio.pause();
+    }
+
+    function next() {
+      if (index < queue.length - 1) load(index + 1, true);
+    }
+    function prev() {
+      if (audio.currentTime > 3) {
+        audio.currentTime = 0;
+        return;
+      }
+      if (index > 0) load(index - 1, true);
+    }
+
+    audio.addEventListener("play", function () { playBtn.textContent = "⏸"; });
+    audio.addEventListener("pause", function () { playBtn.textContent = "▶"; });
+    audio.addEventListener("ended", next);
+    audio.addEventListener("error", function () {
+      titleEl.textContent = "Playback error";
+    });
+    audio.addEventListener("timeupdate", function () {
+      if (seeking) return;
+      curEl.textContent = formatDuration(audio.currentTime);
+      if (audio.duration) seek.value = (audio.currentTime / audio.duration) * 1000;
+    });
+    audio.addEventListener("loadedmetadata", function () {
+      durEl.textContent = formatDuration(audio.duration);
+    });
+
+    document.getElementById("p-playpause").addEventListener("click", togglePlay);
+    document.getElementById("p-next").addEventListener("click", next);
+    document.getElementById("p-prev").addEventListener("click", prev);
+
+    seek.addEventListener("input", function () { seeking = true; });
+    seek.addEventListener("change", function () {
+      if (audio.duration) audio.currentTime = (seek.value / 1000) * audio.duration;
+      seeking = false;
+    });
+
+    volume.addEventListener("input", function () {
+      audio.volume = volume.value / 100;
+    });
+
+    return {
+      playQueue: playQueue,
+      togglePlay: togglePlay,
+      next: next,
+      prev: prev,
+      currentTrackId: function () { return index >= 0 && queue[index] ? queue[index].id : null; },
+      onChange: function (fn) { onQueueChange = fn; },
+    };
+  })();
+
+  // -------------------- sidebar genres --------------------
+  function loadGenreSidebar() {
+    fetchJSON(API + "genres/").then(function (data) {
+      cache.genres = data.genres;
+      genreListEl.innerHTML = data.genres.map(function (g) {
+        return '<a href="#/genre/' + encodeURIComponent(g.name) + '" data-genre="' + escapeHtml(g.name) + '">' +
+          escapeHtml(g.name) + ' <span class="count">' + g.count + "</span></a>";
+      }).join("");
+    }).catch(function () {});
+  }
+
+  // -------------------- views --------------------
+  function renderAlbumGrid(albums) {
+    if (!albums.length) {
+      content.innerHTML = '<div class="empty-state">No albums found.</div>';
+      return;
+    }
+    content.innerHTML = '<div class="grid">' + albums.map(function (a) {
+      return '<div class="card" data-href="#/album/' + a.id + '">' +
+        '<div class="art" style="background-image:url(\'' + COVER(a.id) + '\')">' +
+          '<div class="play-overlay">▶</div>' +
+        "</div>" +
+        '<div class="title">' + escapeHtml(a.title) + '</div>' +
+        '<div class="sub">' + escapeHtml(a.artist) + (a.year ? " · " + a.year : "") + "</div>" +
+      "</div>";
+    }).join("") + "</div>";
+    Array.prototype.forEach.call(content.querySelectorAll(".card"), function (el) {
+      el.addEventListener("click", function () { location.hash = el.getAttribute("data-href"); });
+    });
+  }
+
+  function renderArtistGrid(artists) {
+    if (!artists.length) {
+      content.innerHTML = '<div class="empty-state">No artists found.</div>';
+      return;
+    }
+    content.innerHTML = '<div class="grid">' + artists.map(function (a) {
+      return '<div class="card" data-href="#/artist/' + a.id + '">' +
+        '<div class="art">' + svgNote + "</div>" +
+        '<div class="title">' + escapeHtml(a.name) + '</div>' +
+        '<div class="sub">' + a.album_count + (a.album_count === 1 ? " album" : " albums") + "</div>" +
+      "</div>";
+    }).join("") + "</div>";
+    Array.prototype.forEach.call(content.querySelectorAll(".card"), function (el) {
+      el.addEventListener("click", function () { location.hash = el.getAttribute("data-href"); });
+    });
+  }
+
+  function trackRowsHtml(tracks, opts) {
+    opts = opts || {};
+    return '<div class="row-list">' + tracks.map(function (t, i) {
+      var sub = opts.showAlbum ? (t.album || "") : (t.artist || "");
+      return '<div class="row-item" data-idx="' + i + '">' +
+        '<div class="idx">' + (t.track_number || (i + 1)) + "</div>" +
+        '<div class="r-title">' + escapeHtml(t.title) + "</div>" +
+        '<div class="r-sub">' + escapeHtml(sub) + "</div>" +
+        '<div class="r-dur">' + formatDuration(t.duration) + "</div>" +
+      "</div>";
+    }).join("") + "</div>";
+  }
+
+  function bindTrackRows(container, tracks) {
+    var rows = container.querySelectorAll(".row-item");
+    Array.prototype.forEach.call(rows, function (row, i) {
+      row.addEventListener("click", function () {
+        Player.playQueue(tracks, i);
+        highlightPlaying(container, tracks);
+      });
+    });
+  }
+
+  function highlightPlaying(container, tracks) {
+    var id = Player.currentTrackId();
+    var rows = container.querySelectorAll(".row-item");
+    Array.prototype.forEach.call(rows, function (row, i) {
+      row.classList.toggle("playing", tracks[i] && tracks[i].id === id);
+    });
+  }
+
+  function renderAlbumDetail(album) {
+    var tracks = album.tracks.map(function (t) {
+      return { id: t.id, title: t.title, artist: t.artist, duration: t.duration,
+               track_number: t.track_number, album_id: album.id, album: album.title };
+    });
+    content.innerHTML =
+      '<div class="detail-header">' +
+        '<div class="art" style="background-image:url(\'' + COVER(album.id) + '\')"></div>' +
+        '<div class="meta">' +
+          '<div class="kind">Album</div>' +
+          "<h1>" + escapeHtml(album.title) + "</h1>" +
+          '<div class="sub"><a href="#/artist/' + album.artist_id + '">' + escapeHtml(album.artist) + "</a>" +
+            (album.year ? " · " + album.year : "") + " · " + tracks.length + " tracks</div>" +
+          '<button class="play-btn" id="album-play">▶</button>' +
+        "</div>" +
+      "</div>" +
+      trackRowsHtml(tracks, { showAlbum: false });
+
+    var listEl = content.querySelector(".row-list");
+    bindTrackRows(listEl, tracks);
+    document.getElementById("album-play").addEventListener("click", function () {
+      Player.playQueue(tracks, 0);
+      highlightPlaying(listEl, tracks);
+    });
+    Player.onChange(function () { highlightPlaying(listEl, tracks); });
+  }
+
+  function renderArtistDetail(artist) {
+    content.innerHTML =
+      '<div class="detail-header">' +
+        '<div class="art">' + svgNote + "</div>" +
+        '<div class="meta">' +
+          '<div class="kind">Artist</div>' +
+          "<h1>" + escapeHtml(artist.name) + "</h1>" +
+          '<div class="sub">' + artist.albums.length + " albums</div>" +
+        "</div>" +
+      "</div>" +
+      '<div class="grid">' + artist.albums.map(function (a) {
+        return '<div class="card" data-href="#/album/' + a.id + '">' +
+          '<div class="art" style="background-image:url(\'' + COVER(a.id) + '\')">' +
+            '<div class="play-overlay">▶</div>' +
+          "</div>" +
+          '<div class="title">' + escapeHtml(a.title) + '</div>' +
+          '<div class="sub">' + (a.year || "") + "</div>" +
+        "</div>";
+      }).join("") + "</div>";
+    Array.prototype.forEach.call(content.querySelectorAll(".card"), function (el) {
+      el.addEventListener("click", function () { location.hash = el.getAttribute("data-href"); });
+    });
+  }
+
+  function renderGenreList(genres) {
+    if (!genres.length) {
+      content.innerHTML = '<div class="empty-state">No genres tagged yet.</div>';
+      return;
+    }
+    content.innerHTML = '<div class="grid">' + genres.map(function (g) {
+      return '<div class="card" data-href="#/genre/' + encodeURIComponent(g.name) + '">' +
+        '<div class="art">' + svgNote + "</div>" +
+        '<div class="title">' + escapeHtml(g.name) + '</div>' +
+        '<div class="sub">' + g.count + " tracks</div>" +
+      "</div>";
+    }).join("") + "</div>";
+    Array.prototype.forEach.call(content.querySelectorAll(".card"), function (el) {
+      el.addEventListener("click", function () { location.hash = el.getAttribute("data-href"); });
+    });
+  }
+
+  function renderGenreMix(genre, tracks) {
+    content.innerHTML =
+      '<div class="detail-header">' +
+        '<div class="art">' + svgNote + "</div>" +
+        '<div class="meta">' +
+          '<div class="kind">Genre Mix</div>' +
+          "<h1>" + escapeHtml(genre) + "</h1>" +
+          '<div class="sub">' + tracks.length + " tracks · shuffled</div>" +
+          '<button class="play-btn" id="mix-play">▶</button>' +
+        "</div>" +
+      "</div>" +
+      trackRowsHtml(tracks, { showAlbum: true });
+
+    var listEl = content.querySelector(".row-list");
+    bindTrackRows(listEl, tracks);
+    document.getElementById("mix-play").addEventListener("click", function () {
+      Player.playQueue(tracks, 0);
+      highlightPlaying(listEl, tracks);
+    });
+    Player.onChange(function () { highlightPlaying(listEl, tracks); });
+  }
+
+  // -------------------- filter (client-side) --------------------
+  function applyFilter(route, allItems) {
+    var q = searchBox.value.trim().toLowerCase();
+    if (!q) return allItems;
+    return allItems.filter(function (item) {
+      var haystack = (item.title || item.name || "") + " " + (item.artist || "");
+      return haystack.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  // -------------------- router --------------------
+  var currentRoute = null;
+
+  function setActiveNav(routeKey) {
+    Array.prototype.forEach.call(document.querySelectorAll("#sidebar nav a"), function (a) {
+      a.classList.toggle("active", a.getAttribute("data-route") === routeKey);
+    });
+  }
+
+  function route() {
+    var hash = location.hash.replace(/^#\/?/, "");
+    var parts = hash.split("/").filter(Boolean);
+    searchBox.value = "";
+    setActiveNav(parts[0] || "albums");
+
+    if (!parts.length || parts[0] === "albums") {
+      currentRoute = "albums";
+      pageTitle.textContent = "Albums";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "albums/").then(function (data) {
+        cache.albums = data.albums;
+        renderAlbumGrid(data.albums);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "artists") {
+      currentRoute = "artists";
+      pageTitle.textContent = "Artists";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "artists/").then(function (data) {
+        cache.artists = data.artists;
+        renderArtistGrid(data.artists);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "genres") {
+      currentRoute = "genres";
+      pageTitle.textContent = "Genres";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "genres/").then(function (data) {
+        cache.genres = data.genres;
+        renderGenreList(data.genres);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "album" && parts[1]) {
+      currentRoute = null;
+      pageTitle.textContent = "Album";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "albums/" + parts[1] + "/").then(function (album) {
+        pageTitle.textContent = album.title;
+        renderAlbumDetail(album);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "artist" && parts[1]) {
+      currentRoute = null;
+      pageTitle.textContent = "Artist";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "artists/" + parts[1] + "/").then(function (artist) {
+        pageTitle.textContent = artist.name;
+        renderArtistDetail(artist);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "genre" && parts[1]) {
+      currentRoute = null;
+      var genreName = decodeURIComponent(parts[1]);
+      pageTitle.textContent = genreName;
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "genres/" + encodeURIComponent(genreName) + "/tracks/").then(function (data) {
+        renderGenreMix(data.genre, data.tracks);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    location.hash = "#/albums";
+  }
+
+  window.addEventListener("hashchange", route);
+
+  searchBox.addEventListener("input", function () {
+    if (currentRoute === "albums" && cache.albums) renderAlbumGrid(applyFilter("albums", cache.albums));
+    else if (currentRoute === "artists" && cache.artists) renderArtistGrid(applyFilter("artists", cache.artists));
+    else if (currentRoute === "genres" && cache.genres) {
+      var q = searchBox.value.trim().toLowerCase();
+      renderGenreList(!q ? cache.genres : cache.genres.filter(function (g) {
+        return g.name.toLowerCase().indexOf(q) !== -1;
+      }));
+    }
+  });
+
+  loadGenreSidebar();
+  route();
+})();
+</script>
+</body>
+</html>

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import functools
 import json
+import mimetypes
+import random
+import re
 from io import BytesIO
 from pathlib import Path
 
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -929,3 +933,200 @@ def autocomplete_titles(request):
 
     suggestions = _ranked_track_suggestions(qs, q, limit)
     return JsonResponse({"suggestions": suggestions})
+
+
+# ---------------------------------------------------------------------------
+# Browse UI — unauthenticated, browser-facing album/artist/genre/playback
+# ---------------------------------------------------------------------------
+
+def browse_page(request):
+    return render(request, "library/browse.html")
+
+
+@require_GET
+def browse_albums(request):
+    albums = Album.objects.select_related("artist").order_by(
+        "artist__sort_name", "artist__name", "year", "title"
+    )
+    return JsonResponse({
+        "albums": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "artist": a.artist.name,
+                "artist_id": a.artist_id,
+                "year": a.year,
+            }
+            for a in albums
+        ]
+    })
+
+
+@require_GET
+def browse_album_detail(request, album_id):
+    try:
+        album = Album.objects.select_related("artist").get(pk=album_id)
+    except Album.DoesNotExist:
+        raise Http404
+
+    tracks = album.tracks.prefetch_related("artists")
+    return JsonResponse({
+        "id": album.id,
+        "title": album.title,
+        "artist": album.artist.name,
+        "artist_id": album.artist_id,
+        "year": album.year,
+        "tracks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "track_number": t.track_number,
+                "disc_number": t.disc_number,
+                "duration": t.duration,
+                "artist": t.display_artist,
+            }
+            for t in tracks
+        ],
+    })
+
+
+@require_GET
+def browse_artists(request):
+    from django.db.models import Count
+
+    artists = (
+        Artist.objects.annotate(album_count=Count("albums", distinct=True))
+        .filter(album_count__gt=0)
+        .order_by("sort_name", "name")
+    )
+    return JsonResponse({
+        "artists": [
+            {"id": ar.id, "name": ar.name, "album_count": ar.album_count}
+            for ar in artists
+        ]
+    })
+
+
+@require_GET
+def browse_artist_detail(request, artist_id):
+    try:
+        artist = Artist.objects.get(pk=artist_id)
+    except Artist.DoesNotExist:
+        raise Http404
+
+    albums = artist.albums.order_by("year", "title")
+    return JsonResponse({
+        "id": artist.id,
+        "name": artist.name,
+        "albums": [
+            {"id": al.id, "title": al.title, "year": al.year}
+            for al in albums
+        ],
+    })
+
+
+@require_GET
+def browse_genres(request):
+    from django.db.models import Count
+
+    genres = (
+        Track.objects.exclude(genre="")
+        .values("genre")
+        .annotate(count=Count("id"))
+        .order_by("genre")
+    )
+    return JsonResponse({
+        "genres": [{"name": g["genre"], "count": g["count"]} for g in genres]
+    })
+
+
+GENRE_MIX_LIMIT = 100
+
+
+@require_GET
+def browse_genre_mix(request, genre):
+    tracks = list(
+        Track.objects.filter(genre__iexact=genre, exclude_from_playlist=False)
+        .select_related("album", "album__artist")
+        .prefetch_related("artists")
+    )
+    random.shuffle(tracks)
+    tracks = tracks[:GENRE_MIX_LIMIT]
+    return JsonResponse({
+        "genre": genre,
+        "tracks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "artist": t.display_artist,
+                "album": t.album.title if t.album else None,
+                "album_id": t.album_id,
+                "duration": t.duration,
+            }
+            for t in tracks
+        ],
+    })
+
+
+RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
+STREAM_CHUNK_SIZE = 8192
+
+
+def _ranged_file_stream(path, start, length):
+    with open(path, "rb") as f:
+        f.seek(start)
+        remaining = length
+        while remaining > 0:
+            chunk = f.read(min(STREAM_CHUNK_SIZE, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+@require_GET
+def browse_stream_track(request, track_id):
+    """Stream a track for inline browser playback, honoring Range requests
+    (needed for seeking in an <audio> element) — Django's FileResponse does
+    not implement Range support itself, so it's handled manually here."""
+    try:
+        track = Track.objects.get(pk=track_id)
+    except Track.DoesNotExist:
+        raise Http404
+
+    path = Path(track.file_path)
+    if not path.is_file():
+        raise Http404
+
+    file_size = path.stat().st_size
+    content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+
+    range_header = request.headers.get("Range", "")
+    range_match = RANGE_RE.match(range_header) if range_header else None
+
+    if range_match:
+        start_str, end_str = range_match.groups()
+        start = int(start_str) if start_str else 0
+        end = int(end_str) if end_str else file_size - 1
+        end = min(end, file_size - 1)
+        if start >= file_size or start > end:
+            response = HttpResponse(status=416)
+            response["Content-Range"] = f"bytes */{file_size}"
+            return response
+
+        length = end - start + 1
+        response = StreamingHttpResponse(
+            _ranged_file_stream(path, start, length),
+            status=206,
+            content_type=content_type,
+        )
+        response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        response["Content-Length"] = str(length)
+    else:
+        response = FileResponse(open(path, "rb"), content_type=content_type)
+        response["Content-Length"] = str(file_size)
+
+    response["Accept-Ranges"] = "bytes"
+    response["Content-Disposition"] = "inline"
+    response["Cache-Control"] = "no-cache"
+    return response
