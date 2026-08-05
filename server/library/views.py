@@ -987,6 +987,7 @@ def browse_search(request):
     genre_names = (
         Track.objects.filter(genre__icontains=q)
         .exclude(genre="")
+        .order_by()
         .values_list("genre", flat=True)
         .distinct()[:10]
     )
@@ -1110,6 +1111,9 @@ def browse_genres(request):
     genre_album_pairs = (
         Track.objects.exclude(genre="")
         .filter(album__isnull=False)
+        # Track's default Meta.ordering rides along into this query's ORDER
+        # BY, which breaks .distinct() on just (genre, album_id) — clear it.
+        .order_by()
         .values_list("genre", "album_id")
         .distinct()
     )
