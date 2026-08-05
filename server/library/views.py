@@ -1092,6 +1092,9 @@ def browse_artist_detail(request, artist_id):
     })
 
 
+GENRE_COLLAGE_ALBUMS = 4
+
+
 @require_GET
 def browse_genres(request):
     from django.db.models import Count
@@ -1102,8 +1105,29 @@ def browse_genres(request):
         .annotate(count=Count("id"))
         .order_by("genre")
     )
+
+    album_ids_by_genre = {}
+    genre_album_pairs = (
+        Track.objects.exclude(genre="")
+        .filter(album__isnull=False)
+        .values_list("genre", "album_id")
+        .distinct()
+        .order_by("genre", "album_id")
+    )
+    for genre_name, album_id in genre_album_pairs:
+        bucket = album_ids_by_genre.setdefault(genre_name, [])
+        if len(bucket) < GENRE_COLLAGE_ALBUMS:
+            bucket.append(album_id)
+
     return JsonResponse({
-        "genres": [{"name": g["genre"], "count": g["count"]} for g in genres]
+        "genres": [
+            {
+                "name": g["genre"],
+                "count": g["count"],
+                "album_ids": album_ids_by_genre.get(g["genre"], []),
+            }
+            for g in genres
+        ]
     })
 
 

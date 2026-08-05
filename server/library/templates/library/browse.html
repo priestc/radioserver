@@ -96,6 +96,10 @@
     background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s;
   }
   .card:hover .art .play-overlay { opacity: 1; }
+  .card .art.collage {
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px;
+  }
+  .card .art.collage .tile { background: #1e1e21 center/cover no-repeat; }
   .card .title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card .sub { color: var(--text-dim); font-size: 12px;
@@ -511,6 +515,23 @@
     });
   }
 
+  function genreArtHtml(g) {
+    var ids = g.album_ids || [];
+    if (!ids.length) {
+      return '<div class="art">' + svgNote + '<div class="play-overlay">▶</div></div>';
+    }
+    if (ids.length === 1) {
+      return '<div class="art" style="background-image:url(\'' + COVER(ids[0]) + '\')">' +
+        '<div class="play-overlay">▶</div></div>';
+    }
+    var tiles = [];
+    for (var i = 0; i < 4; i++) {
+      var id = ids[i % ids.length];
+      tiles.push('<div class="tile" style="background-image:url(\'' + COVER(id) + '\')"></div>');
+    }
+    return '<div class="art collage">' + tiles.join("") + '<div class="play-overlay">▶</div></div>';
+  }
+
   function renderGenreList(genres) {
     if (!genres.length) {
       content.innerHTML = '<div class="empty-state">No genres tagged yet.</div>';
@@ -518,7 +539,7 @@
     }
     content.innerHTML = '<div class="grid">' + genres.map(function (g) {
       return '<div class="card" data-href="#/genre/' + encodeURIComponent(g.name) + '">' +
-        '<div class="art">' + svgNote + "</div>" +
+        genreArtHtml(g) +
         '<div class="title">' + escapeHtml(g.name) + '</div>' +
         '<div class="sub">' + g.count + " tracks</div>" +
       "</div>";
