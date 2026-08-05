@@ -943,6 +943,73 @@ def browse_page(request):
     return render(request, "library/browse.html")
 
 
+def search_landing_page(request):
+    return render(request, "library/search.html")
+
+
+def _search_rank(name, q_lower):
+    name_lower = name.lower()
+    if name_lower == q_lower:
+        return 0
+    if name_lower.startswith(q_lower):
+        return 1
+    return 2
+
+
+SEARCH_TYPE_PRIORITY = {"artist": 0, "album": 1, "genre": 2, "track": 3}
+
+
+@require_GET
+def browse_search(request):
+    """Find the single best-matching artist/album/genre/track for a free-text
+    query and return the browse-page destination for it, so the top-level
+    search box can jump straight to "the corresponding page" rather than
+    showing a results list."""
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return JsonResponse({"result": None})
+
+    q_lower = q.lower()
+    candidates = []
+
+    for artist in Artist.objects.filter(name__icontains=q)[:5]:
+        candidates.append((
+            _search_rank(artist.name, q_lower), SEARCH_TYPE_PRIORITY["artist"],
+            {"type": "artist", "id": artist.id, "label": artist.name},
+        ))
+
+    for album in Album.objects.filter(title__icontains=q).select_related("artist")[:5]:
+        candidates.append((
+            _search_rank(album.title, q_lower), SEARCH_TYPE_PRIORITY["album"],
+            {"type": "album", "id": album.id, "label": album.title},
+        ))
+
+    genre_names = (
+        Track.objects.filter(genre__icontains=q)
+        .exclude(genre="")
+        .values_list("genre", flat=True)
+        .distinct()[:10]
+    )
+    for genre in genre_names:
+        candidates.append((
+            _search_rank(genre, q_lower), SEARCH_TYPE_PRIORITY["genre"],
+            {"type": "genre", "name": genre, "label": genre},
+        ))
+
+    for track in Track.objects.filter(title__icontains=q).select_related("album")[:5]:
+        if track.album_id:
+            candidates.append((
+                _search_rank(track.title, q_lower), SEARCH_TYPE_PRIORITY["track"],
+                {"type": "album", "id": track.album_id, "label": f"{track.title} (track)"},
+            ))
+
+    if not candidates:
+        return JsonResponse({"result": None})
+
+    candidates.sort(key=lambda c: (c[0], c[1]))
+    return JsonResponse({"result": candidates[0][2]})
+
+
 @require_GET
 def browse_albums(request):
     albums = Album.objects.select_related("artist").order_by(

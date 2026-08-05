@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music</title>
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --bg-elevated: #161618;
+    --border: #2a2a2e;
+    --text: #f2f2f3;
+    --text-dim: #9a9a9e;
+    --accent: #1db954;
+    --error: #f15c5c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  #wrap {
+    height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; padding: 20px;
+  }
+  .brand { font-size: 22px; font-weight: 700; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
+  form { width: 100%; max-width: 480px; display: flex; gap: 10px; }
+  #q {
+    flex: 1; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px;
+    padding: 14px 20px; font-size: 15px; color: var(--text); outline: none;
+  }
+  #q:focus { border-color: var(--accent); }
+  button[type=submit] {
+    background: var(--accent); color: #04240f; border: none; border-radius: 999px;
+    padding: 0 22px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  button[type=submit]:hover { filter: brightness(1.08); }
+  button[type=submit]:disabled { opacity: .6; cursor: default; }
+  #status { min-height: 20px; font-size: 13px; color: var(--text-dim); text-align: center; }
+  #status.error { color: var(--error); }
+  .browse-link { font-size: 12.5px; color: var(--text-dim); }
+  .browse-link a { color: var(--text-dim); text-decoration: underline; }
+  .browse-link a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="brand">♪ Music</div>
+  <form id="search-form">
+    <input id="q" type="text" placeholder="Search artists, albums, genres, songs…" autofocus autocomplete="off">
+    <button type="submit" id="go-btn">Go</button>
+  </form>
+  <div id="status"></div>
+  <div class="browse-link"><a href="/library/browse/">browse the full library</a></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var form = document.getElementById("search-form");
+  var input = document.getElementById("q");
+  var status = document.getElementById("status");
+  var goBtn = document.getElementById("go-btn");
+
+  function destinationUrl(result) {
+    if (result.type === "artist") return "/library/browse/#/artist/" + result.id;
+    if (result.type === "album") return "/library/browse/#/album/" + result.id;
+    if (result.type === "genre") return "/library/browse/#/genre/" + encodeURIComponent(result.name);
+    return null;
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var q = input.value.trim();
+    if (!q) return;
+
+    status.className = "";
+    status.textContent = "Searching…";
+    goBtn.disabled = true;
+
+    fetch("/library/api/browse/search/?q=" + encodeURIComponent(q))
+      .then(function (r) {
+        if (!r.ok) throw new Error("Search failed (" + r.status + ")");
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data.result) {
+          status.className = "error";
+          status.textContent = "No matches for “" + q + "”.";
+          goBtn.disabled = false;
+          return;
+        }
+        var url = destinationUrl(data.result);
+        if (!url) {
+          status.className = "error";
+          status.textContent = "Couldn't determine a page for that result.";
+          goBtn.disabled = false;
+          return;
+        }
+        window.location.href = url;
+      })
+      .catch(function (err) {
+        status.className = "error";
+        status.textContent = err.message || "Search failed.";
+        goBtn.disabled = false;
+      });
+  });
+})();
+</script>
+</body>
+</html>

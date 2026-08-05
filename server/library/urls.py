@@ -27,6 +27,7 @@ urlpatterns = [
     path("api/browse/genres/", views.browse_genres, name="browse_genres"),
     path("api/browse/genres/<str:genre>/tracks/", views.browse_genre_mix, name="browse_genre_mix"),
     path("api/browse/stream/<int:track_id>/", views.browse_stream_track, name="browse_stream_track"),
+    path("api/browse/search/", views.browse_search, name="browse_search"),
     path("video_frame/<int:video_channel_id>/<int:frame_number>/", views.video_frame, name="video_frame"),
     path("video_audio/<int:video_channel_id>/", views.video_audio, name="video_audio"),
 ]
