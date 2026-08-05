@@ -93,13 +93,14 @@
   .card .art svg { width: 34%; height: 34%; opacity: .3; }
   .card .art .play-overlay {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s;
+    background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s; z-index: 50;
   }
   .card:hover .art .play-overlay { opacity: 1; }
-  .card .art.collage {
-    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px;
+  .card .art.collage img.piece {
+    position: absolute; width: 58%; height: 58%; object-fit: cover;
+    border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.65);
+    border: 2px solid rgba(0,0,0,.35); background: #1e1e21;
   }
-  .card .art.collage .tile { background: #1e1e21 center/cover no-repeat; }
   .card .title { font-weight: 600; font-size: 13.5px; margin-bottom: 3px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card .sub { color: var(--text-dim); font-size: 12px;
@@ -524,12 +525,19 @@
       return '<div class="art" style="background-image:url(\'' + COVER(ids[0]) + '\')">' +
         '<div class="play-overlay">▶</div></div>';
     }
-    var tiles = [];
-    for (var i = 0; i < 4; i++) {
-      var id = ids[i % ids.length];
-      tiles.push('<div class="tile" style="background-image:url(\'' + COVER(id) + '\')"></div>');
-    }
-    return '<div class="art collage">' + tiles.join("") + '<div class="play-overlay">▶</div></div>';
+    // Scatter the covers haphazardly, like records tossed on a bed, rather
+    // than a strict grid. Each piece hides itself on load failure so a
+    // missing/invalid cover just quietly drops out of the pile.
+    var pieces = ids.map(function (id, i) {
+      var angle = (Math.random() * 32 - 16).toFixed(1);
+      var top = (Math.random() * 40).toFixed(1);
+      var left = (Math.random() * 40).toFixed(1);
+      var style = "top:" + top + "%; left:" + left + "%; z-index:" + i +
+        "; transform: rotate(" + angle + "deg);";
+      return '<img class="piece" src="' + COVER(id) + '" style="' + style + '" ' +
+        'loading="lazy" onerror="this.style.display=\'none\'">';
+    }).join("");
+    return '<div class="art collage">' + pieces + '<div class="play-overlay">▶</div></div>';
   }
 
   function renderGenreList(genres) {

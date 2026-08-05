@@ -1092,7 +1092,7 @@ def browse_artist_detail(request, artist_id):
     })
 
 
-GENRE_COLLAGE_ALBUMS = 4
+GENRE_COLLAGE_POOL = 6
 
 
 @require_GET
@@ -1112,19 +1112,22 @@ def browse_genres(request):
         .filter(album__isnull=False)
         .values_list("genre", "album_id")
         .distinct()
-        .order_by("genre", "album_id")
     )
     for genre_name, album_id in genre_album_pairs:
-        bucket = album_ids_by_genre.setdefault(genre_name, [])
-        if len(bucket) < GENRE_COLLAGE_ALBUMS:
-            bucket.append(album_id)
+        album_ids_by_genre.setdefault(genre_name, []).append(album_id)
 
     return JsonResponse({
         "genres": [
             {
                 "name": g["genre"],
                 "count": g["count"],
-                "album_ids": album_ids_by_genre.get(g["genre"], []),
+                # Random sample rather than a deterministic low-id-first pick —
+                # otherwise large genres consistently show the same handful of
+                # (often art-less, bulk-imported) low-id albums.
+                "album_ids": random.sample(
+                    album_ids_by_genre.get(g["genre"], []),
+                    min(len(album_ids_by_genre.get(g["genre"], [])), GENRE_COLLAGE_POOL),
+                ),
             }
             for g in genres
         ]
