@@ -694,6 +694,10 @@ def search_tracks(request):
             set_q &= Q(year__gte=filter_set["year_min"])
         if "year_max" in filter_set:
             set_q &= Q(year__lte=filter_set["year_max"])
+        if "duration_min" in filter_set:
+            set_q &= Q(duration__gte=filter_set["duration_min"])
+        if "duration_max" in filter_set:
+            set_q &= Q(duration__lte=filter_set["duration_max"])
         if "album" in filter_set:
             set_q &= Q(album__title__iexact=filter_set["album"])
         if "decade" in filter_set:
