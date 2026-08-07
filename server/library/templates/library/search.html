@@ -94,15 +94,12 @@
           goBtn.disabled = false;
           return;
         }
-        if (results.length === 1) {
-          var url = destinationUrl(results[0]);
-          if (url) {
-            window.location.href = url;
-            return;
-          }
+        var url = data.top_match ? destinationUrl(data.top_match) : null;
+        if (url) {
+          window.location.href = url;
+          return;
         }
-        // Multiple matches (or a single one of an unknown type) — let the
-        // user pick from a results page instead of guessing.
+        // No single decisive match — let the user pick from a results page.
         window.location.href = "/library/browse/#/search/" + encodeURIComponent(q);
       })
       .catch(function (err) {

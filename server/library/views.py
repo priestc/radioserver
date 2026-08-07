@@ -1026,16 +1026,26 @@ def browse_search(request):
     # occurrence since candidates is already sorted.
     seen = set()
     results = []
-    for _, _, _, payload in candidates:
+    kept_ranks = []
+    for rank, _, _, payload in candidates:
         key = (payload["type"], payload.get("id", payload.get("name")))
         if key in seen:
             continue
         seen.add(key)
         results.append(payload)
+        kept_ranks.append(rank)
         if len(results) >= SEARCH_RESULT_LIMIT:
             break
 
-    return JsonResponse({"results": results})
+    # A single decisive best match (e.g. an exact artist-name hit, even
+    # alongside weaker substring matches elsewhere) still jumps straight to
+    # its page — only a genuine tie at the best rank is "ambiguous" and
+    # sends the user to the results list instead.
+    top_match = None
+    if kept_ranks and kept_ranks.count(kept_ranks[0]) == 1:
+        top_match = results[0]
+
+    return JsonResponse({"results": results, "top_match": top_match})
 
 
 @require_GET
