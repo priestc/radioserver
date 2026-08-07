@@ -965,31 +965,35 @@ def _search_rank(name, q_lower):
 
 
 SEARCH_TYPE_PRIORITY = {"artist": 0, "album": 1, "genre": 2, "track": 3}
+SEARCH_RESULT_LIMIT = 20
 
 
 @require_GET
 def browse_search(request):
-    """Find the single best-matching artist/album/genre/track for a free-text
-    query and return the browse-page destination for it, so the top-level
-    search box can jump straight to "the corresponding page" rather than
-    showing a results list."""
+    """Find artists/albums/genres/track-titles matching a free-text query,
+    ranked best-match first. The top-level search box redirects straight to
+    the destination page when there's exactly one result, and to a search
+    results page (listing all of these) when there's more than one."""
     q = request.GET.get("q", "").strip()
     if not q:
-        return JsonResponse({"result": None})
+        return JsonResponse({"results": []})
 
     q_lower = q.lower()
     candidates = []
 
-    for artist in Artist.objects.filter(name__icontains=q)[:5]:
+    for artist in Artist.objects.filter(name__icontains=q)[:8]:
         candidates.append((
-            _search_rank(artist.name, q_lower), SEARCH_TYPE_PRIORITY["artist"],
-            {"type": "artist", "id": artist.id, "label": artist.name},
+            _search_rank(artist.name, q_lower), SEARCH_TYPE_PRIORITY["artist"], artist.name.lower(),
+            {"type": "artist", "id": artist.id, "label": artist.name, "subtitle": "Artist"},
         ))
 
-    for album in Album.objects.filter(title__icontains=q).select_related("artist")[:5]:
+    for album in Album.objects.filter(title__icontains=q).select_related("artist")[:8]:
         candidates.append((
-            _search_rank(album.title, q_lower), SEARCH_TYPE_PRIORITY["album"],
-            {"type": "album", "id": album.id, "label": album.title},
+            _search_rank(album.title, q_lower), SEARCH_TYPE_PRIORITY["album"], album.title.lower(),
+            {
+                "type": "album", "id": album.id, "label": album.title,
+                "subtitle": "Album by " + album.artist.name,
+            },
         ))
 
     genre_names = (
@@ -997,26 +1001,41 @@ def browse_search(request):
         .exclude(genre="")
         .order_by()
         .values_list("genre", flat=True)
-        .distinct()[:10]
+        .distinct()[:8]
     )
     for genre in genre_names:
         candidates.append((
-            _search_rank(genre, q_lower), SEARCH_TYPE_PRIORITY["genre"],
-            {"type": "genre", "name": genre, "label": genre},
+            _search_rank(genre, q_lower), SEARCH_TYPE_PRIORITY["genre"], genre.lower(),
+            {"type": "genre", "name": genre, "label": genre, "subtitle": "Genre mix"},
         ))
 
-    for track in Track.objects.filter(title__icontains=q).select_related("album")[:5]:
+    for track in Track.objects.filter(title__icontains=q).select_related("album", "album__artist")[:8]:
         if track.album_id:
+            subtitle = "Song by " + track.display_artist
+            if track.album:
+                subtitle += " · " + track.album.title
             candidates.append((
-                _search_rank(track.title, q_lower), SEARCH_TYPE_PRIORITY["track"],
-                {"type": "album", "id": track.album_id, "label": f"{track.title} (track)"},
+                _search_rank(track.title, q_lower), SEARCH_TYPE_PRIORITY["track"], track.title.lower(),
+                {"type": "album", "id": track.album_id, "label": track.title, "subtitle": subtitle},
             ))
 
-    if not candidates:
-        return JsonResponse({"result": None})
+    candidates.sort(key=lambda c: (c[0], c[1], c[2]))
 
-    candidates.sort(key=lambda c: (c[0], c[1]))
-    return JsonResponse({"result": candidates[0][2]})
+    # Dedup by destination (e.g. two matching tracks off the same album would
+    # otherwise point at, and list, that album twice) — keep the best-ranked
+    # occurrence since candidates is already sorted.
+    seen = set()
+    results = []
+    for _, _, _, payload in candidates:
+        key = (payload["type"], payload.get("id", payload.get("name")))
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(payload)
+        if len(results) >= SEARCH_RESULT_LIMIT:
+            break
+
+    return JsonResponse({"results": results})
 
 
 @require_GET

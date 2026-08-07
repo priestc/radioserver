@@ -87,20 +87,23 @@
         return r.json();
       })
       .then(function (data) {
-        if (!data.result) {
+        var results = data.results || [];
+        if (!results.length) {
           status.className = "error";
           status.textContent = "No matches for “" + q + "”.";
           goBtn.disabled = false;
           return;
         }
-        var url = destinationUrl(data.result);
-        if (!url) {
-          status.className = "error";
-          status.textContent = "Couldn't determine a page for that result.";
-          goBtn.disabled = false;
-          return;
+        if (results.length === 1) {
+          var url = destinationUrl(results[0]);
+          if (url) {
+            window.location.href = url;
+            return;
+          }
         }
-        window.location.href = url;
+        // Multiple matches (or a single one of an unknown type) — let the
+        // user pick from a results page instead of guessing.
+        window.location.href = "/library/browse/#/search/" + encodeURIComponent(q);
       })
       .catch(function (err) {
         status.className = "error";

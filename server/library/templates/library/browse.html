@@ -615,6 +615,33 @@
     Player.onChange(function () { highlightPlaying(listEl, tracks); });
   }
 
+  function searchResultHref(r) {
+    if (r.type === "artist") return "#/artist/" + r.id;
+    if (r.type === "album") return "#/album/" + r.id;
+    if (r.type === "genre") return "#/genre/" + encodeURIComponent(r.name);
+    return "#/albums";
+  }
+
+  function renderSearchResults(query, results) {
+    if (!results.length) {
+      content.innerHTML = '<div class="empty-state">No matches for “' + escapeHtml(query) + '”.</div>';
+      return;
+    }
+    content.innerHTML = '<div class="grid">' + results.map(function (r) {
+      var art = r.type === "album"
+        ? '<div class="art" style="background-image:url(\'' + COVER(r.id) + '\')"><div class="play-overlay">▶</div></div>'
+        : '<div class="art">' + svgNote + '<div class="play-overlay">▶</div></div>';
+      return '<div class="card" data-href="' + searchResultHref(r) + '">' +
+        art +
+        '<div class="title">' + escapeHtml(r.label) + '</div>' +
+        '<div class="sub">' + escapeHtml(r.subtitle || "") + '</div>' +
+      "</div>";
+    }).join("") + "</div>";
+    Array.prototype.forEach.call(content.querySelectorAll(".card"), function (el) {
+      el.addEventListener("click", function () { location.hash = el.getAttribute("data-href"); });
+    });
+  }
+
   // -------------------- filter (client-side) --------------------
   function applyFilter(route, allItems) {
     var q = searchBox.value.trim().toLowerCase();
@@ -702,6 +729,17 @@
       content.innerHTML = '<div class="empty-state">Loading…</div>';
       fetchJSON(API + "genres/" + encodeURIComponent(genreName) + "/tracks/").then(function (data) {
         renderGenreMix(data.genre, data.tracks);
+      }).catch(function (e) { showError(e.message); });
+      return;
+    }
+
+    if (parts[0] === "search" && parts[1]) {
+      currentRoute = null;
+      var query = decodeURIComponent(parts[1]);
+      pageTitle.textContent = "Search: “" + query + "”";
+      content.innerHTML = '<div class="empty-state">Loading…</div>';
+      fetchJSON(API + "search/?q=" + encodeURIComponent(query)).then(function (data) {
+        renderSearchResults(query, data.results || []);
       }).catch(function (e) { showError(e.message); });
       return;
     }
