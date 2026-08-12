@@ -86,7 +86,8 @@ class APIService: ObservableObject {
     func fetchChannels() async throws -> [Channel] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/channels/")
-        let request = authorizedRequest(url: url)
+        var request = authorizedRequest(url: url)
+        request.timeoutInterval = 10
         AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -113,6 +114,7 @@ class APIService: ObservableObject {
         var request = authorizedRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -158,7 +160,8 @@ class APIService: ObservableObject {
         guard let base = baseURL else { throw APIError.invalidURL }
         let endpoint = lowBitrate ? "download_song_lowbitrate" : "download_song"
         let url = base.appendingPathComponent("/library/api/\(endpoint)/\(playlistItemId)/")
-        let request = authorizedRequest(url: url)
+        var request = authorizedRequest(url: url)
+        request.timeoutInterval = 30
 
         AppLogger.shared.log(.apiRequest, "GET \(url.absoluteString)")
         do {
