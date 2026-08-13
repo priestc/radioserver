@@ -250,18 +250,31 @@ def client_sync(request):
     if now_playing:
         max_played_id = max(max_played_id, now_playing["id"])
 
-    # Auto-generate playlist for this channel if unplayed duration is under 1 hour
+    # Auto-generate playlist for this channel, topping up to whichever is larger:
+    # 1 hour (baseline so playback never runs dry), or enough duration to cover
+    # the client's requested cache buffer (estimated via the library's average bitrate).
     from django.db.models import Sum
     unplayed_duration = (
         PlaylistItem.objects.filter(played_at__isnull=True, channel=channel, id__gt=max_played_id)
         .aggregate(total=Sum("track__duration"))["total"]
     ) or 0
-    if unplayed_duration < 3600:
+
+    buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
+    target_seconds = 3600
+    if buffer_bytes > 0:
+        bitrate_totals = Track.objects.exclude(file_size__isnull=True).exclude(duration__isnull=True).aggregate(
+            total_size=Sum("file_size"), total_duration=Sum("duration")
+        )
+        if bitrate_totals["total_size"] and bitrate_totals["total_duration"]:
+            avg_bytes_per_second = bitrate_totals["total_size"] / bitrate_totals["total_duration"]
+            if avg_bytes_per_second > 0:
+                target_seconds = max(target_seconds, buffer_bytes / avg_bytes_per_second)
+
+    if unplayed_duration < target_seconds:
         from library.playlist import generate_playlist
-        generate_playlist(3600, channel=channel)
+        generate_playlist(target_seconds, channel=channel)
 
     # Determine items to download
-    buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
     unplayed = PlaylistItem.objects.filter(
         played_at__isnull=True, channel=channel, id__gt=max_played_id
     ).select_related("track").order_by("id")
