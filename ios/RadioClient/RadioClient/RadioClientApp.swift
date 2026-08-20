@@ -43,7 +43,7 @@ struct RadioClientApp: App {
                 audioPlayer.reactivateAudioSession()
                 // Flush pendingPlayed immediately whenever the app becomes active
                 // so plays recorded while offline are reported to the server promptly.
-                audioPlayer.triggerSync()
+                audioPlayer.triggerSync(reason: "app foregrounded")
             }
         }
     }

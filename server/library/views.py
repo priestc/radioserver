@@ -252,7 +252,7 @@ def client_sync(request):
 
     # Auto-generate playlist for this channel, topping up to whichever is larger:
     # 1 hour (baseline so playback never runs dry), or enough duration to cover
-    # the client's requested cache buffer (estimated via the library's average bitrate).
+    # the client's requested cache buffer.
     from django.db.models import Sum
     unplayed_duration = (
         PlaylistItem.objects.filter(played_at__isnull=True, channel=channel, id__gt=max_played_id)
@@ -261,7 +261,14 @@ def client_sync(request):
 
     buffer_bytes = body.get("buffer_cache_mb", 0) * 1024 * 1024
     target_seconds = 3600
-    if buffer_bytes > 0:
+    explicit_target = body.get("target_duration_seconds")
+    if explicit_target:
+        # Client already knows exactly how much duration it wants (a duration-based
+        # per-channel cache limit) — use that directly rather than re-deriving it from
+        # buffer_cache_mb, which is a deliberately generous byte estimate and would
+        # produce a wildly inflated target once run back through an average bitrate.
+        target_seconds = max(target_seconds, explicit_target)
+    elif buffer_bytes > 0:
         bitrate_totals = Track.objects.exclude(file_size__isnull=True).exclude(duration__isnull=True).aggregate(
             total_size=Sum("file_size"), total_duration=Sum("duration")
         )

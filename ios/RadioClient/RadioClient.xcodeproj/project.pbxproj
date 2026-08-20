@@ -10,8 +10,11 @@
 		2A88754979A093DBA10BD02B /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E2E4075C8B4B602DDAA82C /* APIService.swift */; };
 		3824CC05C4906C17EE7A4E63 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6583E122D8359A1E53E08748 /* QRScannerView.swift */; };
 		4DA57E92DAE4AFAB284F031D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426C78E748A8B3A599B622A6 /* SettingsView.swift */; };
+		560A8E07F929E99F8220A1D1 /* ChannelCacheLimitWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD4EEF560BF41AD69921F66 /* ChannelCacheLimitWidget.swift */; };
+		7B381D3390AFABF6702CC0F8 /* ChannelCacheSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C0242627AAF1636B932C1C /* ChannelCacheSettings.swift */; };
 		91F51E72877215E03C8692B8 /* RadioClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */; };
 		92349102C18EC5A1DEFC844A /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469098CCFCEE845A96A0E131 /* CacheManager.swift */; };
+		97A12612A709AF91E82E6421 /* CacheFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32F7441D4092A76D8686281C /* CacheFormat.swift */; };
 		9FC28EA4FAF7906EB72B20D5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6E5600B1C334D13C861760C /* Assets.xcassets */; };
 		A41BF52570935C4D5C6F3C64 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D53D0E61830D9ADE744582 /* AppLogger.swift */; };
 		C89F1E994DF33F8456C6AAD0 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E9968882875943AAE4F854 /* HistoryView.swift */; };
@@ -25,7 +28,9 @@
 /* Begin PBXFileReference section */
 		00E2E4075C8B4B602DDAA82C /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
 		1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioClientApp.swift; sourceTree = "<group>"; };
+		22C0242627AAF1636B932C1C /* ChannelCacheSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelCacheSettings.swift; sourceTree = "<group>"; };
 		27E9968882875943AAE4F854 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		32F7441D4092A76D8686281C /* CacheFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheFormat.swift; sourceTree = "<group>"; };
 		3794BDB5BBD0B61F07F811EC /* RadioClient.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RadioClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		41074D8D095FD70AC4411512 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		426C78E748A8B3A599B622A6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -36,6 +41,7 @@
 		90F1EEB734572E252ABDA3F5 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
 		AA49438693716D89CF1730B5 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		B4D261975A38A191E21C4742 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
+		BDD4EEF560BF41AD69921F66 /* ChannelCacheLimitWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelCacheLimitWidget.swift; sourceTree = "<group>"; };
 		D6E5600B1C334D13C861760C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F0D53D0E61830D9ADE744582 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -44,6 +50,7 @@
 		0B7A90D8BC7FE8F9019856EE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				BDD4EEF560BF41AD69921F66 /* ChannelCacheLimitWidget.swift */,
 				46B0A93580DCFA441554FD3E /* ChannelsView.swift */,
 				27E9968882875943AAE4F854 /* HistoryView.swift */,
 				B4D261975A38A191E21C4742 /* NowPlayingView.swift */,
@@ -105,7 +112,9 @@
 				00E2E4075C8B4B602DDAA82C /* APIService.swift */,
 				F0D53D0E61830D9ADE744582 /* AppLogger.swift */,
 				AA49438693716D89CF1730B5 /* AudioPlayer.swift */,
+				32F7441D4092A76D8686281C /* CacheFormat.swift */,
 				469098CCFCEE845A96A0E131 /* CacheManager.swift */,
+				22C0242627AAF1636B932C1C /* ChannelCacheSettings.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -184,8 +193,11 @@
 				2A88754979A093DBA10BD02B /* APIService.swift in Sources */,
 				A41BF52570935C4D5C6F3C64 /* AppLogger.swift in Sources */,
 				DBEA955A23AEA029F1312735 /* AudioPlayer.swift in Sources */,
+				97A12612A709AF91E82E6421 /* CacheFormat.swift in Sources */,
 				92349102C18EC5A1DEFC844A /* CacheManager.swift in Sources */,
 				DC5705B88A0FD49F572A7FC9 /* CarPlaySceneDelegate.swift in Sources */,
+				560A8E07F929E99F8220A1D1 /* ChannelCacheLimitWidget.swift in Sources */,
+				7B381D3390AFABF6702CC0F8 /* ChannelCacheSettings.swift in Sources */,
 				FC1397C43F8C8A04E8A4E18B /* ChannelsView.swift in Sources */,
 				C89F1E994DF33F8456C6AAD0 /* HistoryView.swift in Sources */,
 				EB688FB54A02EC62C844CA16 /* NowPlayingView.swift in Sources */,

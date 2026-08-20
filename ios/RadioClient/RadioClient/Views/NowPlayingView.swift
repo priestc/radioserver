@@ -66,7 +66,7 @@ struct NowPlayingView: View {
 
                 // Queue info
                 HStack(spacing: 6) {
-                    Text("\(formatQueueDuration()) in queue")
+                    Text("\(formatCachedDuration()) cached")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     if player.isFillingCache {
@@ -89,8 +89,13 @@ struct NowPlayingView: View {
         return "\(mins):\(String(format: "%02d", secs))"
     }
 
-    private func formatQueueDuration() -> String {
-        let total = player.queue.compactMap(\.duration).reduce(0, +)
+    /// Duration actually cached on disk for the current channel — matches the figure
+    /// shown on the Channels page, unlike the raw sync queue (which includes songs that
+    /// have only been synced as metadata, not downloaded yet).
+    private func formatCachedDuration() -> String {
+        _ = player.cacheUpdateTick  // re-evaluate as downloads complete
+        let stats = player.cacheStatsPerChannel().first { $0.channelId == player.selectedChannel?.id }
+        let total = stats?.durationSeconds ?? 0
         let hours = Int(total) / 3600
         let mins = (Int(total) % 3600) / 60
         if hours > 0 {

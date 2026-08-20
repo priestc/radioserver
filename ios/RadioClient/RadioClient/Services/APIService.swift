@@ -12,9 +12,6 @@ class APIService: ObservableObject {
     @Published var apiKey: String {
         didSet { UserDefaults.standard.set(apiKey, forKey: "apiKey") }
     }
-    @Published var bufferCacheMB: Int {
-        didSet { UserDefaults.standard.set(bufferCacheMB, forKey: "bufferCacheMB") }
-    }
     @Published var isOnLocalNetwork = false
 
     private let networkMonitor = NWPathMonitor()
@@ -36,8 +33,6 @@ class APIService: ObservableObject {
         }
         self.remoteURL = UserDefaults.standard.string(forKey: "remoteURL") ?? ""
         self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
-        let saved = UserDefaults.standard.integer(forKey: "bufferCacheMB")
-        self.bufferCacheMB = saved > 0 ? saved : 100
 
         startNetworkMonitor()
     }
@@ -107,7 +102,7 @@ class APIService: ObservableObject {
         }
     }
 
-    func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil, channelId: Int? = nil) async throws -> [SongItem] {
+    func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil, channelId: Int? = nil, targetDurationSeconds: Double? = nil, reason: String) async throws -> [SongItem] {
         guard let base = baseURL else { throw APIError.invalidURL }
         let url = base.appendingPathComponent("/library/api/client_sync/")
 
@@ -128,24 +123,27 @@ class APIService: ObservableObject {
         if let cid = channelId {
             body["channel_id"] = cid
         }
+        if let target = targetDurationSeconds {
+            body["target_duration_seconds"] = target
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let playedDesc = played.isEmpty ? "" : " (\(played.count) played)"
-        AppLogger.shared.log(.apiRequest, "POST \(url.absoluteString)\(playedDesc)")
+        AppLogger.shared.log(.apiRequest, "POST \(url.absoluteString) — \(reason)\(playedDesc)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(code)\(bodySnippet(data))")
+                AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(code)\(bodySnippet(data)) — \(reason)")
                 throw APIError.serverError(code)
             }
             let syncResponse = try JSONDecoder().decode(SyncResponse.self, from: data)
-            AppLogger.shared.log(.apiSuccess, "POST \(url.absoluteString) → 200 (\(syncResponse.download.count) to download)")
+            AppLogger.shared.log(.apiSuccess, "POST \(url.absoluteString) → 200 (\(syncResponse.download.count) to download) — \(reason)")
             return syncResponse.download
         } catch let err as APIError {
             throw err
         } catch {
-            AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(error.localizedDescription)")
+            AppLogger.shared.log(.apiFailure, "POST \(url.absoluteString) → \(error.localizedDescription) — \(reason)")
             throw error
         }
     }

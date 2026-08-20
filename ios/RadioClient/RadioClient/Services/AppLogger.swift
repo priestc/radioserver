@@ -46,12 +46,24 @@ class AppLogger: ObservableObject {
 
     func log(_ kind: LogKind, _ message: String) {
         let entry = LogEntry(kind: kind, message: message)
+        // Prefixed so it's easy to isolate in Xcode's console filter bar (type "RadioLog"),
+        // select all, and copy/paste — quicker than pulling entries off the device.
+        print("[RadioLog] \(kind.rawValue): \(message)")
         if Thread.isMainThread {
             insert(entry)
         } else {
             DispatchQueue.main.async { self.insert(entry) }
         }
         scheduleSave()
+    }
+
+    /// Plain-text dump of the visible log (oldest first), formatted for pasting elsewhere.
+    func formattedText(_ entries: [LogEntry]) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return entries.reversed().map { entry in
+            "[\(formatter.string(from: entry.timestamp))] \(entry.kind.rawValue): \(entry.message)"
+        }.joined(separator: "\n")
     }
 
     func clear() {

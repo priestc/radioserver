@@ -1,7 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct HistoryView: View {
     @ObservedObject private var logger = AppLogger.shared
+    @State private var showCopyConfirmation = false
+
+    private var visibleEntries: [LogEntry] {
+        logger.entries.filter { !$0.kind.isRequest }
+    }
 
     var body: some View {
         NavigationStack {
@@ -13,7 +19,7 @@ struct HistoryView: View {
                         description: Text("App events will appear here.")
                     )
                 } else {
-                    List(logger.entries.filter { !$0.kind.isRequest }) { entry in
+                    List(visibleEntries) { entry in
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: entry.kind.iconName)
                                 .foregroundColor(entry.kind.iconColor)
@@ -29,16 +35,45 @@ struct HistoryView: View {
                         .padding(.vertical, 1)
                     }
                     .listStyle(.plain)
+                    .textSelection(.enabled)
                 }
             }
             .navigationTitle("Log")
+            .overlay(alignment: .bottom) {
+                if showCopyConfirmation {
+                    Text("Copied to clipboard")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.75))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 12)
+                }
+            }
             .toolbar {
                 if !logger.entries.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            copyToClipboard()
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                    }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Clear") { logger.clear() }
                     }
                 }
             }
+        }
+    }
+
+    private func copyToClipboard() {
+        UIPasteboard.general.string = logger.formattedText(visibleEntries)
+        showCopyConfirmation = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            showCopyConfirmation = false
         }
     }
 }

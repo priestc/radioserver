@@ -64,24 +64,18 @@ struct SettingsView: View {
                 }
 
                 Section("Cache") {
-                    HStack {
-                        Text("Buffer Size (MB)")
-                        Spacer()
-                        TextField("MB", value: $api.bufferCacheMB, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                    }
-
                     // cacheUpdateTick is read here so SwiftUI re-evaluates this body after downloads
                     let _ = audioPlayer.cacheUpdateTick
-                    let channelCaches = audioPlayer.cacheSizeMBPerChannel()
+                    let channelCaches = audioPlayer.cacheStatsPerChannel()
                     ForEach(channelCaches, id: \.name) { entry in
-                        HStack {
-                            Text(entry.name)
-                            Spacer()
-                            Text(String(format: "%.1f MB", entry.sizeMB))
-                                .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(entry.name)
+                                Spacer()
+                                Text(CacheFormat.bytes(entry.sizeBytes))
+                                    .foregroundColor(.secondary)
+                            }
+                            ChannelCacheLimitWidget(channelId: entry.channelId, channelName: entry.name)
                         }
                     }
 
@@ -130,7 +124,7 @@ struct SettingsView: View {
             }
             .onAppear {
                 cacheCleared = false
-                audioPlayer.refreshCacheStats()
+                audioPlayer.refreshCacheStats(reason: "settings opened")
             }
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

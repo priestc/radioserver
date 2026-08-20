@@ -43,6 +43,10 @@ struct ChannelsView: View {
             }
             .refreshable {
                 await loadChannels()
+                audioPlayer.refreshCacheStats(reason: "channels pull-to-refresh")
+            }
+            .onAppear {
+                audioPlayer.refreshCacheStats(reason: "channels tab opened")
             }
         }
     }
@@ -51,6 +55,9 @@ struct ChannelsView: View {
     private func channelRow(channel: Channel?) -> some View {
         let isSelected = audioPlayer.selectedChannel == channel
         let isExhausted = audioPlayer.exhaustedChannelIds.contains(channel?.id)
+        // cacheUpdateTick is read here so SwiftUI re-evaluates this row after downloads
+        let _ = audioPlayer.cacheUpdateTick
+        let cacheStats = audioPlayer.cacheStatsPerChannel().first { $0.channelId == channel?.id }
         Button {
             audioPlayer.selectChannel(channel)
         } label: {
@@ -65,6 +72,11 @@ struct ChannelsView: View {
                     Text(isExhausted ? "No songs available" : (channel?.subtitle ?? "No filters — plays everything"))
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    if let stats = cacheStats {
+                        Label(cacheStatusText(stats), systemImage: "arrow.down.circle")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 Spacer()
             }
@@ -72,6 +84,12 @@ struct ChannelsView: View {
         }
         .buttonStyle(.plain)
         .disabled(isExhausted)
+    }
+
+    private func cacheStatusText(_ stats: AudioPlayer.ChannelCacheStats) -> String {
+        guard stats.songCount > 0 else { return "Nothing cached" }
+        let songLabel = stats.songCount == 1 ? "song" : "songs"
+        return "\(stats.songCount) \(songLabel) · \(CacheFormat.duration(stats.durationSeconds)) · \(CacheFormat.bytes(stats.sizeBytes))"
     }
 
     private func loadChannels() async {

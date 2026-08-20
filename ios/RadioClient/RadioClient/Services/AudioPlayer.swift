@@ -47,6 +47,12 @@ class AudioPlayer: ObservableObject {
     private var syncRetryTask: Task<Void, Never>?
     private var syncBackoffSeconds: Double = 2
 
+    // Channels currently being downloaded into. Guards against overlapping download
+    // loops (active-channel sync, background prefill, Fill All Caches) racing past a
+    // channel's configured cache limit — each checks the limit against live disk state,
+    // so without this, two loops can both see "under limit" and both start downloading.
+    private var downloadingChannelIds: Set<Int?> = []
+
     // Network monitoring
     private let networkMonitor = NWPathMonitor()
     private(set) var isCellular = false
@@ -71,7 +77,7 @@ class AudioPlayer: ObservableObject {
                 self.isCellular = path.usesInterfaceType(.cellular)
                 if isConnected && !self.wasNetworkConnected {
                     // Network just came back — flush pendingPlayed immediately
-                    self.triggerSync()
+                    self.triggerSync(reason: "network reconnected")
                 }
                 self.wasNetworkConnected = isConnected
             }
@@ -172,7 +178,7 @@ class AudioPlayer: ObservableObject {
 
     func startSyncTimer() {
         // Perform an initial sync to populate the queue
-        Task { await performSync() }
+        Task { await performSync(reason: "app launch") }
     }
 
     func fetchChannels() {
@@ -249,11 +255,11 @@ class AudioPlayer: ObservableObject {
             isPlaying = true
             loadArtworkForCurrentSong()
             updateNowPlaying()
-            triggerSync()
+            triggerSync(reason: "channel switch")
         } else {
             currentSong = nil
             updateNowPlaying()
-            triggerSync()
+            triggerSync(reason: "channel switch")
 
             // Fall back: start from cached queue if something is already downloaded
             if !queue.isEmpty {
@@ -277,15 +283,15 @@ class AudioPlayer: ObservableObject {
         syncRetryTask = nil
     }
 
-    func triggerSync() {
+    func triggerSync(reason: String) {
         syncRetryTask?.cancel()
         syncBackoffSeconds = 2
-        syncRetryTask = Task { await performSyncWithRetry() }
+        syncRetryTask = Task { await performSyncWithRetry(reason: reason) }
     }
 
-    private func performSyncWithRetry() async {
+    private func performSyncWithRetry(reason: String) async {
         while !Task.isCancelled {
-            let success = await performSync()
+            let success = await performSync(reason: reason)
             if success { return }
 
             // Backoff and retry
@@ -295,7 +301,27 @@ class AudioPlayer: ObservableObject {
         }
     }
 
-    private func performSync() async -> Bool {
+    /// Human-readable name for a channel, for use in sync log messages.
+    private func channelLabel(for channelId: Int?) -> String {
+        guard let channelId else { return "All Music" }
+        return availableChannels.first(where: { $0.id == channelId })?.name ?? "channel #\(channelId)"
+    }
+
+    private func syncLogReason(_ trigger: String, channelId: Int?) -> String {
+        "\(trigger) — \(channelLabel(for: channelId))"
+    }
+
+    /// True if `error` is the result of the hosting Task being cancelled (e.g. a newer
+    /// triggerSync() superseded this one) rather than a genuine network/server failure.
+    /// Once a Task is cancelled every subsequent await on it fails the same way, so callers
+    /// should stop retrying further items instead of looping through them one by one.
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
+    }
+
+    private func performSync(reason: String) async -> Bool {
         guard let api = apiService, api.isConfigured else {
             AppLogger.shared.log(.playbackError, "Sync skipped — API not configured")
             return false
@@ -313,9 +339,11 @@ class AudioPlayer: ObservableObject {
 
             let channelId = await MainActor.run { self.selectedChannel?.id }
             let onCellular = await MainActor.run { self.isCellular }
-            let isLocal = await MainActor.run { self.apiService?.isOnLocalNetwork ?? false }
-            let syncBuffer = (!onCellular && isLocal) ? max(api.bufferCacheMB, 500) : api.bufferCacheMB
-            let newItems = try await api.sync(played: played, bufferCacheMB: syncBuffer, nowPlaying: nowPlaying, channelId: channelId)
+            let limit = ChannelCacheSettings.shared.limit(for: channelId)
+            let syncBuffer = limit.requestBufferMB
+            let targetDuration: Double? = limit.mode == .duration ? limit.durationSeconds : nil
+            let syncLabel = await MainActor.run { self.syncLogReason(reason, channelId: channelId) }
+            let newItems = try await api.sync(played: played, bufferCacheMB: syncBuffer, nowPlaying: nowPlaying, channelId: channelId, targetDurationSeconds: targetDuration, reason: syncLabel)
             await MainActor.run {
                 pendingPlayed.removeAll { p in played.contains { $0.id == p.id } }
                 savePendingPlayed()
@@ -329,55 +357,74 @@ class AudioPlayer: ObservableObject {
                 await MainActor.run { queue.append(contentsOf: toAdd) }
             }
 
-            // Download songs and artwork in background
-
-            if onCellular {
-                // On cellular: keep at most 2 low-bitrate songs cached.
-                let allQueued = await MainActor.run { self.queue }
-                let cachedCount = allQueued.filter {
-                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") ||
-                    CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
-                }.count
-                if cachedCount < 2 {
-                    if let next = allQueued.first(where: {
-                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") &&
-                        !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
-                    }) {
-                        do {
-                            _ = try await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
-                            AppLogger.shared.log(.downloadSuccess, "Cached: \"\(next.title)\" by \(next.artist) (low bitrate)")
-                            await logCacheState()
-                        } catch {
-                            AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(next.title)\" by \(next.artist): \(error.localizedDescription)")
+            // Download songs and artwork in background. Guarded by a per-channel lock so this
+            // loop can't race another concurrent one (e.g. background prefill or Fill All
+            // Caches) past the configured cache limit.
+            let acquiredLock = await MainActor.run { self.beginDownloading(channelId: channelId) }
+            if !acquiredLock {
+                AppLogger.shared.log(.playbackError, "Skipping downloads (\(reason)) — already downloading for this channel elsewhere")
+            } else {
+                if onCellular {
+                    // On cellular: keep at most 2 low-bitrate songs cached, and never exceed
+                    // this channel's configured cache limit even on Wi-Fi later.
+                    let allQueued = await MainActor.run { self.queue }
+                    let cachedCount = allQueued.filter {
+                        CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") ||
+                        CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
+                    }.count
+                    let reachedLimit = await MainActor.run { self.hasReachedCacheLimit(channelId: channelId) }
+                    if cachedCount < 2 && !reachedLimit {
+                        if let next = allQueued.first(where: {
+                            !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: "mp3") &&
+                            !CacheManager.shared.hasCached(playlistItemId: $0.id, ext: $0.fileExtension)
+                        }) {
+                            do {
+                                _ = try await api.downloadSong(playlistItemId: next.id, fileExtension: next.fileExtension, lowBitrate: true)
+                                AppLogger.shared.log(.downloadSuccess, "Cached: \"\(next.title)\" by \(next.artist) (low bitrate)")
+                                await logCacheState()
+                            } catch {
+                                if isCancellation(error) {
+                                    AppLogger.shared.log(.playbackError, "Sync cancelled (\(reason)) — superseded by a newer sync")
+                                } else {
+                                    AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(next.title)\" by \(next.artist): \(error.localizedDescription)")
+                                }
+                            }
+                            if let albumId = next.albumId {
+                                await prefetchArtwork(albumId: albumId, api: api)
+                            }
+                            let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+                            if idle { await MainActor.run { self.playNext() } }
                         }
-                        if let albumId = next.albumId {
+                    }
+                } else {
+                    let queued = await MainActor.run { self.queue }
+                    let newIds = Set(newItems.map { $0.id })
+                    let allItems = newItems + queued.filter { !newIds.contains($0.id) }
+                    for item in allItems {
+                        if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
+                            let reachedLimit = await MainActor.run { self.hasReachedCacheLimit(channelId: channelId) }
+                            if reachedLimit { break }
+                            do {
+                                _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
+                                AppLogger.shared.log(.downloadSuccess, "Cached: \"\(item.title)\" by \(item.artist)")
+                                await logCacheState()
+                            } catch {
+                                if isCancellation(error) {
+                                    AppLogger.shared.log(.playbackError, "Sync cancelled (\(reason)) — superseded by a newer sync, stopping this batch")
+                                    break
+                                }
+                                AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
+                            }
+                            let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
+                            if idle { await MainActor.run { self.playNext() } }
+                        }
+                        if let albumId = item.albumId {
                             await prefetchArtwork(albumId: albumId, api: api)
                         }
-                        let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
-                        if idle { await MainActor.run { self.playNext() } }
                     }
+                    await MainActor.run { self.cacheUpdateTick += 1 }
                 }
-            } else {
-                let queued = await MainActor.run { self.queue }
-                let newIds = Set(newItems.map { $0.id })
-                let allItems = newItems + queued.filter { !newIds.contains($0.id) }
-                for item in allItems {
-                    if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
-                        do {
-                            _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
-                            AppLogger.shared.log(.downloadSuccess, "Cached: \"\(item.title)\" by \(item.artist)")
-                            await logCacheState()
-                        } catch {
-                            AppLogger.shared.log(.downloadFailure, "Failed to cache \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
-                        }
-                        let idle = await MainActor.run { self.currentSong == nil && !self.queue.isEmpty }
-                        if idle { await MainActor.run { self.playNext() } }
-                    }
-                    if let albumId = item.albumId {
-                        await prefetchArtwork(albumId: albumId, api: api)
-                    }
-                }
-                await MainActor.run { self.cacheUpdateTick += 1 }
+                await MainActor.run { self.endDownloading(channelId: channelId) }
             }
 
             // Final auto-start check: only if a cached file is actually ready
@@ -408,31 +455,28 @@ class AudioPlayer: ObservableObject {
         var channelIds: [Int?] = [nil]
         channelIds += await MainActor.run { availableChannels.map { Optional($0.id) } }
         for channelId in channelIds where channelId != activeId {
-            await prefillBackgroundQueue(channelId: channelId, api: api)
+            await prefillBackgroundQueue(channelId: channelId, api: api, reason: "background prefill")
         }
     }
 
-    private func prefillBackgroundQueue(channelId: Int?, api: APIService, bufferMB: Double? = nil, ignoreCellular: Bool = false) async {
+    private func prefillBackgroundQueue(channelId: Int?, api: APIService, ignoreCellular: Bool = false, reason: String) async {
         do {
             let existing = await MainActor.run { backgroundQueues[channelId] ?? [] }
             let existingIds = Set(existing.map { $0.id })
 
             let onCellular = await MainActor.run { isCellular }
-            let isLocal = await MainActor.run { self.apiService?.isOnLocalNetwork ?? false }
-            let effectiveBuffer: Int
-            if let override = bufferMB {
-                effectiveBuffer = Int(override)
-            } else if !onCellular && isLocal {
-                effectiveBuffer = max(api.bufferCacheMB, 500)
-            } else {
-                effectiveBuffer = api.bufferCacheMB
-            }
+            let limit = ChannelCacheSettings.shared.limit(for: channelId)
+            let effectiveBuffer = limit.requestBufferMB
+            let targetDuration: Double? = limit.mode == .duration ? limit.durationSeconds : nil
+            let syncLabel = await MainActor.run { self.syncLogReason(reason, channelId: channelId) }
 
             let newItems = try await api.sync(
                 played: [],
                 bufferCacheMB: effectiveBuffer,
                 nowPlaying: nil,
-                channelId: channelId
+                channelId: channelId,
+                targetDurationSeconds: targetDuration,
+                reason: syncLabel
             )
             let toAdd = newItems.filter { !existingIds.contains($0.id) }
             if !toAdd.isEmpty {
@@ -446,14 +490,29 @@ class AudioPlayer: ObservableObject {
             // Download on WiFi at full quality; skip on cellular unless explicitly requested
             guard !onCellular || ignoreCellular else { return }
 
+            // Guarded by the same per-channel lock as performSync's download loop, so a
+            // background prefill can't race the active-channel sync (or another prefill)
+            // past this channel's configured cache limit.
+            let acquiredLock = await MainActor.run { self.beginDownloading(channelId: channelId) }
+            guard acquiredLock else {
+                AppLogger.shared.log(.playbackError, "Skipping background downloads (\(reason)) — already downloading for this channel elsewhere")
+                return
+            }
+
             let all = await MainActor.run { backgroundQueues[channelId] ?? [] }
             for item in all {
                 if !CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) {
+                    let reachedLimit = await MainActor.run { self.hasReachedCacheLimit(channelId: channelId) }
+                    if reachedLimit { break }
                     do {
                         _ = try await api.downloadSong(playlistItemId: item.id, fileExtension: item.fileExtension)
                         AppLogger.shared.log(.downloadSuccess, "Cached (bg): \"\(item.title)\" by \(item.artist)")
                         await logCacheState()
                     } catch {
+                        if isCancellation(error) {
+                            AppLogger.shared.log(.playbackError, "Background sync cancelled (\(reason)) — superseded by a newer sync, stopping this batch")
+                            break
+                        }
                         AppLogger.shared.log(.downloadFailure, "Failed to cache (bg) \"\(item.title)\" by \(item.artist): \(error.localizedDescription)")
                     }
                 }
@@ -462,6 +521,7 @@ class AudioPlayer: ObservableObject {
                 }
             }
             await MainActor.run { self.cacheUpdateTick += 1 }
+            await MainActor.run { self.endDownloading(channelId: channelId) }
 
             // Pre-warm a silent AVPlayer for the first cached song so channel switching is instant
             let firstCached = await MainActor.run {
@@ -502,7 +562,7 @@ class AudioPlayer: ObservableObject {
             var channelIds: [Int?] = [nil]
             channelIds += channels.map { Optional($0.id) }
             for channelId in channelIds {
-                await prefillBackgroundQueue(channelId: channelId, api: api, bufferMB: 2000, ignoreCellular: true)
+                await prefillBackgroundQueue(channelId: channelId, api: api, ignoreCellular: true, reason: "fill all caches")
             }
             await MainActor.run {
                 self.isFillingCache = false
@@ -511,10 +571,10 @@ class AudioPlayer: ObservableObject {
         }
     }
 
-    func refreshCacheStats() {
+    func refreshCacheStats(reason: String) {
         // triggerSync flushes pendingPlayed first, then syncs background channels
         // and increments cacheUpdateTick so the Settings cache display updates.
-        triggerSync()
+        triggerSync(reason: reason)
     }
 
     /// Creates a silent, buffered AVPlayer for a background channel so that switching to it is near-instant.
@@ -593,7 +653,7 @@ class AudioPlayer: ObservableObject {
                         self.pendingPlayed.append(played)
                         self.savePendingPlayed()
                     }
-                    self.triggerSync()
+                    self.triggerSync(reason: "50% playback mark")
                 }
             }
             self.updateNowPlaying()
@@ -632,7 +692,7 @@ class AudioPlayer: ObservableObject {
         }
         AppLogger.shared.log(.trackPlayed, "Played: \"\(song.title)\" by \(song.artist)")
         removeCachedFiles(for: song)
-        triggerSync()
+        triggerSync(reason: "song finished")
         if queue.isEmpty {
             exhaustedChannelIds.insert(selectedChannel?.id)
             autoSwitchToAvailableChannel()
@@ -666,7 +726,7 @@ class AudioPlayer: ObservableObject {
         if currentSong == nil {
             if queue.isEmpty {
                 AppLogger.shared.log(.playbackError, "Play tapped — queue empty, waiting for sync")
-                triggerSync()
+                triggerSync(reason: "play tapped — queue empty")
             } else {
                 playNext()
             }
@@ -675,7 +735,7 @@ class AudioPlayer: ObservableObject {
         guard let player else {
             AppLogger.shared.log(.playbackError, "Play tapped — player is nil for \"\(currentSong?.title ?? "?")\"")
             currentSong = nil
-            triggerSync()
+            triggerSync(reason: "play tapped — player was nil")
             return
         }
         // If the player item has failed (can happen after a long background session),
@@ -714,7 +774,7 @@ class AudioPlayer: ObservableObject {
             removeCachedFiles(for: song)
         }
         playNext()
-        triggerSync()
+        triggerSync(reason: "song skipped")
     }
 
     func seek(to fraction: Double) {
@@ -838,35 +898,78 @@ class AudioPlayer: ObservableObject {
         AppLogger.shared.log(.cacheState, "Cache: \(count) songs · \(runtimeStr) · \(sizeStr)")
     }
 
-    /// Returns audio cache size in MB for every channel (including ones not yet background-synced).
-    func cacheSizeMBPerChannel() -> [(name: String, sizeMB: Double)] {
-        // Always enumerate all known channels so every row is visible even at 0 MB
+    /// Cache status for a single channel: how much of it is currently downloaded on-device.
+    struct ChannelCacheStats {
+        let name: String
+        let channelId: Int?
+        let sizeBytes: Int64
+        let songCount: Int
+        let durationSeconds: Double
+    }
+
+    /// Returns cache stats (size, song count, playtime) for every channel, including
+    /// ones not yet background-synced, so every row is visible even at zero.
+    func cacheStatsPerChannel() -> [ChannelCacheStats] {
         var entries: [(name: String, channelId: Int?)] = [("All Music", nil)]
         for ch in availableChannels {
             entries.append((ch.name, Optional(ch.id)))
         }
+        return entries.map { statsForChannel($0.channelId, name: $0.name) }
+    }
 
-        return entries.map { (name, channelId) in
-            let items: [SongItem]
-            if channelId == selectedChannel?.id {
-                // Active channel: live queue + any prefilled songs from fillAllCaches
-                var active = queue
-                if let song = currentSong { active.insert(song, at: 0) }
-                let activeIds = Set(active.map(\.id))
-                let prefilled = (backgroundQueues[channelId] ?? []).filter { !activeIds.contains($0.id) }
-                items = active + prefilled
-            } else {
-                items = backgroundQueues[channelId] ?? []
-            }
-            let size = items.reduce(0.0) { total, item in
-                total
-                    + CacheManager.shared.fileSizeMB(for: item.id, ext: item.fileExtension)
-                    + (item.fileExtension != "mp3"
-                        ? CacheManager.shared.fileSizeMB(for: item.id, ext: "mp3")
-                        : 0)
-            }
-            return (name: name, sizeMB: size)
+    private func statsForChannel(_ channelId: Int?, name: String) -> ChannelCacheStats {
+        let items: [SongItem]
+        if channelId == selectedChannel?.id {
+            // Active channel: live queue + any prefilled songs from fillAllCaches
+            var active = queue
+            if let song = currentSong { active.insert(song, at: 0) }
+            let activeIds = Set(active.map(\.id))
+            let prefilled = (backgroundQueues[channelId] ?? []).filter { !activeIds.contains($0.id) }
+            items = active + prefilled
+        } else {
+            items = backgroundQueues[channelId] ?? []
         }
+
+        var sizeBytes: Int64 = 0
+        var songCount = 0
+        var durationSeconds = 0.0
+        for item in items {
+            let isCached = CacheManager.shared.hasCached(playlistItemId: item.id, ext: item.fileExtension) ||
+                           CacheManager.shared.hasCached(playlistItemId: item.id, ext: "mp3")
+            guard isCached else { continue }
+            sizeBytes += CacheManager.shared.fileSizeBytes(for: item.id, ext: item.fileExtension)
+            if item.fileExtension != "mp3" {
+                sizeBytes += CacheManager.shared.fileSizeBytes(for: item.id, ext: "mp3")
+            }
+            songCount += 1
+            durationSeconds += item.duration ?? 0
+        }
+        return ChannelCacheStats(name: name, channelId: channelId, sizeBytes: sizeBytes, songCount: songCount, durationSeconds: durationSeconds)
+    }
+
+    /// Whether the given channel's cache has already reached its configured limit
+    /// (either duration- or size-based), meaning no further downloads should happen.
+    private func hasReachedCacheLimit(channelId: Int?) -> Bool {
+        let limit = ChannelCacheSettings.shared.limit(for: channelId)
+        let stats = statsForChannel(channelId, name: "")
+        switch limit.mode {
+        case .duration:
+            return stats.durationSeconds >= limit.durationSeconds
+        case .size:
+            return stats.sizeBytes >= limit.sizeBytes
+        }
+    }
+
+    /// Claims the download lock for a channel. Returns false if another loop already
+    /// holds it, meaning the caller should skip downloading this round rather than race.
+    private func beginDownloading(channelId: Int?) -> Bool {
+        guard !downloadingChannelIds.contains(channelId) else { return false }
+        downloadingChannelIds.insert(channelId)
+        return true
+    }
+
+    private func endDownloading(channelId: Int?) {
+        downloadingChannelIds.remove(channelId)
     }
 
     private func removeObservers() {
