@@ -53,6 +53,14 @@ targets:
 
 Add `entitlements`, `dependencies`, extra `info` properties, and build settings as needed for the specific app.
 
+## Offline playback is non-negotiable
+
+The iOS app must always be able to play music, even with zero internet connectivity (e.g. no signal at all, like a driveway or dead zone). This is the entire reason the on-device caching system exists.
+
+- A failed or timed-out server sync must never prevent, pause, or delay playback of music already cached on disk. Log the failure and retry later — never gate playback on a sync succeeding.
+- The ONLY acceptable reason for the app not to play music is the on-disk cache having zero playable songs for every channel.
+- This means song metadata (title/artist/duration/etc.) for cached files must be recoverable at launch without any network call — not just the audio files themselves. If you touch the caching or sync code, verify a fully offline cold launch still plays from cache.
+
 ## Error handling principle
 
 Never silently swallow errors. Whenever something goes wrong — a failed network request, an unexpected API response, a caught exception — always surface it visibly in the UI so the user knows what's happening. This applies to:
