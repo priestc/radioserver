@@ -39,7 +39,7 @@ struct NowPlayingView: View {
 
                 // Progress bar
                 VStack(spacing: 4) {
-                    ProgressView(value: player.duration > 0 ? player.currentTime / player.duration : 0)
+                    ProgressView(value: playbackProgress)
                         .tint(.primary)
                     HStack {
                         Text(formatTime(player.currentTime))
@@ -89,12 +89,24 @@ struct NowPlayingView: View {
         return "\(mins):\(String(format: "%02d", secs))"
     }
 
+    /// Clamped to 0...1: near a track's end, AVPlayer's periodic time observer can
+    /// report a currentTime that overshoots the reported duration by a fraction of a
+    /// second (timing granularity, container vs. decoded-length differences), and the
+    /// two also briefly disagree for an instant right as playback hands off to the next
+    /// song. Either produces a raw ratio outside 0...1, which SwiftUI's ProgressView
+    /// logs a warning about instead of just clamping silently.
+    private var playbackProgress: Double {
+        guard player.duration > 0, player.currentTime.isFinite else { return 0 }
+        return min(max(player.currentTime / player.duration, 0), 1)
+    }
+
     /// Duration actually cached on disk for the current channel — matches the figure
     /// shown on the Channels page, unlike the raw sync queue (which includes songs that
-    /// have only been synced as metadata, not downloaded yet).
+    /// have only been synced as metadata, not downloaded yet). Reads the precomputed
+    /// stats cache — this view re-renders twice a second while playing, so recomputing
+    /// from disk here would be a lot worse than what made the Channels page slow.
     private func formatCachedDuration() -> String {
-        _ = player.cacheUpdateTick  // re-evaluate as downloads complete
-        let stats = player.cacheStatsPerChannel().first { $0.channelId == player.selectedChannel?.id }
+        let stats = player.cachedChannelStats.first { $0.channelId == player.selectedChannel?.id }
         let total = stats?.durationSeconds ?? 0
         let hours = Int(total) / 3600
         let mins = (Int(total) % 3600) / 60

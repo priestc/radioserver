@@ -20,19 +20,7 @@ struct HistoryView: View {
                     )
                 } else {
                     List(visibleEntries) { entry in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: entry.kind.iconName)
-                                .foregroundColor(entry.kind.iconColor)
-                                .frame(width: 20)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(entry.message)
-                                    .font(.caption)
-                                Text(entry.timestamp, style: .relative)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 1)
+                        LogRow(entry: entry)
                     }
                     .listStyle(.plain)
                     .textSelection(.enabled)
@@ -75,6 +63,47 @@ struct HistoryView: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             showCopyConfirmation = false
         }
+    }
+}
+
+private struct LogRow: View {
+    let entry: LogEntry
+    @State private var showDetails = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: entry.kind.iconName)
+                    .foregroundColor(entry.kind.iconColor)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.message)
+                        .font(.caption)
+                    Text(entry.timestamp, style: .relative)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if entry.details != nil {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showDetails.toggle()
+                        }
+                    } label: {
+                        Text(showDetails ? "Hide" : "Details")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            if showDetails, let details = entry.details {
+                Text(details)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 30)
+            }
+        }
+        .padding(.vertical, 1)
     }
 }
 

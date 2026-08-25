@@ -11,6 +11,7 @@
 		3824CC05C4906C17EE7A4E63 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6583E122D8359A1E53E08748 /* QRScannerView.swift */; };
 		4DA57E92DAE4AFAB284F031D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426C78E748A8B3A599B622A6 /* SettingsView.swift */; };
 		560A8E07F929E99F8220A1D1 /* ChannelCacheLimitWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD4EEF560BF41AD69921F66 /* ChannelCacheLimitWidget.swift */; };
+		597D336D7095A35F6D5AC34A /* ErrorExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6D1B437E41D6E4C3071BEA /* ErrorExtensions.swift */; };
 		7B381D3390AFABF6702CC0F8 /* ChannelCacheSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C0242627AAF1636B932C1C /* ChannelCacheSettings.swift */; };
 		91F51E72877215E03C8692B8 /* RadioClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC86B0C1F54964C4026CEB2 /* RadioClientApp.swift */; };
 		92349102C18EC5A1DEFC844A /* CacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469098CCFCEE845A96A0E131 /* CacheManager.swift */; };
@@ -38,6 +39,7 @@
 		46B0A93580DCFA441554FD3E /* ChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsView.swift; sourceTree = "<group>"; };
 		5A110F8149BA55740342D0E2 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		6583E122D8359A1E53E08748 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		8B6D1B437E41D6E4C3071BEA /* ErrorExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorExtensions.swift; sourceTree = "<group>"; };
 		90F1EEB734572E252ABDA3F5 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
 		AA49438693716D89CF1730B5 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		B4D261975A38A191E21C4742 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				32F7441D4092A76D8686281C /* CacheFormat.swift */,
 				469098CCFCEE845A96A0E131 /* CacheManager.swift */,
 				22C0242627AAF1636B932C1C /* ChannelCacheSettings.swift */,
+				8B6D1B437E41D6E4C3071BEA /* ErrorExtensions.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 				560A8E07F929E99F8220A1D1 /* ChannelCacheLimitWidget.swift in Sources */,
 				7B381D3390AFABF6702CC0F8 /* ChannelCacheSettings.swift in Sources */,
 				FC1397C43F8C8A04E8A4E18B /* ChannelsView.swift in Sources */,
+				597D336D7095A35F6D5AC34A /* ErrorExtensions.swift in Sources */,
 				C89F1E994DF33F8456C6AAD0 /* HistoryView.swift in Sources */,
 				EB688FB54A02EC62C844CA16 /* NowPlayingView.swift in Sources */,
 				3824CC05C4906C17EE7A4E63 /* QRScannerView.swift in Sources */,

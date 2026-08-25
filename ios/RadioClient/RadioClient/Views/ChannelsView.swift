@@ -1,12 +1,7 @@
 import SwiftUI
 
 struct ChannelsView: View {
-    @EnvironmentObject var apiService: APIService
     @EnvironmentObject var audioPlayer: AudioPlayer
-
-    @State private var channels: [Channel] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
 
     var body: some View {
         NavigationView {
@@ -14,9 +9,9 @@ struct ChannelsView: View {
                 Section {
                     channelRow(channel: nil)
                 }
-                if !channels.isEmpty {
+                if !audioPlayer.availableChannels.isEmpty {
                     Section("Channels") {
-                        ForEach(channels) { channel in
+                        ForEach(audioPlayer.availableChannels) { channel in
                             channelRow(channel: channel)
                         }
                     }
@@ -24,12 +19,12 @@ struct ChannelsView: View {
             }
             .navigationTitle("Channels")
             .overlay {
-                if isLoading && channels.isEmpty {
+                if audioPlayer.availableChannels.isEmpty && audioPlayer.channelsError == nil {
                     ProgressView("Loading channels…")
                 }
             }
             .overlay(alignment: .bottom) {
-                if let msg = errorMessage {
+                if let msg = audioPlayer.channelsError {
                     Text(msg)
                         .foregroundColor(.white)
                         .padding(10)
@@ -38,11 +33,11 @@ struct ChannelsView: View {
                         .padding()
                 }
             }
-            .task {
-                await loadChannels()
-            }
             .refreshable {
-                await loadChannels()
+                // fetchChannels is the single owner of this request — calling it here
+                // (rather than fetching independently) avoids doubling up with the
+                // app-launch fetch or any other concurrent trigger.
+                audioPlayer.fetchChannels()
                 audioPlayer.refreshCacheStats(reason: "channels pull-to-refresh")
             }
             .onAppear {
@@ -55,9 +50,9 @@ struct ChannelsView: View {
     private func channelRow(channel: Channel?) -> some View {
         let isSelected = audioPlayer.selectedChannel == channel
         let isExhausted = audioPlayer.exhaustedChannelIds.contains(channel?.id)
-        // cacheUpdateTick is read here so SwiftUI re-evaluates this row after downloads
-        let _ = audioPlayer.cacheUpdateTick
-        let cacheStats = audioPlayer.cacheStatsPerChannel().first { $0.channelId == channel?.id }
+        // cachedChannelStats is a precomputed cache (see AudioPlayer.recalculateCacheStats) —
+        // just an in-memory lookup, no disk reads on every row/render.
+        let cacheStats = audioPlayer.cachedChannelStats.first { $0.channelId == channel?.id }
         Button {
             audioPlayer.selectChannel(channel)
         } label: {
@@ -92,15 +87,4 @@ struct ChannelsView: View {
         return "\(stats.songCount) \(songLabel) · \(CacheFormat.duration(stats.durationSeconds)) · \(CacheFormat.bytes(stats.sizeBytes))"
     }
 
-    private func loadChannels() async {
-        guard apiService.isConfigured else { return }
-        isLoading = true
-        errorMessage = nil
-        do {
-            channels = try await apiService.fetchChannels()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
-    }
 }

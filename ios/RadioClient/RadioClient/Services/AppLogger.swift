@@ -18,12 +18,17 @@ struct LogEntry: Identifiable, Codable {
     let timestamp: Date
     let kind: LogKind
     let message: String
+    /// Technical details (URLs, status codes, byte counts, etc.) shown only behind a
+    /// "Details" disclosure in the History page — `message` itself should always read
+    /// as plain English.
+    let details: String?
 
-    init(kind: LogKind, message: String) {
+    init(kind: LogKind, message: String, details: String? = nil) {
         id = UUID()
         timestamp = Date()
         self.kind = kind
         self.message = message
+        self.details = details
     }
 }
 
@@ -44,11 +49,12 @@ class AppLogger: ObservableObject {
         load()
     }
 
-    func log(_ kind: LogKind, _ message: String) {
-        let entry = LogEntry(kind: kind, message: message)
+    func log(_ kind: LogKind, _ message: String, details: String? = nil) {
+        let entry = LogEntry(kind: kind, message: message, details: details)
         // Prefixed so it's easy to isolate in Xcode's console filter bar (type "RadioLog"),
         // select all, and copy/paste — quicker than pulling entries off the device.
-        print("[RadioLog] \(kind.rawValue): \(message)")
+        let detailsSuffix = details.map { " [\($0)]" } ?? ""
+        print("[RadioLog] \(kind.rawValue): \(message)\(detailsSuffix)")
         if Thread.isMainThread {
             insert(entry)
         } else {
@@ -57,12 +63,14 @@ class AppLogger: ObservableObject {
         scheduleSave()
     }
 
-    /// Plain-text dump of the visible log (oldest first), formatted for pasting elsewhere.
+    /// Plain-text dump of the visible log (oldest first, with details inlined), formatted
+    /// for pasting elsewhere.
     func formattedText(_ entries: [LogEntry]) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return entries.reversed().map { entry in
-            "[\(formatter.string(from: entry.timestamp))] \(entry.kind.rawValue): \(entry.message)"
+            let detailsSuffix = entry.details.map { " [\($0)]" } ?? ""
+            return "[\(formatter.string(from: entry.timestamp))] \(entry.kind.rawValue): \(entry.message)\(detailsSuffix)"
         }.joined(separator: "\n")
     }
 

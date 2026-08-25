@@ -3,3 +3,6 @@ __pycache__/
 *.egg-info/
 db.sqlite3
 .env
+build/
+camera-formware/
+.DS_Store

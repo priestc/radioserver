@@ -33,8 +33,11 @@ struct RadioClientApp: App {
             .environmentObject(audioPlayer)
             .onAppear {
                 audioPlayer.apiService = apiService
-                audioPlayer.startSyncTimer()
                 audioPlayer.fetchChannels()
+                // No separate initial sync call here — scenePhase below reliably fires
+                // for the initial launch too, and firing both was causing two concurrent
+                // sync requests right at startup (confirmed in server logs), one of which
+                // would get cancelled moments later by the next trigger.
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -43,6 +46,7 @@ struct RadioClientApp: App {
                 audioPlayer.reactivateAudioSession()
                 // Flush pendingPlayed immediately whenever the app becomes active
                 // so plays recorded while offline are reported to the server promptly.
+                // Covers both app launch and returning from background.
                 audioPlayer.triggerSync(reason: "app foregrounded")
             }
         }

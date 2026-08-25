@@ -64,10 +64,7 @@ struct SettingsView: View {
                 }
 
                 Section("Cache") {
-                    // cacheUpdateTick is read here so SwiftUI re-evaluates this body after downloads
-                    let _ = audioPlayer.cacheUpdateTick
-                    let channelCaches = audioPlayer.cacheStatsPerChannel()
-                    ForEach(channelCaches, id: \.name) { entry in
+                    ForEach(audioPlayer.cachedChannelStats, id: \.name) { entry in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(entry.name)
@@ -113,6 +110,7 @@ struct SettingsView: View {
                     Button("Clear Cache", role: .destructive) {
                         CacheManager.shared.clearCache()
                         audioPlayer.cacheUpdateTick += 1
+                        audioPlayer.recalculateCacheStats()
                         cacheCleared = true
                     }
                     if cacheCleared {
