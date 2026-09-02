@@ -10,7 +10,9 @@ enum CacheFormat {
     }
 
     static func duration(_ seconds: Double) -> String {
-        let totalMinutes = Int(seconds.rounded()) / 60
+        // Int(Double) traps on NaN/infinity — never let a bad duration crash a render.
+        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
+        let totalMinutes = Int(min(seconds, 1e9).rounded()) / 60
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
         return "\(hours):\(String(format: "%02d", minutes))"

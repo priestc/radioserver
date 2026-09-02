@@ -41,8 +41,7 @@ class AppLogger: ObservableObject {
     private var saveTask: Task<Void, Never>?
 
     private static var logFileURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return dir.appendingPathComponent("app_log.json")
+        AppPaths.file("app_log.json")
     }
 
     init() {

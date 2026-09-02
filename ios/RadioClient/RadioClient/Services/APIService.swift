@@ -76,7 +76,13 @@ class APIService: ObservableObject {
     }
 
     var activeServerURL: String {
-        isOnLocalNetwork ? localURL : remoteURL
+        let preferred = isOnLocalNetwork ? localURL : remoteURL
+        if !preferred.isEmpty { return preferred }
+        // Fall back to whichever URL is configured. A half-configured setup (e.g. only
+        // the remote/Tailscale URL filled in) must still be able to sync — otherwise
+        // being on Wi-Fi with a blank localURL leaves the app permanently "not set up"
+        // and unable to recover an empty cache.
+        return isOnLocalNetwork ? remoteURL : localURL
     }
 
     private var baseURL: URL? {
@@ -222,8 +228,7 @@ class APIService: ObservableObject {
                 }
             }
 
-            let dest = cache.fileURL(for: playlistItemId, ext: ext)
-            try? FileManager.default.removeItem(at: dest)
+            let dest = cache.prepareDestination(for: playlistItemId, ext: ext)
             try FileManager.default.moveItem(at: tempURL, to: dest)
             if !silent {
                 AppLogger.shared.log(.apiSuccess, "Downloaded track", details: "GET \(url.absoluteString) → 200")
@@ -242,6 +247,18 @@ class APIService: ObservableObject {
     func coverArtURL(albumId: Int) -> URL? {
         guard let base = baseURL else { return nil }
         return base.appendingPathComponent("/library/cover/\(albumId)/")
+    }
+
+    /// Fetches cover art with a short timeout. Artwork is purely cosmetic, so this must
+    /// never be allowed to hold up a download loop — the default 60s URLSession timeout
+    /// per album, multiplied by a queue of songs, used to stall prefill for the better
+    /// part of an hour whenever the server was unreachable but the network was "up".
+    func fetchCoverArt(albumId: Int) async throws -> (Data, Int) {
+        guard let url = coverArtURL(albumId: albumId) else { throw APIError.invalidURL }
+        var request = authorizedRequest(url: url)
+        request.timeoutInterval = 8
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
 
     func testConnection() async -> Result<Int, Error> {

@@ -108,9 +108,7 @@ struct SettingsView: View {
                     .disabled(audioPlayer.isFillingCache)
 
                     Button("Clear Cache", role: .destructive) {
-                        CacheManager.shared.clearCache()
-                        audioPlayer.cacheUpdateTick += 1
-                        audioPlayer.recalculateCacheStats()
+                        audioPlayer.clearAllCaches()
                         cacheCleared = true
                     }
                     if cacheCleared {
@@ -124,6 +122,11 @@ struct SettingsView: View {
                 cacheCleared = false
                 audioPlayer.refreshCacheStats(reason: "settings opened")
             }
+            // Pick up a newly entered server/key right away — otherwise nothing would
+            // talk to the server until the next tab switch or app foreground.
+            .onChange(of: api.localURL) { _, _ in audioPlayer.configurationChanged() }
+            .onChange(of: api.remoteURL) { _, _ in audioPlayer.configurationChanged() }
+            .onChange(of: api.apiKey) { _, _ in audioPlayer.configurationChanged() }
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {

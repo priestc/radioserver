@@ -12,8 +12,24 @@ struct ChannelCacheLimit: Codable, Equatable {
 
     static let `default` = ChannelCacheLimit(mode: .duration, durationSeconds: 3600, sizeGB: 1.0)
 
+    /// Largest values the app will honor. These bound every Int/Int64 conversion below:
+    /// converting an out-of-range or non-finite Double to an integer traps at runtime,
+    /// so a stray "999999999999" typed into the size field must never reach one.
+    static let maxSizeGB = 2048.0
+    static let maxDurationSeconds = 7 * 24 * 3600.0
+
+    static func clampedSizeGB(_ value: Double) -> Double {
+        guard value.isFinite else { return 1.0 }
+        return min(max(value, 0), maxSizeGB)
+    }
+
+    static func clampedDurationSeconds(_ value: Double) -> Double {
+        guard value.isFinite else { return 3600 }
+        return min(max(value, 0), maxDurationSeconds)
+    }
+
     var sizeBytes: Int64 {
-        Int64(sizeGB * 1024 * 1024 * 1024)
+        Int64(Self.clampedSizeGB(sizeGB) * 1024 * 1024 * 1024)
     }
 
     var displayText: String {
@@ -32,9 +48,9 @@ struct ChannelCacheLimit: Codable, Equatable {
     var requestBufferMB: Int {
         switch mode {
         case .size:
-            return max(Int(sizeGB * 1024) + 50, 50)
+            return max(Int(Self.clampedSizeGB(sizeGB) * 1024) + 50, 50)
         case .duration:
-            let minutes = durationSeconds / 60
+            let minutes = Self.clampedDurationSeconds(durationSeconds) / 60
             return max(Int(minutes * 10), 50)
         }
     }
@@ -60,11 +76,18 @@ class ChannelCacheSettings: ObservableObject {
     }
 
     func limit(for channelId: Int?) -> ChannelCacheLimit {
-        limits[key(for: channelId)] ?? .default
+        guard var stored = limits[key(for: channelId)] else { return .default }
+        // Defensive: values persisted by an older build were never clamped.
+        stored.sizeGB = ChannelCacheLimit.clampedSizeGB(stored.sizeGB)
+        stored.durationSeconds = ChannelCacheLimit.clampedDurationSeconds(stored.durationSeconds)
+        return stored
     }
 
     func setLimit(_ limit: ChannelCacheLimit, for channelId: Int?) {
-        limits[key(for: channelId)] = limit
+        var safe = limit
+        safe.sizeGB = ChannelCacheLimit.clampedSizeGB(limit.sizeGB)
+        safe.durationSeconds = ChannelCacheLimit.clampedDurationSeconds(limit.durationSeconds)
+        limits[key(for: channelId)] = safe
     }
 
     private func save() {

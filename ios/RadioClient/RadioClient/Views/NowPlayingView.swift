@@ -9,10 +9,14 @@ struct NowPlayingView: View {
             VStack(spacing: 24) {
                 Spacer()
 
-                // Album art
-                if let albumId = player.currentSong?.albumId {
-                    CoverArtView(albumId: albumId)
+                // Album art — read from the on-disk artwork cache via the player, so
+                // it shows on a fully offline launch too.
+                if let image = player.currentArtworkImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
                         .frame(width: 280, height: 280)
+                        .clipped()
                         .cornerRadius(12)
                         .shadow(radius: 8)
                 } else {
@@ -114,23 +118,6 @@ struct NowPlayingView: View {
             return "\(hours)h \(mins)m"
         }
         return "\(mins)m"
-    }
-}
-
-struct CoverArtView: View {
-    let albumId: Int
-    @EnvironmentObject var player: AudioPlayer
-
-    var body: some View {
-        Group {
-            if let cached = player.artworkCache[albumId] {
-                Image(uiImage: cached)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                GenericAlbumArt()
-            }
-        }
     }
 }
 

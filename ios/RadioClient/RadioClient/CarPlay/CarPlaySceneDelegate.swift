@@ -70,7 +70,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private func makeQueueTemplate() -> CPListTemplate {
         let template = CPListTemplate(title: "Up Next", sections: makeAllSections())
         template.emptyViewTitleVariants = ["Queue is empty"]
-        template.emptyViewSubtitleVariants = ["Songs are loading from the server"]
+        template.emptyViewSubtitleVariants = ["Nothing downloaded for this channel yet"]
         return template
     }
 
