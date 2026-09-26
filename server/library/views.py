@@ -1152,6 +1152,7 @@ def browse_artist_detail(request, artist_id):
 
 GENRE_COLLAGE_POOL = 6
 GENRE_MIN_ALBUMS = 3
+GENRE_MIN_TRACKS = 10
 
 
 @require_GET
@@ -1183,8 +1184,10 @@ def browse_genres(request):
         pool = album_ids_by_genre.get(g["genre"], [])
         # Genres backed by only a couple of albums are usually mis-tagged
         # one-off tracks rather than a real genre, and can't make a decent
-        # collage anyway — leave them off the genre browse page.
-        if len(pool) < GENRE_MIN_ALBUMS:
+        # collage anyway — leave them off the genre browse page. Exception:
+        # a genre concentrated in few albums but with plenty of tracks (e.g.
+        # a whole album's worth of one genre) is real enough to show.
+        if len(pool) < GENRE_MIN_ALBUMS and g["count"] < GENRE_MIN_TRACKS:
             continue
         result.append({
             "name": g["genre"],
