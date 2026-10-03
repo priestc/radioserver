@@ -44,7 +44,15 @@ Request body:
 {"filters": [{"genre": "Rock"}, {"artist": "Miles Davis"}]}
 ```
 Each object in `filters` is a set of AND'd field constraints; the objects
-themselves are OR'd together. Response:
+themselves are OR'd together. Supported fields: `artist` (exact,
+case-insensitive, track or album artist), `title` (substring,
+case-insensitive), `album`, `genre`, `genre_group`, `year`, `year_min`,
+`year_max`, `decade`, `duration_min`, `duration_max`.
+
+By default the response is a radio-style random sample of at most 100
+matching tracks. Add `"all": true` at the top level for every match
+instead (stable album/disc/track order, capped at 5000, no
+`replaygain_track_gain`). Response:
 ```json
 {"tracks": [
   {"id": 4821, "artist": "Miles Davis", "title": "So What", "year": 1959, "format": "flac", "duration": 545.2}

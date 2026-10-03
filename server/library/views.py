@@ -720,6 +720,8 @@ def search_tracks(request):
             set_q &= Q(duration__lte=filter_set["duration_max"])
         if "album" in filter_set:
             set_q &= Q(album__title__iexact=filter_set["album"])
+        if "title" in filter_set:
+            set_q &= Q(title__icontains=filter_set["title"])
         if "decade" in filter_set:
             decade_start = int(filter_set["decade"])
             set_q &= Q(year__gte=decade_start, year__lt=decade_start + 10)
@@ -731,7 +733,7 @@ def search_tracks(request):
                 set_q &= Q(pk__isnull=True)  # match nothing
         combined_q |= set_q
 
-    all_tracks = list(
+    matching = (
         Track.objects.filter(combined_q)
         .filter(exclude_from_playlist=False)
         .exclude(duration__isnull=True)
@@ -739,6 +741,32 @@ def search_tracks(request):
         .select_related("album", "album__artist")
         .prefetch_related("artists")
     )
+
+    if body.get("all"):
+        # Plain search: every match, in a stable album/disc/track order,
+        # instead of the default 100-track radio-style random sample below
+        # — for clients that need the actual full result (Takeloom's song
+        # set builder, exact artist+title lookups). Capped only as a
+        # safety valve. replaygain_track_gain is left out: reading it opens
+        # every file, too slow across thousands of tracks.
+        listed = matching.order_by(
+            "album__artist__name", "album__title", "disc_number", "track_number", "title",
+        )[:ALL_TRACKS_MAX]
+        return JsonResponse({"tracks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "artist": t.display_artist,
+                "album": t.album.title if t.album else None,
+                "genre": t.genre,
+                "year": t.year,
+                "duration": t.duration,
+                "format": t.format,
+            }
+            for t in listed
+        ]})
+
+    all_tracks = list(matching)
     if not all_tracks:
         return JsonResponse({"tracks": []})
 
@@ -825,6 +853,9 @@ def download_track(request, track_id):
 
     return _file_response(path)
 
+
+# Safety cap on search_tracks' `"all": true` mode.
+ALL_TRACKS_MAX = 5000
 
 AUTOCOMPLETE_DEFAULT_LIMIT = 10
 AUTOCOMPLETE_MAX_LIMIT = 25
