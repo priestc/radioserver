@@ -99,6 +99,21 @@ def _best_thumbnail(meta: dict) -> str:
     return meta.get("thumbnail", "")
 
 
+def _album_from_meta(meta: dict) -> str:
+    """Album name from yt-dlp metadata.
+
+    Flat-playlist entries have no ``album`` field, so fall back to the playlist
+    title — which YouTube Music formats as "Album - <name>".
+    """
+    album = meta.get("album") or ""
+    if album:
+        return album
+    playlist_title = meta.get("playlist_title") or ""
+    if playlist_title.startswith("Album - "):
+        playlist_title = playlist_title[len("Album - "):]
+    return playlist_title
+
+
 def get_metadata_from_ytdl(url: str) -> dict:
     """Fetch album metadata from a YouTube Music URL.
 
@@ -128,7 +143,7 @@ def get_metadata_from_ytdl(url: str) -> dict:
             continue
         meta = json.loads(line)
         if not album_title:
-            album_title = meta.get("album") or meta.get("playlist_title") or ""
+            album_title = _album_from_meta(meta)
         if not artist_name:
             artist_name = meta.get("artist") or meta.get("channel") or ""
             if artist_name.endswith(" - Topic"):
@@ -157,7 +172,7 @@ def get_metadata_from_ytdl(url: str) -> dict:
             "duration": meta.get("duration"),
             "url": meta.get("url") or meta.get("webpage_url") or "",
             "thumbnail": thumb_url,
-            "album": meta.get("album") or meta.get("playlist_title") or "",
+            "album": _album_from_meta(meta),
             "artist": track_artist,
             "album_artist": album_artist,
             "genre": meta.get("genre") or "",
