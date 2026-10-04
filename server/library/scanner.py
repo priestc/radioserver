@@ -107,10 +107,24 @@ def _upsert_track(tag_data: dict, album_artist_name: str, source: str = "") -> t
     return created, changed_fields
 
 
+def _walk_library(library_path: str):
+    """os.walk over the library, skipping the top-level music videos folder.
+
+    Audio from music videos is extracted into the normal artist/album layout,
+    so nothing inside the videos folder should become a Track.
+    """
+    from library.musicvideo import MUSIC_VIDEOS_DIRNAME
+
+    for dirpath, dirnames, filenames in os.walk(library_path):
+        if os.path.normpath(dirpath) == os.path.normpath(library_path):
+            dirnames[:] = [d for d in dirnames if d != MUSIC_VIDEOS_DIRNAME]
+        yield dirpath, dirnames, filenames
+
+
 def _count_files(library_path: str, extensions: set[str]) -> int:
     """Count total audio files in the library."""
     count = 0
-    for dirpath, _dirnames, filenames in os.walk(library_path):
+    for dirpath, _dirnames, filenames in _walk_library(library_path):
         for filename in filenames:
             if filename.startswith("._"):
                 continue
@@ -137,7 +151,7 @@ def scan(force: bool = False, clean: bool = False, progress_callback=None) -> di
     seen_paths: set[str] = set()
 
     scan_start = time.monotonic()
-    for dirpath, _dirnames, filenames in os.walk(library_path):
+    for dirpath, _dirnames, filenames in _walk_library(library_path):
         for filename in filenames:
             if filename.startswith("._"):
                 continue

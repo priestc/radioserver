@@ -1277,20 +1277,10 @@ def _ranged_file_stream(path, start, length):
             yield chunk
 
 
-@require_GET
-def browse_stream_track(request, track_id):
-    """Stream a track for inline browser playback, honoring Range requests
-    (needed for seeking in an <audio> element) — Django's FileResponse does
-    not implement Range support itself, so it's handled manually here."""
-    try:
-        track = Track.objects.get(pk=track_id)
-    except Track.DoesNotExist:
-        raise Http404
-
-    path = Path(track.file_path)
-    if not path.is_file():
-        raise Http404
-
+def ranged_file_response(request, path: Path):
+    """Serve a file honoring Range requests (needed for seeking in <audio>
+    and <video> elements) — Django's FileResponse does not implement Range
+    support itself, so it's handled manually here."""
     file_size = path.stat().st_size
     content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
 
@@ -1323,3 +1313,18 @@ def browse_stream_track(request, track_id):
     response["Content-Disposition"] = "inline"
     response["Cache-Control"] = "no-cache"
     return response
+
+
+@require_GET
+def browse_stream_track(request, track_id):
+    """Stream a track for inline browser playback, with Range support."""
+    try:
+        track = Track.objects.get(pk=track_id)
+    except Track.DoesNotExist:
+        raise Http404
+
+    path = Path(track.file_path)
+    if not path.is_file():
+        raise Http404
+
+    return ranged_file_response(request, path)

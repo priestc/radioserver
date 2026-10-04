@@ -1,0 +1,344 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Music Video Downloads{% endblock %}
+
+{% block content_title %}<h1>Music Video Downloads</h1>{% endblock %}
+
+{% block content %}
+<style>
+  .mv-section { margin-bottom: 24px; }
+  .mv-section h2 { font-size: 1.1em; margin-bottom: 8px; }
+  .mv-input-row { display: flex; gap: 8px; align-items: center; }
+  .mv-input-row input[type="text"] { flex: 1; padding: 6px 10px; }
+  .btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; background: #fff; }
+  .btn:hover { background: #f0f0f0; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #417690; color: #fff; border-color: #417690; }
+  .btn-primary:hover { background: #205067; }
+  .btn-primary:disabled { background: #417690; }
+  #metadata-section { display: none; }
+  #progress-section { display: none; }
+  .video-table { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  .video-table th, .video-table td { padding: 5px 6px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: middle; }
+  .video-table th { background: #f8f8f8; font-size: 0.85em; }
+  .video-table input[type="text"] { width: 100%; padding: 2px 5px; box-sizing: border-box; font-size: 0.85em; }
+  .video-thumb { width: 96px; height: 54px; object-fit: cover; border-radius: 3px; display: block; }
+  .video-thumb-placeholder { width: 96px; height: 54px; background: #eee; border-radius: 3px; display: block; }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th, .history-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #ddd; }
+  .history-table th { background: #f8f8f8; }
+  .status-complete { color: #2e7d32; font-weight: bold; }
+  .status-error { color: #c62828; font-weight: bold; }
+  .status-active { color: #1565c0; font-weight: bold; }
+  .error-msg { color: #c62828; margin-top: 8px; white-space: pre-wrap; }
+  .warn { color: #e65100; font-size: 0.8em; }
+  .spinner { display: none; margin-left: 8px; }
+  .progress-row { padding: 6px 0; border-bottom: 1px solid #eee; }
+  .progress-msg { white-space: pre-wrap; font-size: 0.9em; color: #444; }
+</style>
+
+<div class="mv-section">
+  <h2>Download music videos from YouTube</h2>
+  <p style="color:#666; margin-top:0">
+    Videos are saved to the <code>Music Videos</code> folder in the library. Their audio is
+    extracted and added to the library as a regular track, so it plays on the radio channels too.
+    A playlist URL adds every video in it.
+  </p>
+  <div class="mv-input-row">
+    <input type="text" id="url-input" placeholder="Paste YouTube video or playlist URL...">
+    <button class="btn btn-primary" id="fetch-btn" onclick="fetchMetadata()">Fetch Metadata</button>
+    <span class="spinner" id="fetch-spinner">Fetching...</span>
+  </div>
+  <div id="fetch-error" class="error-msg"></div>
+</div>
+
+<div id="metadata-section" class="mv-section">
+  <h2>Videos</h2>
+  <div id="metadata-errors" class="error-msg" style="display:none; margin-bottom: 8px;"></div>
+  <div style="overflow-x: auto;">
+    <table class="video-table">
+      <colgroup>
+        <col style="width:30px">
+        <col style="width:104px">
+        <col style="width:22%">
+        <col style="width:18%">
+        <col style="width:16%">
+        <col style="width:12%">
+        <col style="width:64px">
+        <col style="width:56px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="select-all" checked onchange="toggleAll(this.checked)"></th>
+          <th>Thumbnail</th>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Album</th>
+          <th>Genre</th>
+          <th>Year</th>
+          <th>Dur</th>
+        </tr>
+      </thead>
+      <tbody id="video-list"></tbody>
+    </table>
+  </div>
+  <p style="color:#666; font-size:0.85em">Leave Album blank to file the audio under "Music Videos" for that artist.</p>
+  <div style="margin-top: 12px; display: flex; align-items: center; gap: 16px;">
+    <button class="btn btn-primary" id="download-btn" onclick="startDownload()">Download</button>
+    <span class="spinner" id="download-spinner">Starting...</span>
+  </div>
+  <div id="download-error" class="error-msg"></div>
+</div>
+
+<div id="progress-section" class="mv-section">
+  <h2>Download Progress</h2>
+  <div id="progress-list"></div>
+  <div id="progress-error" class="error-msg"></div>
+</div>
+
+{% if downloads %}
+<div class="mv-section">
+  <h2>Download History</h2>
+  <table class="history-table">
+    <thead>
+      <tr>
+        <th>Artist</th>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Date</th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for dl in downloads %}
+      <tr>
+        <td>{{ dl.artist_name }}</td>
+        <td>{{ dl.title }}</td>
+        <td>
+          {% if dl.status == "complete" %}
+            <span class="status-complete" title="{{ dl.progress_message }}">Complete</span>
+          {% elif dl.status == "error" %}
+            <span class="status-error" title="{{ dl.error_message }}">Error</span>
+            <div style="font-size:0.85em; color:#c62828;">{{ dl.error_message|truncatechars:200 }}</div>
+          {% else %}
+            <span class="status-active">{{ dl.get_status_display }}</span>
+          {% endif %}
+        </td>
+        <td>{{ dl.created_at|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% if dl.track_id %}
+            <a href="{% url 'admin:library_track_change' dl.track_id %}">View track</a>
+          {% elif dl.status == "error" %}
+            <a href="#" onclick="retryDownload('{{ dl.url|escapejs }}'); return false;">Retry</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+function getCookie(name) {
+  const cookies = document.cookie.split(';');
+  for (let c of cookies) {
+    c = c.trim();
+    if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
+  }
+  return '';
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function retryDownload(url) {
+  var input = document.getElementById('url-input');
+  input.value = url;
+  input.focus();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function toggleAll(checked) {
+  document.querySelectorAll('#video-list .video-select').forEach(function(cb) { cb.checked = checked; });
+}
+
+function fetchMetadata() {
+  var url = document.getElementById('url-input').value.trim();
+  var errorDiv = document.getElementById('fetch-error');
+  if (!url) { errorDiv.textContent = 'Please enter a URL.'; return; }
+
+  var btn = document.getElementById('fetch-btn');
+  var spinner = document.getElementById('fetch-spinner');
+
+  btn.disabled = true;
+  spinner.style.display = 'inline';
+  errorDiv.textContent = '';
+  document.getElementById('metadata-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+
+  var formData = new FormData();
+  formData.append('url', url);
+
+  fetch('fetch-metadata/', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    if (!res.ok) {
+      errorDiv.textContent = res.data.error || 'Unknown error';
+      return;
+    }
+    showMetadata(res.data);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    errorDiv.textContent = 'Request failed: ' + err;
+  });
+}
+
+function showMetadata(data) {
+  var tbody = document.getElementById('video-list');
+  tbody.innerHTML = '';
+  (data.videos || []).forEach(function(v) {
+    var dur = '';
+    if (v.duration) {
+      var mins = Math.floor(v.duration / 60);
+      var secs = Math.round(v.duration % 60);
+      dur = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    }
+    var thumb = v.thumbnail
+      ? '<img class="video-thumb" src="' + esc(v.thumbnail) + '" loading="lazy">'
+      : '<span class="video-thumb-placeholder"></span>';
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-url', v.url || '');
+    tr.setAttribute('data-thumbnail', v.thumbnail || '');
+    tr.innerHTML =
+      '<td><input type="checkbox" class="video-select"' + (v.already_imported ? '' : ' checked') + '></td>' +
+      '<td>' + thumb + '</td>' +
+      '<td><input type="text" class="video-title" value="' + esc(v.title) + '">' +
+        (v.already_imported ? '<div class="warn">Already imported</div>' : '') + '</td>' +
+      '<td><input type="text" class="video-artist" value="' + esc(v.artist) + '"></td>' +
+      '<td><input type="text" class="video-album" value="' + esc(v.album) + '" placeholder="Music Videos"></td>' +
+      '<td><input type="text" class="video-genre" value="' + esc(v.genre) + '"></td>' +
+      '<td><input type="text" class="video-year" value="' + esc(v.year) + '"></td>' +
+      '<td style="color:#666;font-size:0.85em;white-space:nowrap">' + dur + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  var errorsDiv = document.getElementById('metadata-errors');
+  var errors = data.errors || [];
+  if (errors.length > 0) {
+    errorsDiv.textContent = errors.length + ' video(s) failed to fetch metadata:\n' + errors.join('\n');
+    errorsDiv.style.display = 'block';
+  } else {
+    errorsDiv.textContent = '';
+    errorsDiv.style.display = 'none';
+  }
+
+  document.getElementById('metadata-section').style.display = 'block';
+  document.getElementById('download-error').textContent = '';
+  document.getElementById('download-btn').disabled = false;
+}
+
+function startDownload() {
+  var videos = [];
+  document.querySelectorAll('#video-list tr').forEach(function(row) {
+    if (!row.querySelector('.video-select').checked) return;
+    videos.push({
+      url: row.getAttribute('data-url'),
+      thumbnail: row.getAttribute('data-thumbnail') || '',
+      title: row.querySelector('.video-title').value.trim(),
+      artist: row.querySelector('.video-artist').value.trim(),
+      album: row.querySelector('.video-album').value.trim(),
+      genre: row.querySelector('.video-genre').value.trim(),
+      year: row.querySelector('.video-year').value.trim(),
+    });
+  });
+
+  var btn = document.getElementById('download-btn');
+  var spinner = document.getElementById('download-spinner');
+  var errorDiv = document.getElementById('download-error');
+
+  if (videos.length === 0) { errorDiv.textContent = 'No videos selected.'; return; }
+
+  btn.disabled = true;
+  spinner.style.display = 'inline';
+  errorDiv.textContent = '';
+
+  fetch('start-download/', {
+    method: 'POST',
+    body: JSON.stringify({videos: videos}),
+    headers: {
+      'X-CSRFToken': getCookie('csrftoken'),
+      'Content-Type': 'application/json',
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    spinner.style.display = 'none';
+    if (!res.ok) {
+      btn.disabled = false;
+      errorDiv.textContent = res.data.error || 'Unknown error';
+      return;
+    }
+    document.getElementById('metadata-section').style.display = 'none';
+    pollStatus(res.data.ids);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    errorDiv.textContent = 'Request failed: ' + err;
+  });
+}
+
+function pollStatus(ids) {
+  var section = document.getElementById('progress-section');
+  var list = document.getElementById('progress-list');
+  var errorDiv = document.getElementById('progress-error');
+  section.style.display = 'block';
+  list.textContent = 'Starting...';
+  errorDiv.textContent = '';
+
+  var interval = setInterval(function() {
+    fetch('download-status/?ids=' + ids.join(','))
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        var allDone = true;
+        list.innerHTML = '';
+        data.downloads.forEach(function(d) {
+          var cls = d.status === 'complete' ? 'status-complete'
+                  : d.status === 'error' ? 'status-error' : 'status-active';
+          if (d.status !== 'complete' && d.status !== 'error') allDone = false;
+          var html = '<div class="progress-row"><strong>' + esc(d.artist) + ' — ' + esc(d.title) + '</strong> ' +
+            '<span class="' + cls + '">' + esc(d.status_display) + '</span>';
+          if (d.track_id) {
+            html += ' <a href="/admin/library/track/' + d.track_id + '/change/">View track</a>';
+          }
+          if (d.status === 'error') {
+            html += '<div class="error-msg">' + esc(d.error_message) + '</div>';
+          } else if (d.progress_message) {
+            html += '<div class="progress-msg">' + esc(d.progress_message) + '</div>';
+          }
+          list.insertAdjacentHTML('beforeend', html + '</div>');
+        });
+        if (allDone) clearInterval(interval);
+      })
+      .catch(function(err) {
+        clearInterval(interval);
+        errorDiv.textContent = 'Polling failed: ' + err;
+      });
+  }, 2000);
+}
+</script>
+{% endblock %}

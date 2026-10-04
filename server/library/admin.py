@@ -21,6 +21,7 @@ from library.models import (
     Decade,
     DecadeStation,
     GenreGroup,
+    MusicVideoDownload,
     PlaylistItem,
     PlaylistSettings,
     Track,
@@ -106,6 +107,14 @@ def _delete_file_and_cleanup_dir(file_path: Path) -> None:
             shutil.rmtree(parent, ignore_errors=True)
 
 
+def _delete_video_file(video_path: Path) -> None:
+    """Unlink a music video, then remove its artist folder if it is now empty."""
+    video_path.unlink(missing_ok=True)
+    parent = video_path.parent
+    if parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
+
+
 class DeleteWithFilesMixin:
     """Mixin that replaces Django's delete confirmation with a two-option prompt:
     delete DB entries only, or delete DB entries plus the audio files from disk."""
@@ -125,6 +134,8 @@ class DeleteWithFilesMixin:
                 for track in self._tracks_to_delete(obj):
                     if track.file_path:
                         _delete_file_and_cleanup_dir(Path(track.file_path))
+                    if track.video_path:
+                        _delete_video_file(Path(track.video_path))
             # Both "delete_files" and "delete_db_only" proceed with DB deletion
             return super().delete_view(request, object_id, extra_context)
 
@@ -726,7 +737,7 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
     list_editable = ["exclude_from_playlist"]
     list_filter = ["format", "genre", "source"]
     search_fields = ["title", "artists__name", "album__title", "source"]
-    readonly_fields = ["audio_player", "ai_year_lookup"]
+    readonly_fields = ["audio_player", "video_player", "ai_year_lookup"]
 
     def get_urls(self):
         custom_urls = [
@@ -739,6 +750,11 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 "<int:track_id>/stream/",
                 self.admin_site.admin_view(self.stream_view),
                 name="library_track_stream",
+            ),
+            path(
+                "<int:track_id>/video/",
+                self.admin_site.admin_view(self.video_stream_view),
+                name="library_track_video",
             ),
         ]
         return custom_urls + super().get_urls()
@@ -753,6 +769,31 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         if not file_path.is_file():
             return JsonResponse({"error": "File not found"}, status=404)
         return FileResponse(open(file_path, "rb"))
+
+    def video_stream_view(self, request, track_id):
+        from django.http import Http404
+        from library.views import ranged_file_response
+        track = Track.objects.get(pk=track_id)
+        if not track.video_path or not Path(track.video_path).is_file():
+            raise Http404(f"Video file not found: {track.video_path or '(none)'}")
+        return ranged_file_response(request, Path(track.video_path))
+
+    @admin.display(description="Music video")
+    def video_player(self, obj):
+        if not obj.pk or not obj.video_path:
+            return "—"
+        if not Path(obj.video_path).is_file():
+            return format_html(
+                '<span style="color:#c62828">Video file missing: {}</span>', obj.video_path,
+            )
+        from django.urls import reverse
+        url = reverse("admin:library_track_video", args=[obj.pk])
+        return format_html(
+            '<video controls preload="metadata" style="width:100%; max-width:640px;">'
+            '<source src="{}" type="video/mp4">'
+            '</video>',
+            url,
+        )
 
     @admin.display(description="Player")
     def audio_player(self, obj):
@@ -1149,6 +1190,142 @@ class YtdlDownloadAdmin(admin.ModelAdmin):
             "album_id": dl.album_id,
         }
         return JsonResponse(data)
+
+
+@admin.register(MusicVideoDownload)
+class MusicVideoDownloadAdmin(admin.ModelAdmin):
+    list_display = ["artist_name", "title", "status", "created_at"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "fetch-metadata/",
+                self.admin_site.admin_view(self.fetch_metadata_view),
+                name="library_musicvideodownload_fetch_metadata",
+            ),
+            path(
+                "start-download/",
+                self.admin_site.admin_view(self.start_download_view),
+                name="library_musicvideodownload_start_download",
+            ),
+            path(
+                "download-status/",
+                self.admin_site.admin_view(self.download_status_view),
+                name="library_musicvideodownload_download_status",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Music Video Downloads",
+            "downloads": MusicVideoDownload.objects.select_related("track")[:50],
+            "opts": self.model._meta,
+            "has_add_permission": False,
+        }
+        return TemplateResponse(
+            request,
+            "admin/library/musicvideodownload/change_list.html",
+            context,
+        )
+
+    def fetch_metadata_view(self, request):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        url = request.POST.get("url", "").strip()
+        if not url:
+            return JsonResponse({"error": "No URL provided"}, status=400)
+        try:
+            from library.musicvideo import get_video_metadata
+            metadata = get_video_metadata(url)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+        # Flag videos that have already been imported
+        for v in metadata["videos"]:
+            v["already_imported"] = Track.objects.filter(source=v["url"]).exclude(video_path="").exists()
+        return JsonResponse(metadata)
+
+    def start_download_view(self, request):
+        import json as json_mod
+        import threading
+
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+
+        try:
+            data = json_mod.loads(request.body)
+        except ValueError as e:
+            return JsonResponse({"error": f"Invalid JSON: {e}"}, status=400)
+
+        videos = data.get("videos", [])
+        if not videos:
+            return JsonResponse({"error": "No videos selected"}, status=400)
+
+        errors = []
+        for i, v in enumerate(videos, 1):
+            if not (v.get("url") or "").strip():
+                errors.append(f"Row {i}: missing URL")
+            if not (v.get("title") or "").strip():
+                errors.append(f"Row {i}: title is required")
+            if not (v.get("artist") or "").strip():
+                errors.append(f"Row {i}: artist is required")
+            year = v.get("year")
+            if year not in (None, "") and not str(year).isdigit():
+                errors.append(f"Row {i}: year must be a number")
+        if errors:
+            return JsonResponse({"error": "\n".join(errors)}, status=400)
+
+        from library.musicvideo import run_video_download
+
+        ids = []
+        for v in videos:
+            year = v.get("year")
+            dl = MusicVideoDownload.objects.create(
+                url=v["url"].strip(),
+                title=v["title"].strip(),
+                artist_name=v["artist"].strip(),
+                album_title=(v.get("album") or "").strip(),
+                genre=(v.get("genre") or "").strip(),
+                year=int(year) if year not in (None, "") else None,
+                thumbnail=(v.get("thumbnail") or "").strip(),
+                status="pending",
+            )
+            ids.append(dl.pk)
+
+        # Download sequentially in one thread so we don't hammer YouTube
+        def run_all():
+            for pk in ids:
+                run_video_download(pk)
+
+        threading.Thread(daemon=True, target=run_all).start()
+        return JsonResponse({"ids": ids})
+
+    def download_status_view(self, request):
+        ids = [int(i) for i in request.GET.get("ids", "").split(",") if i.strip().isdigit()]
+        downloads = MusicVideoDownload.objects.filter(pk__in=ids)
+        return JsonResponse({
+            "downloads": [
+                {
+                    "id": dl.pk,
+                    "title": dl.title,
+                    "artist": dl.artist_name,
+                    "status": dl.status,
+                    "status_display": dl.get_status_display(),
+                    "progress_message": dl.progress_message,
+                    "error_message": dl.error_message,
+                    "track_id": dl.track_id,
+                }
+                for dl in downloads
+            ],
+        })
 
 
 @admin.register(VideoChannel)

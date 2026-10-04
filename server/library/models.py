@@ -76,6 +76,10 @@ class Track(models.Model):
     file_mtime = models.FloatField(null=True, blank=True)
     source = models.CharField(max_length=500, blank=True, default="")
     format = models.CharField(max_length=20, blank=True, default="")
+    video_path = models.CharField(
+        max_length=1000, blank=True, default="",
+        help_text="Path to the music video this track's audio was extracted from, if any.",
+    )
     date_added = models.DateTimeField(auto_now_add=True)
     date_modified = models.DateTimeField(auto_now=True)
 
@@ -346,6 +350,42 @@ class YtdlDownload(models.Model):
 
     def __str__(self):
         return f"{self.artist_name} — {self.album_title}"
+
+
+class MusicVideoDownload(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("downloading", "Downloading"),
+        ("extracting", "Extracting audio"),
+        ("scanning", "Scanning"),
+        ("applying_replaygain", "Applying ReplayGain"),
+        ("complete", "Complete"),
+        ("error", "Error"),
+    ]
+
+    url = models.URLField(max_length=500)
+    title = models.CharField(max_length=500)
+    artist_name = models.CharField(max_length=500)
+    album_title = models.CharField(max_length=500, blank=True, default="")
+    genre = models.CharField(max_length=200, blank=True, default="")
+    year = models.PositiveSmallIntegerField(null=True, blank=True)
+    thumbnail = models.URLField(max_length=1000, blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    progress_message = models.TextField(blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    video_path = models.CharField(max_length=1000, blank=True, default="")
+    track = models.ForeignKey(
+        Track, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "music video download"
+        verbose_name_plural = "music video downloads"
+
+    def __str__(self):
+        return f"{self.artist_name} — {self.title}"
 
 
 class ApiKey(models.Model):
