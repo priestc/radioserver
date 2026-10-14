@@ -160,9 +160,12 @@
     <h2>Episode playlist</h2>
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
+      Dylan's intro to a song belongs to that song, so talk breaks start out merged into the song after them.
+      If he's talking about the song that just ended, add a boundary where that stops and use <b>↑ Merge</b> on the stretch.
+      Only split off a <b>Talk</b> track when he's on something unrelated (an email, a phone call, a jingle).<br><br>
       Click a playlist song to put it on the selected track.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±5s (<kbd>Shift</kbd> ±1s)<br>
-      <kbd>B</kbd> add boundary at playhead · <kbd>Del</kbd> remove selected boundary<br>
+      <kbd>B</kbd> add boundary at playhead · <kbd>Del</kbd> remove selected boundary (merges into the previous track)<br>
       <kbd>[</kbd>/<kbd>]</kbd> nudge selected boundary ±0.25s · <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary<br>
       <kbd>T</kbd> mark selected track as talk · Double-click the zoomed waveform to add a boundary there.
     </div>
@@ -341,7 +344,8 @@
       const len = trackEnd(i) - t.start;
       const pe = playlistEntry(t);
       const expected = pe && pe.expected_length;
-      const bad = expected && !isTalk(t) && (len < expected * 0.6 || len > expected * 1.2);
+      // Tracks include Dylan's talk around the song, so allow up to ~2.5 extra minutes.
+      const bad = expected && !isTalk(t) && (len < expected * 0.6 || len > expected * 1.2 + 150);
       tr.innerHTML = `
         <td class="num">${i + 1}</td>
         <td class="time"><input class="start" value="${fmt(t.start)}" ${i === 0 ? "disabled" : ""} aria-label="Start time"></td>
@@ -352,7 +356,9 @@
         <td class="actions">
           <button class="play-start" title="Play from start">▶</button>
           <button class="play-end" title="Play the last 5 seconds">▶ end</button>
-          <button class="talk-btn" title="Mark as talk (T)">Talk</button>
+          <button class="merge-up" title="Merge into the previous track (Del): it keeps the previous track's name" ${i === 0 ? "disabled" : ""}>↑ Merge</button>
+          <button class="merge-down" title="Merge into the next track: it takes the next track's name" ${i === tracks.length - 1 ? "disabled" : ""}>↓ Merge</button>
+          <button class="talk-btn" title="Mark as a separate talk track (T)">Talk</button>
         </td>`;
       tr.querySelector(".title").value = t.title;
       tr.querySelector(".artist").value = t.artists.join(", ");
@@ -421,6 +427,15 @@
     selected = i - 1;
     changed();
   }
+  function mergeIntoNext(i) {
+    if (i < 0 || i >= tracks.length - 1) return;
+    const next = tracks[i + 1];
+    tracks[i].title = next.title;
+    tracks[i].artists = [...next.artists];
+    tracks.splice(i + 1, 1);
+    selected = i;
+    changed();
+  }
   function moveBoundary(i, t) {
     const lo = tracks[i - 1].start + 1, hi = trackEnd(i) - 1;
     tracks[i].start = Math.round(Math.min(Math.max(t, lo), hi) * 100) / 100;
@@ -443,6 +458,8 @@
     if (e.target.closest(".play-start")) { select(i); audio.currentTime = tracks[i].start; centerOn(tracks[i].start); audio.play(); return; }
     if (e.target.closest(".play-end")) { select(i); const t = Math.max(tracks[i].start, trackEnd(i) - 5); audio.currentTime = t; centerOn(trackEnd(i)); audio.play(); return; }
     if (e.target.closest(".talk-btn")) { select(i); markTalk(i); return; }
+    if (e.target.closest(".merge-up")) { removeBoundary(i); return; }
+    if (e.target.closest(".merge-down")) { mergeIntoNext(i); return; }
     if (i !== selected) select(i);
   });
   rowsEl.addEventListener("change", e => {
