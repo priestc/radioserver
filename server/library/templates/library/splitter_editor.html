@@ -75,6 +75,8 @@
   .side.right input { text-align: right; }
   .arrow { color: var(--text-dim); font-size: 20px; padding-bottom: 26px; }
 
+  .shift { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; }
+  .shift span { flex: 1; text-align: center; color: var(--text-dim); font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; }
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   .controls .spacer { flex: 1; }
   #time { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-width: 150px; }
@@ -137,6 +139,11 @@
       </div>
     </div>
 
+    <div class="shift">
+      <button id="earlier-btn" title="Show an earlier stretch (,)">◀ Earlier <kbd>,</kbd></button>
+      <span id="window-range"></span>
+      <button id="later-btn" title="Show a later stretch (.)">Later ▶ <kbd>.</kbd></button>
+    </div>
     <canvas id="detail"></canvas>
     <div class="legend">
       <span><i style="background:var(--music)"></i>Music</span>
@@ -151,7 +158,7 @@
       <button id="from-start-btn" title="Play this stretch from the start (R)">⟲ From start <kbd>R</kbd></button>
       <button id="around-btn" title="Play from 3 seconds before the boundary (A)">Hear the cut <kbd>A</kbd></button>
       <button id="set-btn" class="primary" title="Move this boundary to the playhead (B)">Set boundary here <kbd>B</kbd></button>
-      <button id="reset-btn" title="Move this boundary back to the middle of the talk">Reset to middle of talk</button>
+      <button id="reset-btn" title="Move this boundary back to the suggested spot">Reset to suggestion</button>
       <span class="spacer"></span>
       <span id="time">0:00.0</span>
       <label>Speed
@@ -172,11 +179,13 @@
     <h2>Episode playlist</h2>
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
-      Each boundary starts in the middle of Dylan's talk between two songs. Listen to the talk and put the boundary where he stops talking about the old song and starts on the new one.<br><br>
+      Each boundary starts about 10 seconds after a song's music ends. Listen to the talk and put the boundary where he stops talking about the old song and starts on the new one.<br>
+      If the real switch isn't in view, use <b>◀ Earlier</b> / <b>Later ▶</b>. If a song was missed entirely (two songs detected as one), slide to it and use <b>+ Add boundary at playhead</b>.<br><br>
       Click a playlist song to make it the “Starting” song.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
       <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead<br>
       <kbd>[</kbd>/<kbd>]</kbd> nudge boundary ±0.25s · <kbd>A</kbd> hear the cut · <kbd>R</kbd> replay stretch<br>
+      <kbd>,</kbd>/<kbd>.</kbd> slide the view earlier/later<br>
       Click the waveform to move the playhead; drag the yellow line to move the boundary.
     </div>
   </aside>
@@ -191,7 +200,8 @@
   const API = `/library/api/splitter/${JOB_ID}/`;
   const TALK_TITLES = ["Opening", "Commentary", "Closing"];
   // These mirror library/splitter.py (song_regions / boundary_context).
-  const SONG_MIN_MUSIC = 25, MUSIC_GAP_MERGE = 2, WINDOW_PAD = 4;
+  const SONG_MIN_MUSIC = 25, MUSIC_GAP_MERGE = 2;
+  const SUGGEST_AFTER_MUSIC = 10, SUGGEST_MAX_FRACTION = 1 / 3, WINDOW_BEFORE = 12, WINDOW_AFTER = 6;
   const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
 
   const $ = id => document.getElementById(id);
@@ -244,17 +254,15 @@
     const before = regions.filter(r => r[0] < b - 1);
     if (!before.length) {
       const nxt = regions.find(r => r[0] >= b - 1);
-      const end = nxt ? nxt[0] + WINDOW_PAD : Math.min(job.duration, b + 15);
+      const end = nxt ? nxt[0] + WINDOW_AFTER : Math.min(job.duration, b + 15);
       return { suggested: b, window: [0, Math.max(end, b + 10)] };
     }
     const a = before[before.length - 1];
     if (b < a[1] - 3) return { suggested: b, window: [Math.max(0, b - 12), Math.min(job.duration, b + 12)] };
     const nxt = regions.find(r => r[0] >= a[1]);
     const gapEnd = nxt ? nxt[0] : job.duration;
-    const speech = job.segments.filter(([lab, s, e]) => lab === "speech" && e > a[1] && s < gapEnd)
-      .map(([, s, e]) => [Math.max(s, a[1]), Math.min(e, gapEnd)]);
-    const suggested = speech.length ? (speech[0][0] + speech[speech.length - 1][1]) / 2 : gapEnd;
-    let lo = Math.max(0, a[1] - WINDOW_PAD), hi = Math.min(job.duration, gapEnd + WINDOW_PAD);
+    const suggested = a[1] + Math.min(SUGGEST_AFTER_MUSIC, (gapEnd - a[1]) * SUGGEST_MAX_FRACTION);
+    let lo = Math.max(0, a[1] - WINDOW_BEFORE), hi = Math.min(job.duration, gapEnd + WINDOW_AFTER);
     if (hi - lo < 10) { lo = Math.max(0, suggested - 5); hi = Math.min(job.duration, suggested + 5); }
     return { suggested, window: [lo, hi] };
   }
@@ -366,7 +374,17 @@
       $("right-title").value = R.title; $("right-artist").value = R.artists.join(", ");
     }
     $("del-btn").disabled = n < 1;
+    $("window-range").textContent = `showing ${fmt(win[0])} – ${fmt(win[1])}`;
     renderPlaylist(); renderNotes(); draw();
+  }
+  // Slide the zoomed view by half its width, for boundaries the detector missed.
+  function shiftWindow(dir) {
+    const w = win[1] - win[0], step = w / 2;
+    let lo = win[0] + dir * step;
+    lo = Math.max(0, Math.min(job.duration - w, lo));
+    win = [lo, lo + w];
+    audio.currentTime = win[0];
+    renderBoundary();
   }
   function goTo(i, { seek = true } = {}) {
     if (tracks.length < 2) { renderBoundary(); return; }
@@ -506,6 +524,8 @@
   const seekBy = d => { audio.currentTime = clampT(audio.currentTime + d); };
   const fromStart = () => { audio.currentTime = win[0]; audio.play(); };
   const aroundCut = () => { if (tracks.length > 1) { audio.currentTime = clampT(tracks[cur].start - 3); audio.play(); } };
+  $("earlier-btn").addEventListener("click", () => shiftWindow(-1));
+  $("later-btn").addEventListener("click", () => shiftWindow(1));
   $("prev-btn").addEventListener("click", () => goTo(cur - 1));
   $("next-btn").addEventListener("click", () => goTo(cur + 1));
   $("from-start-btn").addEventListener("click", fromStart);
@@ -535,6 +555,8 @@
     else if (k === "j") goTo(cur - 1);
     else if (k === "k") goTo(cur + 1);
     else if (k === "b") setBoundary(audio.currentTime);
+    else if (k === ",") shiftWindow(-1);
+    else if (k === ".") shiftWindow(1);
     else if (k === "a") aroundCut();
     else if (k === "r") fromStart();
     else if ((k === "[" || k === "]") && tracks.length > 1) { setBoundary(tracks[cur].start + (k === "]" ? 0.25 : -0.25)); aroundCut(); }

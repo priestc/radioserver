@@ -107,7 +107,14 @@ def _norm(s: str) -> str:
 
 SONG_MIN_MUSIC = 25.0   # music stretches shorter than this aren't treated as songs
 MUSIC_GAP_MERGE = 2.0   # music separated by less than this is one stretch
-WINDOW_PAD = 4.0        # seconds of song shown either side of the talk
+# Fitted to hand-placed boundaries: Dylan usually says a little about the song
+# that ended, then more about the next one, so the switch tends to come ~10s
+# after the music stops. He sometimes talks over a song's last bars, and the
+# detector still calls that music, so the view starts well before the music ends.
+SUGGEST_AFTER_MUSIC = 10.0   # suggested boundary: this long after the music ends...
+SUGGEST_MAX_FRACTION = 1 / 3  # ...but no further than this far into the gap
+WINDOW_BEFORE = 12.0          # seconds shown before the music ends
+WINDOW_AFTER = 6.0            # seconds shown after the next song starts
 
 
 def song_regions(segments: list) -> list[tuple[float, float]]:
@@ -126,26 +133,24 @@ def song_regions(segments: list) -> list[tuple[float, float]]:
 def boundary_context(segments: list, b: float, duration: float) -> dict:
     """Describe the gap around boundary time b.
 
-    Returns {"suggested", "window": [start, end]}: the suggestion is the midpoint
-    of the talk between the song ending before b and the song starting after it
-    (silence after a song stays with that song); with no talk, the next song's
-    start. If b sits inside a song (back-to-back songs), it's left where it is.
+    Returns {"suggested", "window": [start, end]}: the suggestion is a little
+    after the song ending before b stops (see SUGGEST_AFTER_MUSIC); with no gap,
+    the next song's start. If b sits inside a song (back-to-back songs), it's
+    left where it is.
     """
     regions = song_regions(segments)
     before = [r for r in regions if r[0] < b - 1]
     if not before:
         nxt = next((r for r in regions if r[0] >= b - 1), None)
-        end = nxt[0] + WINDOW_PAD if nxt else min(duration, b + 15)
+        end = nxt[0] + WINDOW_AFTER if nxt else min(duration, b + 15)
         return {"suggested": b, "window": [0.0, max(end, b + 10)]}
     a = before[-1]
     if b < a[1] - 3:
         return {"suggested": b, "window": [max(0.0, b - 12), min(duration, b + 12)]}
     nxt = next((r for r in regions if r[0] >= a[1]), None)
     gap_end = nxt[0] if nxt else duration
-    speech = [(max(s, a[1]), min(e, gap_end)) for lab, s, e in segments
-              if lab == "speech" and e > a[1] and s < gap_end]
-    suggested = (speech[0][0] + speech[-1][1]) / 2 if speech else gap_end
-    lo, hi = max(0.0, a[1] - WINDOW_PAD), min(duration, gap_end + WINDOW_PAD)
+    suggested = a[1] + min(SUGGEST_AFTER_MUSIC, (gap_end - a[1]) * SUGGEST_MAX_FRACTION)
+    lo, hi = max(0.0, a[1] - WINDOW_BEFORE), min(duration, gap_end + WINDOW_AFTER)
     if hi - lo < 10:
         lo, hi = max(0.0, suggested - 5), min(duration, suggested + 5)
     return {"suggested": round(suggested, 2), "window": [round(lo, 2), round(hi, 2)]}
