@@ -249,10 +249,12 @@ def read_tags(path: str | Path) -> dict | None:
 
     # Split all artist tag values on commas, slashes, or "Ft."/"Feat."/"Featuring"
     # The & delimiter is only recognised after a feat/ft/featuring split has occurred
+    # Word delimiters only count when another name follows them, so band names
+    # ending in one (e.g. "Little Feat") aren't split
     raw_artists = tags.get("artist", [])
     artists = []
     for val in raw_artists:
-        for part in re.split(r"[,/]|\bFt\.?\b|\bFeat\.?\b|\bFeaturing\b|\bDuet\s+with\b|\bwith\b", str(val), flags=re.IGNORECASE):
+        for part in re.split(r"[,/]|(?:\bFt\b|\bFeat\b|\bFeaturing\b|\bDuet\s+with\b|\bwith\b)\.?(?=\s*\w)", str(val), flags=re.IGNORECASE):
             part = part.strip()
             if not part:
                 continue
