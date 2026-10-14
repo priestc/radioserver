@@ -12,7 +12,7 @@ class Artist(models.Model):
 
     class Meta:
         ordering = ["sort_name", "name"]
-        indexes = [models.Index(fields=["name"])]
+        indexes = [models.Index(fields=["name"], name="library_artist_name_idx")]
 
     def __str__(self):
         return self.name
@@ -85,7 +85,7 @@ class Track(models.Model):
 
     class Meta:
         ordering = ["album", "disc_number", "track_number", "title"]
-        indexes = [models.Index(fields=["title"])]
+        indexes = [models.Index(fields=["title"], name="library_track_title_idx")]
 
     @property
     def display_artist(self) -> str:
