@@ -8,8 +8,8 @@
   :root {
     --bg: #0c0c0e; --bg-elevated: #161618; --bg-hover: #232326; --border: #2a2a2e;
     --text: #f2f2f3; --text-dim: #9a9a9e; --accent: #1db954; --warn: #e0a100; --danger: #e5484d;
-    --music: rgba(29, 185, 84, .16); --speech: rgba(90, 140, 255, .18);
-    --boundary: #f2f2f3; --selected: #e0a100; --playhead: #e5484d;
+    --music: rgba(29, 185, 84, .18); --speech: rgba(90, 140, 255, .22);
+    --boundary: #e0a100; --other-boundary: #f2f2f3; --playhead: #e5484d;
   }
   * { box-sizing: border-box; }
   body {
@@ -24,21 +24,22 @@
   button:hover { background: var(--bg-hover); }
   button:disabled { opacity: .45; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  button.big { padding: 9px 16px; font-size: 15px; font-weight: 600; }
   kbd {
     font-family: ui-monospace, Menlo, monospace; font-size: 11px; padding: 1px 5px;
     border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim);
   }
 
-  header {
-    position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border);
-    padding: 10px 16px;
-  }
+  header { border-bottom: 1px solid var(--border); padding: 10px 16px; }
   .topline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .topline h1 { font-size: 16px; margin: 0; flex: 1; min-width: 200px; }
   .topline a { color: var(--text-dim); text-decoration: none; }
   .topline a:hover { color: var(--text); }
   #save-state { color: var(--text-dim); font-size: 12.5px; }
   #save-state.dirty { color: var(--warn); }
+  .notes { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; }
+  .notes.clear { color: var(--accent); }
+  .notes:empty { display: none; }
 
   #banner {
     display: none; margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; font-size: 13px;
@@ -49,69 +50,60 @@
   #banner span { flex: 1; white-space: pre-wrap; }
   #banner button { padding: 0 8px; }
 
-  .transport { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  #time { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-width: 150px; }
-  .transport label { color: var(--text-dim); font-size: 12.5px; display: flex; align-items: center; gap: 4px; }
-  .transport select {
-    background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
-  }
-
-  .waves { padding: 10px 16px 0; }
+  main { padding: 12px 16px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
   canvas { display: block; width: 100%; border-radius: 6px; background: var(--bg-elevated); }
-  #overview { height: 70px; cursor: pointer; }
-  #detail { height: 170px; margin-top: 8px; cursor: crosshair; }
+  #overview { height: 56px; cursor: pointer; }
+  #detail { height: 200px; cursor: crosshair; }
   #detail.dragging, #detail.over-boundary { cursor: ew-resize; }
   .legend { display: flex; gap: 14px; color: var(--text-dim); font-size: 12px; padding: 6px 0 0; flex-wrap: wrap; }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 4px; }
-  #waveform-status { color: var(--text-dim); font-size: 12.5px; padding: 6px 0 0; }
+  #waveform-status { color: var(--text-dim); font-size: 12.5px; }
 
-  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 12px 16px 40px; }
-  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin: 6px 0 8px; }
+  .nav { display: flex; align-items: center; gap: 12px; margin: 16px 0 10px; flex-wrap: wrap; }
+  .nav .which { flex: 1; text-align: center; color: var(--text-dim); font-size: 13px; min-width: 160px; }
+  .nav .which b { color: var(--text); font-size: 15px; }
 
-  .tracks-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
-  th { color: var(--text-dim); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  tr.selected td { background: #2a2410; }
-  tr.playing td:first-child { box-shadow: inset 3px 0 var(--accent); }
-  td.num, td.time { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: nowrap; }
-  td.len.bad { color: var(--warn); }
-  td input {
-    width: 100%; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 4px; padding: 4px 6px;
+  .sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; margin: 10px 0 4px; }
+  .side label { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); margin-bottom: 4px; }
+  .side input {
+    width: 100%; background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; margin-bottom: 4px;
   }
-  td input:hover { border-color: var(--border); }
-  td input:focus { border-color: var(--accent); outline: none; background: var(--bg); }
-  td input.start { width: 82px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
-  td input.title { min-width: 180px; }
-  td input.artist { min-width: 150px; }
-  td.actions { white-space: nowrap; }
-  td.actions button { padding: 3px 7px; font-size: 12px; }
-  tr.talk input.title, tr.talk input.artist { color: var(--text-dim); }
+  .side input:focus { border-color: var(--accent); outline: none; }
+  .side.right { text-align: right; }
+  .side.right input { text-align: right; }
+  .arrow { color: var(--text-dim); font-size: 20px; padding-bottom: 26px; }
 
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .controls .spacer { flex: 1; }
+  #time { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-width: 150px; }
+  .controls label { color: var(--text-dim); font-size: 12.5px; display: flex; align-items: center; gap: 4px; }
+  .controls select {
+    background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
+  }
+  .structure { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .structure p { color: var(--text-dim); font-size: 12.5px; margin: 0 0 8px; }
+
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin: 0 0 8px; }
   .playlist { list-style: none; margin: 0; padding: 0; }
-  .playlist li {
-    display: flex; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; align-items: baseline;
-  }
+  .playlist li { display: flex; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; align-items: baseline; }
   .playlist li:hover { background: var(--bg-elevated); }
   .playlist li .n { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-width: 22px; }
   .playlist li .t { flex: 1; }
   .playlist li .a { display: block; color: var(--text-dim); font-size: 12.5px; }
-  .playlist li .l { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-  .playlist li.used .t { color: var(--text-dim); text-decoration: line-through; }
+  .playlist li.used .t { color: var(--text-dim); }
   .playlist li.missing { box-shadow: inset 3px 0 var(--warn); }
+  .playlist li.current { background: #1d2a20; }
   .help { color: var(--text-dim); font-size: 12.5px; line-height: 1.7; margin-top: 18px; }
-  .notes { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; }
-  .notes.clear { color: var(--accent); }
-  .notes:empty { display: none; }
 </style>
 </head>
 <body>
 <header>
   <div class="topline">
     <a href="/library/splitter/">← All recordings</a>
-    {% if prev_id %}<a href="/library/splitter/{{ prev_id }}/">‹ Prev</a>{% endif %}
-    {% if next_id %}<a href="/library/splitter/{{ next_id }}/">Next ›</a>{% endif %}
+    {% if prev_id %}<a href="/library/splitter/{{ prev_id }}/">‹ Prev episode</a>{% endif %}
+    {% if next_id %}<a href="/library/splitter/{{ next_id }}/">Next episode ›</a>{% endif %}
     <h1>{{ job.album_title }}</h1>
     <span id="save-state">Loading…</span>
     <button id="save-btn" disabled>Save <kbd>⌘S</kbd></button>
@@ -119,88 +111,98 @@
   </div>
   <p class="notes" id="live-notes"></p>
   <div id="banner"><span></span><button type="button" aria-label="Dismiss">×</button></div>
-  <div class="transport">
-    <button id="play-btn">▶ Play</button>
-    <button id="back-btn" title="Back 5s (←)">−5s</button>
-    <button id="fwd-btn" title="Forward 5s (→)">+5s</button>
-    <span id="time">0:00.0 / 0:00</span>
-    <button id="add-btn" title="Add boundary at playhead (B)">+ Boundary <kbd>B</kbd></button>
-    <button id="del-btn" title="Delete selected boundary (Delete)" disabled>− Boundary <kbd>Del</kbd></button>
-    <label>Speed
-      <select id="speed"><option>0.75</option><option selected>1</option><option>1.5</option><option>2</option></select>
-    </label>
-    <label>Zoom
-      <select id="zoom"><option value="15">15s</option><option value="45" selected>45s</option><option value="120">2 min</option><option value="300">5 min</option></select>
-    </label>
-  </div>
 </header>
 
-<div class="waves">
-  <canvas id="overview"></canvas>
-  <canvas id="detail"></canvas>
-  <div class="legend">
-    <span><i style="background:var(--music)"></i>Detected music</span>
-    <span><i style="background:var(--speech)"></i>Detected speech</span>
-    <span><i style="background:var(--boundary)"></i>Boundary (drag to move)</span>
-    <span><i style="background:var(--selected)"></i>Selected</span>
-    <span><i style="background:var(--playhead)"></i>Playhead</span>
-  </div>
-  <div id="waveform-status">Loading waveform…</div>
-</div>
-
-<div class="cols">
+<main>
   <section>
-    <h2>Tracks</h2>
-    <div class="tracks-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Start</th><th>Length</th><th>Title</th><th>Artist(s)</th><th></th></tr></thead>
-        <tbody id="track-rows"></tbody>
-      </table>
+    <canvas id="overview" title="Whole episode: click to jump to the nearest boundary"></canvas>
+
+    <div class="nav">
+      <button id="prev-btn" class="big">◀ Prev boundary</button>
+      <div class="which" id="which"></div>
+      <button id="next-btn" class="big">Next boundary ▶</button>
+    </div>
+
+    <div class="sides">
+      <div class="side left">
+        <label>Ending</label>
+        <input id="left-title" list="playlist-titles" aria-label="Title of the song that's ending">
+        <input id="left-artist" aria-label="Artists of the song that's ending (comma separated)">
+      </div>
+      <div class="arrow">→</div>
+      <div class="side right">
+        <label>Starting</label>
+        <input id="right-title" list="playlist-titles" aria-label="Title of the song that's starting">
+        <input id="right-artist" aria-label="Artists of the song that's starting (comma separated)">
+      </div>
+    </div>
+
+    <canvas id="detail"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--music)"></i>Music</span>
+      <span><i style="background:var(--speech)"></i>Talk</span>
+      <span><i style="background:var(--boundary)"></i>This boundary (drag it)</span>
+      <span><i style="background:var(--playhead)"></i>Playhead</span>
+      <span id="waveform-status">Loading waveform…</span>
+    </div>
+
+    <div class="controls">
+      <button id="play-btn">▶ Play</button>
+      <button id="from-start-btn" title="Play this stretch from the start (R)">⟲ From start <kbd>R</kbd></button>
+      <button id="around-btn" title="Play from 3 seconds before the boundary (A)">Hear the cut <kbd>A</kbd></button>
+      <button id="set-btn" class="primary" title="Move this boundary to the playhead (B)">Set boundary here <kbd>B</kbd></button>
+      <button id="reset-btn" title="Move this boundary back to the middle of the talk">Reset to middle of talk</button>
+      <span class="spacer"></span>
+      <span id="time">0:00.0</span>
+      <label>Speed
+        <select id="speed"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option></select>
+      </label>
+    </div>
+
+    <div class="structure">
+      <p>If a song was missed or two songs were merged, add a boundary at the playhead. If this boundary shouldn't exist, delete it (the two sides become one track). For talk that isn't about any song (an email, a phone call), give that stretch its own boundaries and mark it as talk.</p>
+      <button id="add-btn">+ Add boundary at playhead</button>
+      <button id="del-btn">Delete this boundary</button>
+      <button id="talk-left-btn">Mark “Ending” as talk</button>
+      <button id="talk-right-btn">Mark “Starting” as talk</button>
     </div>
   </section>
+
   <aside>
     <h2>Episode playlist</h2>
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
-      Dylan's intro to a song belongs to that song, so talk breaks start out merged into the song after them.
-      If he's talking about the song that just ended, add a boundary where that stops and use <b>↑ Merge</b> on the stretch.
-      Only split off a <b>Talk</b> track when he's on something unrelated (an email, a phone call, a jingle).<br><br>
-      Click a playlist song to put it on the selected track.<br>
-      <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±5s (<kbd>Shift</kbd> ±1s)<br>
-      <kbd>B</kbd> add boundary at playhead · <kbd>Del</kbd> remove selected boundary (merges into the previous track)<br>
-      <kbd>[</kbd>/<kbd>]</kbd> nudge selected boundary ±0.25s · <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary<br>
-      <kbd>T</kbd> mark selected track as talk · Double-click the zoomed waveform to add a boundary there.
+      Each boundary starts in the middle of Dylan's talk between two songs. Listen to the talk and put the boundary where he stops talking about the old song and starts on the new one.<br><br>
+      Click a playlist song to make it the “Starting” song.<br>
+      <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
+      <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead<br>
+      <kbd>[</kbd>/<kbd>]</kbd> nudge boundary ±0.25s · <kbd>A</kbd> hear the cut · <kbd>R</kbd> replay stretch<br>
+      Click the waveform to move the playhead; drag the yellow line to move the boundary.
     </div>
   </aside>
-</div>
+</main>
 
 <audio id="audio" preload="auto" src="/library/api/splitter/{{ job.id }}/audio/"></audio>
+<datalist id="playlist-titles"></datalist>
 {% csrf_token %}
 <script>
 (() => {
   const JOB_ID = {{ job.id }};
   const API = `/library/api/splitter/${JOB_ID}/`;
   const TALK_TITLES = ["Opening", "Commentary", "Closing"];
+  // These mirror library/splitter.py (song_regions / boundary_context).
+  const SONG_MIN_MUSIC = 25, MUSIC_GAP_MERGE = 2, WINDOW_PAD = 4;
   const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
 
-  const audio = document.getElementById("audio");
-  const overview = document.getElementById("overview");
-  const detail = document.getElementById("detail");
-  const rowsEl = document.getElementById("track-rows");
-  const playlistEl = document.getElementById("playlist");
-  const saveBtn = document.getElementById("save-btn");
-  const importBtn = document.getElementById("import-btn");
-  const saveState = document.getElementById("save-state");
-  const banner = document.getElementById("banner");
+  const $ = id => document.getElementById(id);
+  const audio = $("audio"), overview = $("overview"), detail = $("detail");
+  const saveBtn = $("save-btn"), importBtn = $("import-btn"), saveState = $("save-state"), banner = $("banner");
 
-  let job = null;          // server data
-  let tracks = [];         // [{start, title, artists}]
+  let job = null, tracks = [], regions = [];
   let peaks = [], res = 0.25;
-  let selected = 0;        // index of selected track (its start boundary)
+  let cur = 1;            // current boundary = start of tracks[cur]
+  let win = [0, 30];      // detail view range, pinned per boundary
   let dirty = false;
-  let zoom = 45;
-  let viewStart = 0;
-  let follow = true;
 
   // ---------- helpers ----------
   function fmt(t, precise = true) {
@@ -208,61 +210,76 @@
     const m = Math.floor(t / 60), s = t - m * 60;
     return `${m}:${(precise ? s.toFixed(1) : Math.floor(s).toString()).padStart(precise ? 4 : 2, "0")}`;
   }
-  function parseTime(str) {
-    const m = String(str).trim().match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
-    if (!m) return NaN;
-    return (m[1] ? parseInt(m[1], 10) * 60 : 0) + parseFloat(m[2]);
-  }
-  function showBanner(msg, kind = "error") {
-    banner.className = kind;
-    banner.querySelector("span").textContent = msg;
-  }
+  function showBanner(msg, kind = "error") { banner.className = kind; banner.querySelector("span").textContent = msg; }
   banner.querySelector("button").addEventListener("click", () => { banner.className = ""; });
   async function api(url, opts = {}) {
     let resp;
     try {
-      resp = await fetch(url, {
-        ...opts,
-        headers: { "X-CSRFToken": csrf, "Content-Type": "application/json", ...(opts.headers || {}) },
-      });
+      resp = await fetch(url, { ...opts, headers: { "X-CSRFToken": csrf, "Content-Type": "application/json" } });
     } catch (e) {
       throw new Error(`Network error talking to the server: ${e.message}`);
     }
     let data = null;
     try { data = await resp.json(); } catch (e) { /* non-JSON error page */ }
-    if (!resp.ok) {
-      const detailMsg = data && data.error ? data.error : `${resp.status} ${resp.statusText}`;
-      throw new Error(detailMsg);
-    }
+    if (!resp.ok) throw new Error(data && data.error ? data.error : `${resp.status} ${resp.statusText}`);
     if (data === null) throw new Error(`Server returned an unexpected (non-JSON) response for ${url}`);
     return data;
   }
-  function trackEnd(i) { return i + 1 < tracks.length ? tracks[i + 1].start : job.duration; }
-  function isTalk(t) { return TALK_TITLES.includes(t.title) && t.artists.join(", ") === job.album_artist; }
-  function norm(s) { return s.toLowerCase().replace(/[^a-z0-9]/g, ""); }
-  function playlistEntry(t) {
-    return job.playlist.find(p => norm(p.title) === norm(t.title));
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const trackEnd = i => i + 1 < tracks.length ? tracks[i + 1].start : job.duration;
+  const isTalk = t => TALK_TITLES.includes(t.title) && t.artists.join(", ") === job.album_artist;
+  const playlistEntry = t => job.playlist.find(p => norm(p.title) === norm(t.title));
+  const clampT = t => Math.max(0, Math.min(job.duration, t));
+
+  function songRegions(segments) {
+    const r = [];
+    for (const [lab, s, e] of segments) {
+      if (lab !== "music") continue;
+      if (r.length && s - r[r.length - 1][1] < MUSIC_GAP_MERGE) r[r.length - 1][1] = e;
+      else r.push([s, e]);
+    }
+    return r.filter(([s, e]) => e - s >= SONG_MIN_MUSIC);
+  }
+  function boundaryContext(b) {
+    const before = regions.filter(r => r[0] < b - 1);
+    if (!before.length) {
+      const nxt = regions.find(r => r[0] >= b - 1);
+      const end = nxt ? nxt[0] + WINDOW_PAD : Math.min(job.duration, b + 15);
+      return { suggested: b, window: [0, Math.max(end, b + 10)] };
+    }
+    const a = before[before.length - 1];
+    if (b < a[1] - 3) return { suggested: b, window: [Math.max(0, b - 12), Math.min(job.duration, b + 12)] };
+    const nxt = regions.find(r => r[0] >= a[1]);
+    const gapEnd = nxt ? nxt[0] : job.duration;
+    const speech = job.segments.filter(([lab, s, e]) => lab === "speech" && e > a[1] && s < gapEnd)
+      .map(([, s, e]) => [Math.max(s, a[1]), Math.min(e, gapEnd)]);
+    const suggested = speech.length ? (speech[0][0] + speech[speech.length - 1][1]) / 2 : gapEnd;
+    let lo = Math.max(0, a[1] - WINDOW_PAD), hi = Math.min(job.duration, gapEnd + WINDOW_PAD);
+    if (hi - lo < 10) { lo = Math.max(0, suggested - 5); hi = Math.min(job.duration, suggested + 5); }
+    return { suggested, window: [lo, hi] };
+  }
+
+  function setDirty(v) {
+    dirty = v;
+    saveState.textContent = v ? "Unsaved changes" : (job.status === "done" ? "Saved · imported" : "Saved");
+    saveState.classList.toggle("dirty", v);
+    saveBtn.disabled = !v;
   }
   function musicSeconds(s, e) {
     let n = 0;
     for (const [lab, a, b] of job.segments) if (lab === "music") n += Math.max(0, Math.min(b, e) - Math.max(a, s));
     return n;
   }
-  // Tracks carry Dylan's talk too, so measure only the detected music against the
-  // song's usual length (whole-track length plus a talk allowance if there are no hints).
   function lengthProblem(i) {
     const t = tracks[i], pe = playlistEntry(t), expected = pe && pe.expected_length;
     if (!expected || isTalk(t)) return null;
-    const end = trackEnd(i);
-    const hints = job.segments.length > 0;
-    const heard = hints ? musicSeconds(t.start, end) : end - t.start;
-    const hi = hints ? expected * 1.2 : expected * 1.2 + 150;
+    const heard = musicSeconds(t.start, trackEnd(i));
     if (heard < expected * 0.6) return `${t.title} has ${fmt(heard, false)} of music, short of its usual ${fmt(expected, false)}`;
-    if (heard > hi) return `${t.title} has ${fmt(heard, false)} of music, more than its usual ${fmt(expected, false)}`;
+    if (heard > expected * 1.2) return `${t.title} has ${fmt(heard, false)} of music, more than its usual ${fmt(expected, false)}`;
     return null;
   }
   function renderNotes() {
-    const el = document.getElementById("live-notes");
+    const el = $("live-notes");
     const used = new Set(tracks.map(t => norm(t.title)));
     const missing = job.playlist.filter(p => !used.has(norm(p.title))).map(p => p.title);
     const lengths = tracks.map((_, i) => lengthProblem(i)).filter(Boolean);
@@ -270,381 +287,270 @@
     if (missing.length) parts.push(`Not on any track yet: ${missing.join(", ")}`);
     if (lengths.length) parts.push(`Check: ${lengths.join("; ")}`);
     el.classList.toggle("clear", !parts.length);
-    el.textContent = parts.length ? parts.join(" · ") : "Every playlist song is on a track and all lengths look plausible.";
-  }
-  function setDirty(v) {
-    dirty = v;
-    saveState.textContent = v ? "Unsaved changes" : (job.status === "done" ? "Saved · imported" : "Saved");
-    saveState.classList.toggle("dirty", v);
-    saveBtn.disabled = !v;
-  }
-  function currentTrackIndex(t) {
-    let i = 0;
-    while (i + 1 < tracks.length && tracks[i + 1].start <= t) i++;
-    return i;
+    el.textContent = parts.length ? parts.join(" · ") : "Every playlist song is on a track and all song lengths look plausible.";
   }
 
-  // ---------- rendering: canvases ----------
+  // ---------- canvases ----------
   function sizeCanvas(c) {
-    const dpr = window.devicePixelRatio || 1;
-    const w = c.clientWidth, h = c.clientHeight;
-    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
-      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
-    }
+    const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     const ctx = c.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return [ctx, w, h];
   }
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  function drawRange(ctx, w, h, t0, t1, opts) {
+  function drawRange(c, t0, t1, opts) {
+    const [ctx, w, h] = sizeCanvas(c);
     const span = t1 - t0, x = t => (t - t0) / span * w;
     ctx.clearRect(0, 0, w, h);
-    // speech / music hints
     for (const [lab, s, e] of job.segments) {
       if (e < t0 || s > t1) continue;
       ctx.fillStyle = lab === "music" ? css("--music") : css("--speech");
       ctx.fillRect(x(s), 0, Math.max(1, x(e) - x(s)), h);
     }
-    // waveform
     if (peaks.length) {
-      ctx.fillStyle = "#6d6d73";
+      ctx.fillStyle = "#77777d";
       const mid = h / 2;
-      const cols = Math.floor(w);
-      for (let px = 0; px < cols; px++) {
+      for (let px = 0; px < Math.floor(w); px++) {
         const a = t0 + px / w * span, b = t0 + (px + 1) / w * span;
-        let i0 = Math.floor(a / res), i1 = Math.max(i0 + 1, Math.ceil(b / res));
+        const i0 = Math.max(0, Math.floor(a / res)), i1 = Math.max(i0 + 1, Math.ceil(b / res));
         let m = 0;
-        for (let i = i0; i < i1 && i < peaks.length; i++) if (i >= 0 && peaks[i] > m) m = peaks[i];
+        for (let i = i0; i < i1 && i < peaks.length; i++) if (peaks[i] > m) m = peaks[i];
         const ph = m / 255 * (h / 2 - 4);
         ctx.fillRect(px, mid - ph, 1, Math.max(1, ph * 2));
       }
     }
-    // boundaries + labels
-    ctx.font = "12px -apple-system, BlinkMacSystemFont, sans-serif";
-    tracks.forEach((t, i) => {
-      const s = t.start, e = trackEnd(i);
-      if (e < t0 || s > t1) return;
-      if (i > 0) {
-        ctx.fillStyle = i === selected ? css("--selected") : css("--boundary");
-        ctx.fillRect(Math.round(x(s)) - (i === selected ? 1 : 0), 0, i === selected ? 3 : 1.5, h);
-      }
-      if (opts.labels) {
-        const lx = Math.max(x(s), 0) + 5, rx = Math.min(x(e), w) - 5;
-        if (rx - lx > 30) {
-          ctx.save();
-          ctx.beginPath(); ctx.rect(lx, 0, rx - lx, h); ctx.clip();
-          ctx.fillStyle = isTalk(t) ? "#8f9bb8" : "#e8e8ea";
-          ctx.fillText(`${i + 1}. ${t.title}`, lx, 15);
-          ctx.fillStyle = "#9a9a9e";
-          ctx.fillText(t.artists.join(", "), lx, 30);
-          ctx.restore();
-        }
-      }
-    });
-    // playhead
-    ctx.fillStyle = css("--playhead");
-    ctx.fillRect(Math.round(x(audio.currentTime)) - 1, 0, 2, h);
+    for (let i = 1; i < tracks.length; i++) {
+      const s = tracks[i].start;
+      if (s < t0 || s > t1) continue;
+      const mine = i === cur;
+      ctx.fillStyle = mine ? css("--boundary") : css("--other-boundary");
+      ctx.fillRect(Math.round(x(s)) - (mine ? 1.5 : 0.5), 0, mine ? 3 : 1, h);
+    }
+    if (opts.labels) {
+      ctx.font = "13px -apple-system, BlinkMacSystemFont, sans-serif";
+      const bx = x(tracks[cur].start);
+      const left = tracks[cur - 1], right = tracks[cur];
+      ctx.fillStyle = "#e8e8ea";
+      ctx.textAlign = "right";
+      if (bx > 60) ctx.fillText(`${left.title} ◀`, bx - 8, 18);
+      ctx.textAlign = "left";
+      if (w - bx > 60) ctx.fillText(`▶ ${right.title}`, bx + 8, 18);
+      ctx.fillStyle = "#9a9a9e"; ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(fmt(t0), 4, h - 6);
+      ctx.textAlign = "right"; ctx.fillText(fmt(t1), w - 4, h - 6); ctx.textAlign = "left";
+    }
+    const p = audio.currentTime;
+    if (p >= t0 && p <= t1) { ctx.fillStyle = css("--playhead"); ctx.fillRect(Math.round(x(p)) - 1, 0, 2, h); }
     if (opts.viewport) {
-      ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1;
-      ctx.strokeRect(x(viewStart) + .5, .5, Math.max(2, x(viewStart + zoom) - x(viewStart)), h - 1);
+      ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 1;
+      ctx.strokeRect(x(win[0]) + .5, .5, Math.max(3, x(win[1]) - x(win[0])), h - 1);
     }
   }
-
   function draw() {
     if (!job) return;
-    const [octx, ow, oh] = sizeCanvas(overview);
-    drawRange(octx, ow, oh, 0, job.duration, { viewport: true });
-    const [dctx, dw, dh] = sizeCanvas(detail);
-    drawRange(dctx, dw, dh, viewStart, viewStart + zoom, { labels: true });
+    drawRange(overview, 0, job.duration, { viewport: true });
+    if (tracks.length > 1) drawRange(detail, win[0], win[1], { labels: true });
   }
 
-  function clampView() {
-    viewStart = Math.min(Math.max(0, viewStart), Math.max(0, job.duration - zoom));
+  // ---------- boundary navigation ----------
+  function renderBoundary() {
+    const n = tracks.length - 1;
+    $("which").innerHTML = n ? `Boundary <b>${cur}</b> of ${n} · at ${fmt(tracks[cur].start)}` : "No boundaries";
+    $("prev-btn").disabled = cur <= 1;
+    $("next-btn").disabled = cur >= n;
+    if (n) {
+      const L = tracks[cur - 1], R = tracks[cur];
+      $("left-title").value = L.title; $("left-artist").value = L.artists.join(", ");
+      $("right-title").value = R.title; $("right-artist").value = R.artists.join(", ");
+    }
+    $("del-btn").disabled = n < 1;
+    renderPlaylist(); renderNotes(); draw();
   }
-  function centerOn(t) { viewStart = t - zoom / 2; clampView(); }
-
-  // ---------- rendering: table + playlist ----------
-  function renderTable() {
-    rowsEl.innerHTML = "";
-    tracks.forEach((t, i) => {
-      const tr = document.createElement("tr");
-      tr.dataset.index = i;
-      tr.classList.toggle("selected", i === selected);
-      tr.classList.toggle("talk", isTalk(t));
-      const len = trackEnd(i) - t.start;
-      const pe = playlistEntry(t);
-      const expected = pe && pe.expected_length;
-      const bad = !!lengthProblem(i);
-      tr.innerHTML = `
-        <td class="num">${i + 1}</td>
-        <td class="time"><input class="start" value="${fmt(t.start)}" ${i === 0 ? "disabled" : ""} aria-label="Start time"></td>
-        <td class="time len ${bad ? "bad" : ""}" title="${expected ? `Track ${fmt(len, false)} · music ${fmt(musicSeconds(t.start, trackEnd(i)), false)} · song usually ${fmt(expected, false)}` : ""}">
-          ${fmt(len, false)}${expected && !isTalk(t) ? ` <span style="color:var(--text-dim)">♪ ${fmt(musicSeconds(t.start, trackEnd(i)), false)} / ${fmt(expected, false)}</span>` : ""}</td>
-        <td><input class="title" list="playlist-titles" aria-label="Title"></td>
-        <td><input class="artist" aria-label="Artists (comma separated)"></td>
-        <td class="actions">
-          <button class="play-start" title="Play from start">▶</button>
-          <button class="play-end" title="Play the last 5 seconds">▶ end</button>
-          <button class="merge-up" title="Merge into the previous track (Del): it keeps the previous track's name" ${i === 0 ? "disabled" : ""}>↑ Merge</button>
-          <button class="merge-down" title="Merge into the next track: it takes the next track's name" ${i === tracks.length - 1 ? "disabled" : ""}>↓ Merge</button>
-          <button class="talk-btn" title="Mark as a separate talk track (T)">Talk</button>
-        </td>`;
-      tr.querySelector(".title").value = t.title;
-      tr.querySelector(".artist").value = t.artists.join(", ");
-      rowsEl.append(tr);
-    });
-    renderPlaylist();
-    renderNotes();
-    highlightPlaying();
-  }
-
-  function renderPlaylist() {
-    playlistEl.innerHTML = "";
-    const used = new Set(tracks.map(t => norm(t.title)));
-    job.playlist.forEach((p, i) => {
-      const li = document.createElement("li");
-      const isUsed = used.has(norm(p.title));
-      li.className = isUsed ? "used" : "missing";
-      li.title = isUsed ? "Already assigned to a track" : "Not assigned to any track yet";
-      li.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><span class="l">${p.expected_length ? fmt(p.expected_length, false) : ""}</span>`;
-      li.querySelector(".t").textContent = p.title;
-      const a = document.createElement("span"); a.className = "a"; a.textContent = p.artists.join(", ");
-      li.querySelector(".t").append(a);
-      li.addEventListener("click", () => assignPlaylist(p));
-      playlistEl.append(li);
-    });
-    let dl = document.getElementById("playlist-titles");
-    if (!dl) { dl = document.createElement("datalist"); dl.id = "playlist-titles"; document.body.append(dl); }
-    dl.innerHTML = "";
-    for (const p of job.playlist) { const o = document.createElement("option"); o.value = p.title; dl.append(o); }
-    for (const t of TALK_TITLES) { const o = document.createElement("option"); o.value = t; dl.append(o); }
-  }
-
-  function highlightPlaying() {
-    const cur = currentTrackIndex(audio.currentTime);
-    rowsEl.querySelectorAll("tr").forEach(tr => tr.classList.toggle("playing", +tr.dataset.index === cur));
-  }
-
-  function select(i, { seek = false } = {}) {
-    selected = Math.max(0, Math.min(tracks.length - 1, i));
-    rowsEl.querySelectorAll("tr").forEach(tr => tr.classList.toggle("selected", +tr.dataset.index === selected));
-    document.getElementById("del-btn").disabled = selected === 0;
-    if (seek) { audio.currentTime = tracks[selected].start; centerOn(tracks[selected].start); }
-    draw();
+  function goTo(i, { seek = true } = {}) {
+    if (tracks.length < 2) { renderBoundary(); return; }
+    cur = Math.max(1, Math.min(tracks.length - 1, i));
+    win = boundaryContext(tracks[cur].start).window;
+    // Keep the boundary itself in view even after it was moved by hand.
+    const b = tracks[cur].start;
+    if (b < win[0] + 1) win = [Math.max(0, b - 5), win[1]];
+    if (b > win[1] - 1) win = [win[0], Math.min(job.duration, b + 5)];
+    if (seek) audio.currentTime = win[0];
+    renderBoundary();
   }
 
   // ---------- editing ----------
-  function changed({ table = true } = {}) {
-    setDirty(true);
-    if (table) renderTable(); else { renderPlaylist(); renderNotes(); }
-    draw();
+  function changed() { setDirty(true); renderBoundary(); }
+  function setBoundary(t) {
+    if (tracks.length < 2) return;
+    const lo = tracks[cur - 1].start + 1, hi = trackEnd(cur) - 1;
+    tracks[cur].start = Math.round(Math.min(Math.max(t, lo), hi) * 100) / 100;
+    changed();
   }
   function addBoundary(t) {
     t = Math.round(t * 100) / 100;
-    const i = currentTrackIndex(t);
-    if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) {
-      showBanner("A boundary needs at least one second on each side.");
-      return;
-    }
+    let i = 0;
+    while (i + 1 < tracks.length && tracks[i + 1].start <= t) i++;
+    if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) { showBanner("A boundary needs at least one second on each side."); return; }
     const prev = tracks[i];
     tracks.splice(i + 1, 0, { start: t, title: prev.title, artists: [...prev.artists] });
-    selected = i + 1;
-    changed();
+    setDirty(true);
+    goTo(i + 1, { seek: false });
   }
-  function removeBoundary(i) {
-    if (i <= 0 || i >= tracks.length) return;
-    tracks.splice(i, 1);
-    selected = i - 1;
-    changed();
-  }
-  function mergeIntoNext(i) {
-    if (i < 0 || i >= tracks.length - 1) return;
-    const next = tracks[i + 1];
-    tracks[i].title = next.title;
-    tracks[i].artists = [...next.artists];
-    tracks.splice(i + 1, 1);
-    selected = i;
-    changed();
-  }
-  function moveBoundary(i, t) {
-    const lo = tracks[i - 1].start + 1, hi = trackEnd(i) - 1;
-    tracks[i].start = Math.round(Math.min(Math.max(t, lo), hi) * 100) / 100;
-  }
-  function assignPlaylist(p) {
-    const t = tracks[selected];
-    t.title = p.title; t.artists = [...p.artists];
-    changed();
+  function deleteBoundary() {
+    if (tracks.length < 2) return;
+    const R = tracks[cur], L = tracks[cur - 1];
+    // The merged track keeps the "Starting" song's name unless that side is just talk.
+    if (isTalk(L) || !isTalk(R)) { L.title = R.title; L.artists = [...R.artists]; }
+    tracks.splice(cur, 1);
+    setDirty(true);
+    goTo(Math.min(cur, tracks.length - 1));
   }
   function markTalk(i) {
-    const t = tracks[i];
-    t.title = i === 0 ? "Opening" : (i === tracks.length - 1 ? "Closing" : "Commentary");
-    t.artists = [job.album_artist];
+    tracks[i].title = i === 0 ? "Opening" : (i === tracks.length - 1 ? "Closing" : "Commentary");
+    tracks[i].artists = [job.album_artist];
     changed();
   }
-
-  rowsEl.addEventListener("click", e => {
-    const tr = e.target.closest("tr"); if (!tr) return;
-    const i = +tr.dataset.index;
-    if (e.target.closest(".play-start")) { select(i); audio.currentTime = tracks[i].start; centerOn(tracks[i].start); audio.play(); return; }
-    if (e.target.closest(".play-end")) { select(i); const t = Math.max(tracks[i].start, trackEnd(i) - 5); audio.currentTime = t; centerOn(trackEnd(i)); audio.play(); return; }
-    if (e.target.closest(".talk-btn")) { select(i); markTalk(i); return; }
-    if (e.target.closest(".merge-up")) { removeBoundary(i); return; }
-    if (e.target.closest(".merge-down")) { mergeIntoNext(i); return; }
-    if (i !== selected) select(i);
-  });
-  rowsEl.addEventListener("change", e => {
-    const tr = e.target.closest("tr"); if (!tr) return;
-    const i = +tr.dataset.index, t = tracks[i];
-    if (e.target.classList.contains("title")) {
-      t.title = e.target.value.trim();
+  function setName(i, title, artistText) {
+    const t = tracks[i];
+    if (title !== undefined) {
+      t.title = title.trim();
       const p = job.playlist.find(p => p.title === t.title);
       if (p) t.artists = [...p.artists];
       else if (TALK_TITLES.includes(t.title)) t.artists = [job.album_artist];
-      changed();
-    } else if (e.target.classList.contains("artist")) {
-      t.artists = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-      changed({ table: false });
-    } else if (e.target.classList.contains("start")) {
-      const v = parseTime(e.target.value);
-      if (isNaN(v)) { showBanner(`"${e.target.value}" isn't a time. Use m:ss.s, e.g. 3:07.5`); e.target.value = fmt(t.start); return; }
-      moveBoundary(i, v);
-      changed();
     }
-  });
+    if (artistText !== undefined) t.artists = artistText.split(",").map(s => s.trim()).filter(Boolean);
+    changed();
+  }
+  $("left-title").addEventListener("change", e => setName(cur - 1, e.target.value));
+  $("right-title").addEventListener("change", e => setName(cur, e.target.value));
+  $("left-artist").addEventListener("change", e => setName(cur - 1, undefined, e.target.value));
+  $("right-artist").addEventListener("change", e => setName(cur, undefined, e.target.value));
 
-  // ---------- mouse on canvases ----------
-  function timeAt(c, ev, t0, span) {
-    const r = c.getBoundingClientRect();
-    return t0 + (ev.clientX - r.left) / r.width * span;
-  }
-  function boundaryNear(ev) {
-    const r = detail.getBoundingClientRect();
-    let best = -1, bestD = 7;
-    tracks.forEach((t, i) => {
-      if (i === 0) return;
-      const x = (t.start - viewStart) / zoom * r.width + r.left;
-      const d = Math.abs(ev.clientX - x);
-      if (d < bestD) { bestD = d; best = i; }
+  function renderPlaylist() {
+    const list = $("playlist");
+    list.innerHTML = "";
+    const used = new Set(tracks.map(t => norm(t.title)));
+    job.playlist.forEach((p, i) => {
+      const li = document.createElement("li");
+      li.className = used.has(norm(p.title)) ? "used" : "missing";
+      if (tracks[cur] && norm(tracks[cur].title) === norm(p.title)) li.classList.add("current");
+      li.title = used.has(norm(p.title)) ? "On a track" : "Not on any track yet";
+      li.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span>`;
+      li.querySelector(".t").textContent = p.title;
+      const a = document.createElement("span"); a.className = "a"; a.textContent = p.artists.join(", ");
+      li.querySelector(".t").append(a);
+      li.addEventListener("click", () => {
+        if (tracks.length < 2) return;
+        const t = tracks[cur]; t.title = p.title; t.artists = [...p.artists]; changed();
+      });
+      list.append(li);
     });
-    return best;
+    const dl = $("playlist-titles");
+    dl.innerHTML = "";
+    for (const title of [...job.playlist.map(p => p.title), ...TALK_TITLES]) {
+      const o = document.createElement("option"); o.value = title; dl.append(o);
+    }
   }
-  let drag = -1, dragMoved = false;
+
+  // ---------- mouse ----------
+  const timeAt = (c, ev, t0, t1) => { const r = c.getBoundingClientRect(); return t0 + (ev.clientX - r.left) / r.width * (t1 - t0); };
+  function nearBoundary(ev) {
+    if (tracks.length < 2) return false;
+    const r = detail.getBoundingClientRect();
+    const x = (tracks[cur].start - win[0]) / (win[1] - win[0]) * r.width + r.left;
+    return Math.abs(ev.clientX - x) < 8;
+  }
+  let dragging = false, dragMoved = false;
   detail.addEventListener("mousedown", ev => {
-    const b = boundaryNear(ev);
-    if (b > 0) { drag = b; dragMoved = false; select(b); detail.classList.add("dragging"); ev.preventDefault(); }
+    if (nearBoundary(ev)) { dragging = true; dragMoved = false; detail.classList.add("dragging"); ev.preventDefault(); }
   });
   window.addEventListener("mousemove", ev => {
-    if (drag > 0) {
-      moveBoundary(drag, timeAt(detail, ev, viewStart, zoom));
-      dragMoved = true;
-      draw();
+    if (dragging) {
+      const lo = tracks[cur - 1].start + 1, hi = trackEnd(cur) - 1;
+      tracks[cur].start = Math.round(Math.min(Math.max(timeAt(detail, ev, win[0], win[1]), lo), hi) * 100) / 100;
+      dragMoved = true; draw();
       return;
     }
-    detail.classList.toggle("over-boundary", ev.target === detail && boundaryNear(ev) > 0);
+    detail.classList.toggle("over-boundary", ev.target === detail && nearBoundary(ev));
   });
   window.addEventListener("mouseup", () => {
-    if (drag > 0) {
-      detail.classList.remove("dragging");
-      const i = drag; drag = -1;
-      if (dragMoved) { changed(); select(i); }
-    }
+    if (!dragging) return;
+    dragging = false; detail.classList.remove("dragging");
+    if (dragMoved) changed();
   });
   detail.addEventListener("click", ev => {
     if (dragMoved) { dragMoved = false; return; }
-    if (boundaryNear(ev) > 0) return;
-    const t = timeAt(detail, ev, viewStart, zoom);
-    audio.currentTime = Math.max(0, Math.min(job.duration, t));
-    follow = false;
-    select(currentTrackIndex(t));
+    if (nearBoundary(ev)) return;
+    audio.currentTime = clampT(timeAt(detail, ev, win[0], win[1]));
   });
-  detail.addEventListener("dblclick", ev => {
-    if (boundaryNear(ev) > 0) return;
-    addBoundary(timeAt(detail, ev, viewStart, zoom));
-  });
-  detail.addEventListener("wheel", ev => {
-    ev.preventDefault();
-    viewStart += (ev.deltaX || ev.deltaY) / detail.clientWidth * zoom;
-    clampView(); follow = false; draw();
-  }, { passive: false });
   overview.addEventListener("click", ev => {
+    if (tracks.length < 2) return;
     const t = timeAt(overview, ev, 0, job.duration);
-    audio.currentTime = Math.max(0, Math.min(job.duration, t));
-    centerOn(t); follow = true;
-    select(currentTrackIndex(t));
+    let best = 1;
+    for (let i = 1; i < tracks.length; i++) if (Math.abs(tracks[i].start - t) < Math.abs(tracks[best].start - t)) best = i;
+    goTo(best);
   });
 
   // ---------- transport ----------
-  const playBtn = document.getElementById("play-btn");
-  function togglePlay() { audio.paused ? audio.play() : audio.pause(); }
+  const playBtn = $("play-btn");
+  const togglePlay = () => { audio.paused ? audio.play() : audio.pause(); };
   playBtn.addEventListener("click", togglePlay);
-  audio.addEventListener("play", () => { playBtn.textContent = "❚❚ Pause"; follow = true; });
+  audio.addEventListener("play", () => { playBtn.textContent = "❚❚ Pause"; });
   audio.addEventListener("pause", () => { playBtn.textContent = "▶ Play"; });
   audio.addEventListener("error", () => {
     const code = audio.error ? audio.error.code : "?";
     showBanner(`The recording couldn't be loaded for playback (media error ${code}). Check that the source file still exists on the server.`);
   });
-  function seekBy(d) { audio.currentTime = Math.max(0, Math.min(job.duration, audio.currentTime + d)); follow = true; }
-  document.getElementById("back-btn").addEventListener("click", () => seekBy(-5));
-  document.getElementById("fwd-btn").addEventListener("click", () => seekBy(5));
-  document.getElementById("add-btn").addEventListener("click", () => addBoundary(audio.currentTime));
-  document.getElementById("del-btn").addEventListener("click", () => removeBoundary(selected));
-  document.getElementById("speed").addEventListener("change", e => { audio.playbackRate = parseFloat(e.target.value); });
-  document.getElementById("zoom").addEventListener("change", e => {
-    const mid = viewStart + zoom / 2;
-    zoom = parseFloat(e.target.value); centerOn(mid); draw();
-  });
+  const seekBy = d => { audio.currentTime = clampT(audio.currentTime + d); };
+  const fromStart = () => { audio.currentTime = win[0]; audio.play(); };
+  const aroundCut = () => { if (tracks.length > 1) { audio.currentTime = clampT(tracks[cur].start - 3); audio.play(); } };
+  $("prev-btn").addEventListener("click", () => goTo(cur - 1));
+  $("next-btn").addEventListener("click", () => goTo(cur + 1));
+  $("from-start-btn").addEventListener("click", fromStart);
+  $("around-btn").addEventListener("click", aroundCut);
+  $("set-btn").addEventListener("click", () => setBoundary(audio.currentTime));
+  // Suggest from the middle of the gap this window shows, not where the boundary was dragged to.
+  $("reset-btn").addEventListener("click", () => setBoundary(boundaryContext((win[0] + win[1]) / 2).suggested));
+  $("add-btn").addEventListener("click", () => addBoundary(audio.currentTime));
+  $("del-btn").addEventListener("click", deleteBoundary);
+  $("talk-left-btn").addEventListener("click", () => { if (tracks.length > 1) markTalk(cur - 1); });
+  $("talk-right-btn").addEventListener("click", () => { if (tracks.length > 1) markTalk(cur); });
+  $("speed").addEventListener("change", e => { audio.playbackRate = parseFloat(e.target.value); });
 
   function tick() {
-    if (job) {
-      const t = audio.currentTime;
-      document.getElementById("time").textContent = `${fmt(t)} / ${fmt(job.duration, false)}`;
-      if (follow && !audio.paused && (t < viewStart + zoom * 0.1 || t > viewStart + zoom * 0.85)) {
-        viewStart = t - zoom * 0.15; clampView();
-      }
-      highlightPlaying();
-      draw();
-    }
+    if (job) { $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(job.duration, false)}`; draw(); }
     requestAnimationFrame(tick);
   }
 
   document.addEventListener("keydown", ev => {
     if ((ev.metaKey || ev.ctrlKey) && ev.key === "s") { ev.preventDefault(); save(); return; }
     const tag = ev.target.tagName;
-    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") {
-      if (ev.key === "Escape") ev.target.blur();
-      return;
-    }
-    const k = ev.key;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") { if (ev.key === "Escape") ev.target.blur(); return; }
+    const k = ev.key.toLowerCase();
     if (k === " ") { ev.preventDefault(); togglePlay(); }
-    else if (k === "ArrowLeft") { ev.preventDefault(); seekBy(ev.shiftKey ? -1 : -5); }
-    else if (k === "ArrowRight") { ev.preventDefault(); seekBy(ev.shiftKey ? 1 : 5); }
-    else if (k === "b" || k === "B") addBoundary(audio.currentTime);
-    else if (k === "Delete" || k === "Backspace") { ev.preventDefault(); removeBoundary(selected); }
-    else if ((k === "[" || k === "]") && selected > 0) {
-      moveBoundary(selected, tracks[selected].start + (k === "]" ? 0.25 : -0.25)); changed();
-      audio.currentTime = Math.max(0, tracks[selected].start - 2);
-    }
-    else if (k === "j" || k === "J" || k === "k" || k === "K") {
-      const n = selected + ((k === "k" || k === "K") ? 1 : -1);
-      if (n >= 0 && n < tracks.length) { select(n); audio.currentTime = Math.max(0, tracks[n].start - 2); centerOn(tracks[n].start); }
-    }
-    else if (k === "t" || k === "T") markTalk(selected);
+    else if (k === "arrowleft") { ev.preventDefault(); seekBy(ev.shiftKey ? -0.5 : -2); }
+    else if (k === "arrowright") { ev.preventDefault(); seekBy(ev.shiftKey ? 0.5 : 2); }
+    else if (k === "j") goTo(cur - 1);
+    else if (k === "k") goTo(cur + 1);
+    else if (k === "b") setBoundary(audio.currentTime);
+    else if (k === "a") aroundCut();
+    else if (k === "r") fromStart();
+    else if ((k === "[" || k === "]") && tracks.length > 1) { setBoundary(tracks[cur].start + (k === "]" ? 0.25 : -0.25)); aroundCut(); }
   });
 
   // ---------- save / import ----------
   async function save() {
     if (!dirty) return true;
-    saveBtn.disabled = true;
-    saveState.textContent = "Saving…";
+    saveBtn.disabled = true; saveState.textContent = "Saving…";
     try {
       const data = await api(API, { method: "PUT", body: JSON.stringify({ tracks }) });
-      job = data; tracks = data.tracks;
-      setDirty(false); renderTable(); draw();
+      job = { ...job, ...data, duration: job.duration }; tracks = data.tracks;
+      setDirty(false); goTo(Math.min(cur, tracks.length - 1), { seek: false });
       return true;
     } catch (e) {
-      showBanner(`Save failed: ${e.message}`);
-      setDirty(true);
+      showBanner(`Save failed: ${e.message}`); setDirty(true);
       return false;
     }
   }
@@ -654,12 +560,10 @@
     if (!window.confirm(`Cut into ${tracks.length} tracks and add them to the library?${again}`)) return;
     if (!(await save())) return;
     importBtn.disabled = true;
-    const old = importBtn.textContent;
-    importBtn.textContent = "Cutting…";
+    const old = importBtn.textContent; importBtn.textContent = "Cutting…";
     try {
       const data = await api(API + "import/", { method: "POST", body: "{}" });
-      job.status = data.status;
-      setDirty(false);
+      job.status = data.status; setDirty(false);
       showBanner(`Imported ${data.imported} tracks into the library.`, "ok");
     } catch (e) {
       showBanner(`Import failed: ${e.message}`);
@@ -680,21 +584,19 @@
       return;
     }
     tracks = job.tracks.length ? job.tracks : [{ start: 0, title: "Opening", artists: [job.album_artist] }];
+    regions = songRegions(job.segments);
     setDirty(false);
     importBtn.disabled = false;
-    renderTable(); select(0); draw();
+    goTo(1);
     requestAnimationFrame(tick);
-    const ws = document.getElementById("waveform-status");
-    ws.textContent = "Loading waveform (first open of a recording takes a few seconds)…";
     try {
       const w = await api(API + "waveform/");
       peaks = w.peaks; res = w.resolution;
       if (w.duration) job.duration = w.duration;   // exact decoded length
-      ws.textContent = "";
-      renderTable();
-      draw();
+      $("waveform-status").textContent = "";
+      goTo(cur);
     } catch (e) {
-      ws.textContent = "Waveform unavailable.";
+      $("waveform-status").textContent = "Waveform unavailable.";
       showBanner(`Couldn't load the waveform: ${e.message}. Playback and editing still work.`);
     }
   }

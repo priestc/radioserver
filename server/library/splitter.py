@@ -105,6 +105,63 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
+SONG_MIN_MUSIC = 25.0   # music stretches shorter than this aren't treated as songs
+MUSIC_GAP_MERGE = 2.0   # music separated by less than this is one stretch
+WINDOW_PAD = 4.0        # seconds of song shown either side of the talk
+
+
+def song_regions(segments: list) -> list[tuple[float, float]]:
+    """Long stretches of detected music, i.e. the songs."""
+    regions: list[list[float]] = []
+    for lab, s, e in segments:
+        if lab != "music":
+            continue
+        if regions and s - regions[-1][1] < MUSIC_GAP_MERGE:
+            regions[-1][1] = e
+        else:
+            regions.append([s, e])
+    return [(s, e) for s, e in regions if e - s >= SONG_MIN_MUSIC]
+
+
+def boundary_context(segments: list, b: float, duration: float) -> dict:
+    """Describe the gap around boundary time b.
+
+    Returns {"suggested", "window": [start, end]}: the suggestion is the midpoint
+    of the talk between the song ending before b and the song starting after it
+    (silence after a song stays with that song); with no talk, the next song's
+    start. If b sits inside a song (back-to-back songs), it's left where it is.
+    """
+    regions = song_regions(segments)
+    before = [r for r in regions if r[0] < b - 1]
+    if not before:
+        nxt = next((r for r in regions if r[0] >= b - 1), None)
+        end = nxt[0] + WINDOW_PAD if nxt else min(duration, b + 15)
+        return {"suggested": b, "window": [0.0, max(end, b + 10)]}
+    a = before[-1]
+    if b < a[1] - 3:
+        return {"suggested": b, "window": [max(0.0, b - 12), min(duration, b + 12)]}
+    nxt = next((r for r in regions if r[0] >= a[1]), None)
+    gap_end = nxt[0] if nxt else duration
+    speech = [(max(s, a[1]), min(e, gap_end)) for lab, s, e in segments
+              if lab == "speech" and e > a[1] and s < gap_end]
+    suggested = (speech[0][0] + speech[-1][1]) / 2 if speech else gap_end
+    lo, hi = max(0.0, a[1] - WINDOW_PAD), min(duration, gap_end + WINDOW_PAD)
+    if hi - lo < 10:
+        lo, hi = max(0.0, suggested - 5), min(duration, suggested + 5)
+    return {"suggested": round(suggested, 2), "window": [round(lo, 2), round(hi, 2)]}
+
+
+def suggest_boundaries(job: SplitJob) -> list[dict]:
+    """Return job.tracks with every boundary moved to its suggested point."""
+    tracks = [dict(t) for t in job.tracks]
+    for i in range(1, len(tracks)):
+        tracks[i]["start"] = boundary_context(job.segments, tracks[i]["start"], job.duration)["suggested"]
+    # Keep order and at least a second per track if two suggestions collide.
+    for i in range(1, len(tracks)):
+        tracks[i]["start"] = max(tracks[i]["start"], tracks[i - 1]["start"] + 1)
+    return tracks
+
+
 def music_seconds(segments: list, start: float, end: float) -> float:
     """Seconds of detected music between start and end."""
     return sum(max(0.0, min(e, end) - max(s, start)) for lab, s, e in segments if lab == "music")
