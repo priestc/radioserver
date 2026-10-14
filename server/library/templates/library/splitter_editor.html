@@ -243,13 +243,22 @@
   function playlistEntry(t) {
     return job.playlist.find(p => norm(p.title) === norm(t.title));
   }
-  // Tracks include Dylan's talk around the song, so allow up to ~2.5 extra minutes.
+  function musicSeconds(s, e) {
+    let n = 0;
+    for (const [lab, a, b] of job.segments) if (lab === "music") n += Math.max(0, Math.min(b, e) - Math.max(a, s));
+    return n;
+  }
+  // Tracks carry Dylan's talk too, so measure only the detected music against the
+  // song's usual length (whole-track length plus a talk allowance if there are no hints).
   function lengthProblem(i) {
     const t = tracks[i], pe = playlistEntry(t), expected = pe && pe.expected_length;
     if (!expected || isTalk(t)) return null;
-    const len = trackEnd(i) - t.start;
-    if (len < expected * 0.6) return `${t.title} is ${fmt(len, false)}, shorter than its usual ${fmt(expected, false)}`;
-    if (len > expected * 1.2 + 150) return `${t.title} is ${fmt(len, false)}, much longer than its usual ${fmt(expected, false)}`;
+    const end = trackEnd(i);
+    const hints = job.segments.length > 0;
+    const heard = hints ? musicSeconds(t.start, end) : end - t.start;
+    const hi = hints ? expected * 1.2 : expected * 1.2 + 150;
+    if (heard < expected * 0.6) return `${t.title} has ${fmt(heard, false)} of music, short of its usual ${fmt(expected, false)}`;
+    if (heard > hi) return `${t.title} has ${fmt(heard, false)} of music, more than its usual ${fmt(expected, false)}`;
     return null;
   }
   function renderNotes() {
@@ -370,8 +379,8 @@
       tr.innerHTML = `
         <td class="num">${i + 1}</td>
         <td class="time"><input class="start" value="${fmt(t.start)}" ${i === 0 ? "disabled" : ""} aria-label="Start time"></td>
-        <td class="time len ${bad ? "bad" : ""}" title="${expected ? "Recording is usually " + fmt(expected, false) : ""}">
-          ${fmt(len, false)}${expected && !isTalk(t) ? ` <span style="color:var(--text-dim)">/ ${fmt(expected, false)}</span>` : ""}</td>
+        <td class="time len ${bad ? "bad" : ""}" title="${expected ? `Track ${fmt(len, false)} · music ${fmt(musicSeconds(t.start, trackEnd(i)), false)} · song usually ${fmt(expected, false)}` : ""}">
+          ${fmt(len, false)}${expected && !isTalk(t) ? ` <span style="color:var(--text-dim)">♪ ${fmt(musicSeconds(t.start, trackEnd(i)), false)} / ${fmt(expected, false)}</span>` : ""}</td>
         <td><input class="title" list="playlist-titles" aria-label="Title"></td>
         <td><input class="artist" aria-label="Artists (comma separated)"></td>
         <td class="actions">
