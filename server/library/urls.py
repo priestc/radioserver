@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from django.urls import path
 
-from library import views
+from library import splitter_views, views
 
 app_name = "library"
 
 urlpatterns = [
+    path("splitter/", splitter_views.splitter_index, name="splitter_index"),
+    path("splitter/<int:job_id>/", splitter_views.splitter_editor, name="splitter_editor"),
+    path("api/splitter/<int:job_id>/", splitter_views.splitter_job_api, name="splitter_job_api"),
+    path("api/splitter/<int:job_id>/waveform/", splitter_views.splitter_waveform, name="splitter_waveform"),
+    path("api/splitter/<int:job_id>/audio/", splitter_views.splitter_audio, name="splitter_audio"),
+    path("api/splitter/<int:job_id>/import/", splitter_views.splitter_import, name="splitter_import"),
     path("cover/<int:album_id>/", views.cover_art, name="cover_art"),
     path("api/client_sync/", views.client_sync, name="client_sync"),
     path("api/download_song/<int:playlist_item_id>/", views.download_song, name="download_song"),

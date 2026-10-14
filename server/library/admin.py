@@ -24,6 +24,7 @@ from library.models import (
     MusicVideoDownload,
     PlaylistItem,
     PlaylistSettings,
+    SplitJob,
     Track,
     VideoChannel,
     YtdlDownload,
@@ -1512,3 +1513,16 @@ class AIServiceErrorAdmin(admin.ModelAdmin):
         if len(msg) > 120:
             return msg[:120] + "..."
         return msg
+
+
+@admin.register(SplitJob)
+class SplitJobAdmin(admin.ModelAdmin):
+    list_display = ["album_title", "status", "editor_link", "imported_at", "updated_at"]
+    list_filter = ["status"]
+    search_fields = ["album_title", "source_path"]
+    exclude = ["waveform"]
+    readonly_fields = ["output_files", "imported_at"]
+
+    @admin.display(description="Editor")
+    def editor_link(self, obj):
+        return format_html('<a href="/library/splitter/{}/">Open editor</a>', obj.pk)

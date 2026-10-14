@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Split: {{ job.album_title }}</title>
+<style>
+  :root {
+    --bg: #0c0c0e; --bg-elevated: #161618; --bg-hover: #232326; --border: #2a2a2e;
+    --text: #f2f2f3; --text-dim: #9a9a9e; --accent: #1db954; --warn: #e0a100; --danger: #e5484d;
+    --music: rgba(29, 185, 84, .16); --speech: rgba(90, 140, 255, .18);
+    --boundary: #f2f2f3; --selected: #e0a100; --playhead: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px;
+  }
+  button, input, select { font: inherit; }
+  button {
+    background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 11px; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { background: var(--bg-hover); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  kbd {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; padding: 1px 5px;
+    border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim);
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+  }
+  .topline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .topline h1 { font-size: 16px; margin: 0; flex: 1; min-width: 200px; }
+  .topline a { color: var(--text-dim); text-decoration: none; }
+  .topline a:hover { color: var(--text); }
+  #save-state { color: var(--text-dim); font-size: 12.5px; }
+  #save-state.dirty { color: var(--warn); }
+
+  #banner {
+    display: none; margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+    align-items: flex-start; gap: 10px;
+  }
+  #banner.error { display: flex; background: #3a1214; border: 1px solid var(--danger); }
+  #banner.ok { display: flex; background: #0f2a18; border: 1px solid var(--accent); }
+  #banner span { flex: 1; white-space: pre-wrap; }
+  #banner button { padding: 0 8px; }
+
+  .transport { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  #time { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-width: 150px; }
+  .transport label { color: var(--text-dim); font-size: 12.5px; display: flex; align-items: center; gap: 4px; }
+  .transport select {
+    background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
+  }
+
+  .waves { padding: 10px 16px 0; }
+  canvas { display: block; width: 100%; border-radius: 6px; background: var(--bg-elevated); }
+  #overview { height: 70px; cursor: pointer; }
+  #detail { height: 170px; margin-top: 8px; cursor: crosshair; }
+  #detail.dragging, #detail.over-boundary { cursor: ew-resize; }
+  .legend { display: flex; gap: 14px; color: var(--text-dim); font-size: 12px; padding: 6px 0 0; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 4px; }
+  #waveform-status { color: var(--text-dim); font-size: 12.5px; padding: 6px 0 0; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 12px 16px 40px; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin: 6px 0 8px; }
+
+  .tracks-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+  th { color: var(--text-dim); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  tr.selected td { background: #2a2410; }
+  tr.playing td:first-child { box-shadow: inset 3px 0 var(--accent); }
+  td.num, td.time { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: nowrap; }
+  td.len.bad { color: var(--warn); }
+  td input {
+    width: 100%; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 4px; padding: 4px 6px;
+  }
+  td input:hover { border-color: var(--border); }
+  td input:focus { border-color: var(--accent); outline: none; background: var(--bg); }
+  td input.start { width: 82px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  td input.title { min-width: 180px; }
+  td input.artist { min-width: 150px; }
+  td.actions { white-space: nowrap; }
+  td.actions button { padding: 3px 7px; font-size: 12px; }
+  tr.talk input.title, tr.talk input.artist { color: var(--text-dim); }
+
+  .playlist { list-style: none; margin: 0; padding: 0; }
+  .playlist li {
+    display: flex; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; align-items: baseline;
+  }
+  .playlist li:hover { background: var(--bg-elevated); }
+  .playlist li .n { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-width: 22px; }
+  .playlist li .t { flex: 1; }
+  .playlist li .a { display: block; color: var(--text-dim); font-size: 12.5px; }
+  .playlist li .l { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .playlist li.used .t { color: var(--text-dim); text-decoration: line-through; }
+  .playlist li.missing { box-shadow: inset 3px 0 var(--warn); }
+  .help { color: var(--text-dim); font-size: 12.5px; line-height: 1.7; margin-top: 18px; }
+  .notes { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="topline">
+    <a href="/library/splitter/">← All recordings</a>
+    {% if prev_id %}<a href="/library/splitter/{{ prev_id }}/">‹ Prev</a>{% endif %}
+    {% if next_id %}<a href="/library/splitter/{{ next_id }}/">Next ›</a>{% endif %}
+    <h1>{{ job.album_title }}</h1>
+    <span id="save-state">Loading…</span>
+    <button id="save-btn" disabled>Save <kbd>⌘S</kbd></button>
+    <button id="import-btn" class="primary" disabled>Cut &amp; import</button>
+  </div>
+  {% if job.review_notes %}<p class="notes">Auto-splitter notes: {{ job.review_notes }}</p>{% endif %}
+  <div id="banner"><span></span><button type="button" aria-label="Dismiss">×</button></div>
+  <div class="transport">
+    <button id="play-btn">▶ Play</button>
+    <button id="back-btn" title="Back 5s (←)">−5s</button>
+    <button id="fwd-btn" title="Forward 5s (→)">+5s</button>
+    <span id="time">0:00.0 / 0:00</span>
+    <button id="add-btn" title="Add boundary at playhead (B)">+ Boundary <kbd>B</kbd></button>
+    <button id="del-btn" title="Delete selected boundary (Delete)" disabled>− Boundary <kbd>Del</kbd></button>
+    <label>Speed
+      <select id="speed"><option>0.75</option><option selected>1</option><option>1.5</option><option>2</option></select>
+    </label>
+    <label>Zoom
+      <select id="zoom"><option value="15">15s</option><option value="45" selected>45s</option><option value="120">2 min</option><option value="300">5 min</option></select>
+    </label>
+  </div>
+</header>
+
+<div class="waves">
+  <canvas id="overview"></canvas>
+  <canvas id="detail"></canvas>
+  <div class="legend">
+    <span><i style="background:var(--music)"></i>Detected music</span>
+    <span><i style="background:var(--speech)"></i>Detected speech</span>
+    <span><i style="background:var(--boundary)"></i>Boundary (drag to move)</span>
+    <span><i style="background:var(--selected)"></i>Selected</span>
+    <span><i style="background:var(--playhead)"></i>Playhead</span>
+  </div>
+  <div id="waveform-status">Loading waveform…</div>
+</div>
+
+<div class="cols">
+  <section>
+    <h2>Tracks</h2>
+    <div class="tracks-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Start</th><th>Length</th><th>Title</th><th>Artist(s)</th><th></th></tr></thead>
+        <tbody id="track-rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <aside>
+    <h2>Episode playlist</h2>
+    <ul class="playlist" id="playlist"></ul>
+    <div class="help">
+      Click a playlist song to put it on the selected track.<br>
+      <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±5s (<kbd>Shift</kbd> ±1s)<br>
+      <kbd>B</kbd> add boundary at playhead · <kbd>Del</kbd> remove selected boundary<br>
+      <kbd>[</kbd>/<kbd>]</kbd> nudge selected boundary ±0.25s · <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary<br>
+      <kbd>T</kbd> mark selected track as talk · Double-click the zoomed waveform to add a boundary there.
+    </div>
+  </aside>
+</div>
+
+<audio id="audio" preload="auto" src="/library/api/splitter/{{ job.id }}/audio/"></audio>
+{% csrf_token %}
+<script>
+(() => {
+  const JOB_ID = {{ job.id }};
+  const API = `/library/api/splitter/${JOB_ID}/`;
+  const TALK_TITLES = ["Opening", "Commentary", "Closing"];
+  const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
+
+  const audio = document.getElementById("audio");
+  const overview = document.getElementById("overview");
+  const detail = document.getElementById("detail");
+  const rowsEl = document.getElementById("track-rows");
+  const playlistEl = document.getElementById("playlist");
+  const saveBtn = document.getElementById("save-btn");
+  const importBtn = document.getElementById("import-btn");
+  const saveState = document.getElementById("save-state");
+  const banner = document.getElementById("banner");
+
+  let job = null;          // server data
+  let tracks = [];         // [{start, title, artists}]
+  let peaks = [], res = 0.25;
+  let selected = 0;        // index of selected track (its start boundary)
+  let dirty = false;
+  let zoom = 45;
+  let viewStart = 0;
+  let follow = true;
+
+  // ---------- helpers ----------
+  function fmt(t, precise = true) {
+    if (!isFinite(t)) t = 0;
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return `${m}:${(precise ? s.toFixed(1) : Math.floor(s).toString()).padStart(precise ? 4 : 2, "0")}`;
+  }
+  function parseTime(str) {
+    const m = String(str).trim().match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+    if (!m) return NaN;
+    return (m[1] ? parseInt(m[1], 10) * 60 : 0) + parseFloat(m[2]);
+  }
+  function showBanner(msg, kind = "error") {
+    banner.className = kind;
+    banner.querySelector("span").textContent = msg;
+  }
+  banner.querySelector("button").addEventListener("click", () => { banner.className = ""; });
+  async function api(url, opts = {}) {
+    let resp;
+    try {
+      resp = await fetch(url, {
+        ...opts,
+        headers: { "X-CSRFToken": csrf, "Content-Type": "application/json", ...(opts.headers || {}) },
+      });
+    } catch (e) {
+      throw new Error(`Network error talking to the server: ${e.message}`);
+    }
+    let data = null;
+    try { data = await resp.json(); } catch (e) { /* non-JSON error page */ }
+    if (!resp.ok) {
+      const detailMsg = data && data.error ? data.error : `${resp.status} ${resp.statusText}`;
+      throw new Error(detailMsg);
+    }
+    if (data === null) throw new Error(`Server returned an unexpected (non-JSON) response for ${url}`);
+    return data;
+  }
+  function trackEnd(i) { return i + 1 < tracks.length ? tracks[i + 1].start : job.duration; }
+  function isTalk(t) { return TALK_TITLES.includes(t.title) && t.artists.join(", ") === job.album_artist; }
+  function norm(s) { return s.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+  function playlistEntry(t) {
+    return job.playlist.find(p => norm(p.title) === norm(t.title));
+  }
+  function setDirty(v) {
+    dirty = v;
+    saveState.textContent = v ? "Unsaved changes" : (job.status === "done" ? "Saved · imported" : "Saved");
+    saveState.classList.toggle("dirty", v);
+    saveBtn.disabled = !v;
+  }
+  function currentTrackIndex(t) {
+    let i = 0;
+    while (i + 1 < tracks.length && tracks[i + 1].start <= t) i++;
+    return i;
+  }
+
+  // ---------- rendering: canvases ----------
+  function sizeCanvas(c) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+    }
+    const ctx = c.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return [ctx, w, h];
+  }
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  function drawRange(ctx, w, h, t0, t1, opts) {
+    const span = t1 - t0, x = t => (t - t0) / span * w;
+    ctx.clearRect(0, 0, w, h);
+    // speech / music hints
+    for (const [lab, s, e] of job.segments) {
+      if (e < t0 || s > t1) continue;
+      ctx.fillStyle = lab === "music" ? css("--music") : css("--speech");
+      ctx.fillRect(x(s), 0, Math.max(1, x(e) - x(s)), h);
+    }
+    // waveform
+    if (peaks.length) {
+      ctx.fillStyle = "#6d6d73";
+      const mid = h / 2;
+      const cols = Math.floor(w);
+      for (let px = 0; px < cols; px++) {
+        const a = t0 + px / w * span, b = t0 + (px + 1) / w * span;
+        let i0 = Math.floor(a / res), i1 = Math.max(i0 + 1, Math.ceil(b / res));
+        let m = 0;
+        for (let i = i0; i < i1 && i < peaks.length; i++) if (i >= 0 && peaks[i] > m) m = peaks[i];
+        const ph = m / 255 * (h / 2 - 4);
+        ctx.fillRect(px, mid - ph, 1, Math.max(1, ph * 2));
+      }
+    }
+    // boundaries + labels
+    ctx.font = "12px -apple-system, BlinkMacSystemFont, sans-serif";
+    tracks.forEach((t, i) => {
+      const s = t.start, e = trackEnd(i);
+      if (e < t0 || s > t1) return;
+      if (i > 0) {
+        ctx.fillStyle = i === selected ? css("--selected") : css("--boundary");
+        ctx.fillRect(Math.round(x(s)) - (i === selected ? 1 : 0), 0, i === selected ? 3 : 1.5, h);
+      }
+      if (opts.labels) {
+        const lx = Math.max(x(s), 0) + 5, rx = Math.min(x(e), w) - 5;
+        if (rx - lx > 30) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(lx, 0, rx - lx, h); ctx.clip();
+          ctx.fillStyle = isTalk(t) ? "#8f9bb8" : "#e8e8ea";
+          ctx.fillText(`${i + 1}. ${t.title}`, lx, 15);
+          ctx.fillStyle = "#9a9a9e";
+          ctx.fillText(t.artists.join(", "), lx, 30);
+          ctx.restore();
+        }
+      }
+    });
+    // playhead
+    ctx.fillStyle = css("--playhead");
+    ctx.fillRect(Math.round(x(audio.currentTime)) - 1, 0, 2, h);
+    if (opts.viewport) {
+      ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1;
+      ctx.strokeRect(x(viewStart) + .5, .5, Math.max(2, x(viewStart + zoom) - x(viewStart)), h - 1);
+    }
+  }
+
+  function draw() {
+    if (!job) return;
+    const [octx, ow, oh] = sizeCanvas(overview);
+    drawRange(octx, ow, oh, 0, job.duration, { viewport: true });
+    const [dctx, dw, dh] = sizeCanvas(detail);
+    drawRange(dctx, dw, dh, viewStart, viewStart + zoom, { labels: true });
+  }
+
+  function clampView() {
+    viewStart = Math.min(Math.max(0, viewStart), Math.max(0, job.duration - zoom));
+  }
+  function centerOn(t) { viewStart = t - zoom / 2; clampView(); }
+
+  // ---------- rendering: table + playlist ----------
+  function renderTable() {
+    rowsEl.innerHTML = "";
+    tracks.forEach((t, i) => {
+      const tr = document.createElement("tr");
+      tr.dataset.index = i;
+      tr.classList.toggle("selected", i === selected);
+      tr.classList.toggle("talk", isTalk(t));
+      const len = trackEnd(i) - t.start;
+      const pe = playlistEntry(t);
+      const expected = pe && pe.expected_length;
+      const bad = expected && !isTalk(t) && (len < expected * 0.6 || len > expected * 1.2);
+      tr.innerHTML = `
+        <td class="num">${i + 1}</td>
+        <td class="time"><input class="start" value="${fmt(t.start)}" ${i === 0 ? "disabled" : ""} aria-label="Start time"></td>
+        <td class="time len ${bad ? "bad" : ""}" title="${expected ? "Recording is usually " + fmt(expected, false) : ""}">
+          ${fmt(len, false)}${expected && !isTalk(t) ? ` <span style="color:var(--text-dim)">/ ${fmt(expected, false)}</span>` : ""}</td>
+        <td><input class="title" list="playlist-titles" aria-label="Title"></td>
+        <td><input class="artist" aria-label="Artists (comma separated)"></td>
+        <td class="actions">
+          <button class="play-start" title="Play from start">▶</button>
+          <button class="play-end" title="Play the last 5 seconds">▶ end</button>
+          <button class="talk-btn" title="Mark as talk (T)">Talk</button>
+        </td>`;
+      tr.querySelector(".title").value = t.title;
+      tr.querySelector(".artist").value = t.artists.join(", ");
+      rowsEl.append(tr);
+    });
+    renderPlaylist();
+    highlightPlaying();
+  }
+
+  function renderPlaylist() {
+    playlistEl.innerHTML = "";
+    const used = new Set(tracks.map(t => norm(t.title)));
+    job.playlist.forEach((p, i) => {
+      const li = document.createElement("li");
+      const isUsed = used.has(norm(p.title));
+      li.className = isUsed ? "used" : "missing";
+      li.title = isUsed ? "Already assigned to a track" : "Not assigned to any track yet";
+      li.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><span class="l">${p.expected_length ? fmt(p.expected_length, false) : ""}</span>`;
+      li.querySelector(".t").textContent = p.title;
+      const a = document.createElement("span"); a.className = "a"; a.textContent = p.artists.join(", ");
+      li.querySelector(".t").append(a);
+      li.addEventListener("click", () => assignPlaylist(p));
+      playlistEl.append(li);
+    });
+    let dl = document.getElementById("playlist-titles");
+    if (!dl) { dl = document.createElement("datalist"); dl.id = "playlist-titles"; document.body.append(dl); }
+    dl.innerHTML = "";
+    for (const p of job.playlist) { const o = document.createElement("option"); o.value = p.title; dl.append(o); }
+    for (const t of TALK_TITLES) { const o = document.createElement("option"); o.value = t; dl.append(o); }
+  }
+
+  function highlightPlaying() {
+    const cur = currentTrackIndex(audio.currentTime);
+    rowsEl.querySelectorAll("tr").forEach(tr => tr.classList.toggle("playing", +tr.dataset.index === cur));
+  }
+
+  function select(i, { seek = false } = {}) {
+    selected = Math.max(0, Math.min(tracks.length - 1, i));
+    rowsEl.querySelectorAll("tr").forEach(tr => tr.classList.toggle("selected", +tr.dataset.index === selected));
+    document.getElementById("del-btn").disabled = selected === 0;
+    if (seek) { audio.currentTime = tracks[selected].start; centerOn(tracks[selected].start); }
+    draw();
+  }
+
+  // ---------- editing ----------
+  function changed({ table = true } = {}) {
+    setDirty(true);
+    if (table) renderTable(); else renderPlaylist();
+    draw();
+  }
+  function addBoundary(t) {
+    t = Math.round(t * 100) / 100;
+    const i = currentTrackIndex(t);
+    if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) {
+      showBanner("A boundary needs at least one second on each side.");
+      return;
+    }
+    const prev = tracks[i];
+    tracks.splice(i + 1, 0, { start: t, title: prev.title, artists: [...prev.artists] });
+    selected = i + 1;
+    changed();
+  }
+  function removeBoundary(i) {
+    if (i <= 0 || i >= tracks.length) return;
+    tracks.splice(i, 1);
+    selected = i - 1;
+    changed();
+  }
+  function moveBoundary(i, t) {
+    const lo = tracks[i - 1].start + 1, hi = trackEnd(i) - 1;
+    tracks[i].start = Math.round(Math.min(Math.max(t, lo), hi) * 100) / 100;
+  }
+  function assignPlaylist(p) {
+    const t = tracks[selected];
+    t.title = p.title; t.artists = [...p.artists];
+    changed();
+  }
+  function markTalk(i) {
+    const t = tracks[i];
+    t.title = i === 0 ? "Opening" : (i === tracks.length - 1 ? "Closing" : "Commentary");
+    t.artists = [job.album_artist];
+    changed();
+  }
+
+  rowsEl.addEventListener("click", e => {
+    const tr = e.target.closest("tr"); if (!tr) return;
+    const i = +tr.dataset.index;
+    if (e.target.closest(".play-start")) { select(i); audio.currentTime = tracks[i].start; centerOn(tracks[i].start); audio.play(); return; }
+    if (e.target.closest(".play-end")) { select(i); const t = Math.max(tracks[i].start, trackEnd(i) - 5); audio.currentTime = t; centerOn(trackEnd(i)); audio.play(); return; }
+    if (e.target.closest(".talk-btn")) { select(i); markTalk(i); return; }
+    if (i !== selected) select(i);
+  });
+  rowsEl.addEventListener("change", e => {
+    const tr = e.target.closest("tr"); if (!tr) return;
+    const i = +tr.dataset.index, t = tracks[i];
+    if (e.target.classList.contains("title")) {
+      t.title = e.target.value.trim();
+      const p = job.playlist.find(p => p.title === t.title);
+      if (p) t.artists = [...p.artists];
+      else if (TALK_TITLES.includes(t.title)) t.artists = [job.album_artist];
+      changed();
+    } else if (e.target.classList.contains("artist")) {
+      t.artists = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+      changed({ table: false });
+    } else if (e.target.classList.contains("start")) {
+      const v = parseTime(e.target.value);
+      if (isNaN(v)) { showBanner(`"${e.target.value}" isn't a time. Use m:ss.s, e.g. 3:07.5`); e.target.value = fmt(t.start); return; }
+      moveBoundary(i, v);
+      changed();
+    }
+  });
+
+  // ---------- mouse on canvases ----------
+  function timeAt(c, ev, t0, span) {
+    const r = c.getBoundingClientRect();
+    return t0 + (ev.clientX - r.left) / r.width * span;
+  }
+  function boundaryNear(ev) {
+    const r = detail.getBoundingClientRect();
+    let best = -1, bestD = 7;
+    tracks.forEach((t, i) => {
+      if (i === 0) return;
+      const x = (t.start - viewStart) / zoom * r.width + r.left;
+      const d = Math.abs(ev.clientX - x);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+  let drag = -1, dragMoved = false;
+  detail.addEventListener("mousedown", ev => {
+    const b = boundaryNear(ev);
+    if (b > 0) { drag = b; dragMoved = false; select(b); detail.classList.add("dragging"); ev.preventDefault(); }
+  });
+  window.addEventListener("mousemove", ev => {
+    if (drag > 0) {
+      moveBoundary(drag, timeAt(detail, ev, viewStart, zoom));
+      dragMoved = true;
+      draw();
+      return;
+    }
+    detail.classList.toggle("over-boundary", ev.target === detail && boundaryNear(ev) > 0);
+  });
+  window.addEventListener("mouseup", () => {
+    if (drag > 0) {
+      detail.classList.remove("dragging");
+      const i = drag; drag = -1;
+      if (dragMoved) { changed(); select(i); }
+    }
+  });
+  detail.addEventListener("click", ev => {
+    if (dragMoved) { dragMoved = false; return; }
+    if (boundaryNear(ev) > 0) return;
+    const t = timeAt(detail, ev, viewStart, zoom);
+    audio.currentTime = Math.max(0, Math.min(job.duration, t));
+    follow = false;
+    select(currentTrackIndex(t));
+  });
+  detail.addEventListener("dblclick", ev => {
+    if (boundaryNear(ev) > 0) return;
+    addBoundary(timeAt(detail, ev, viewStart, zoom));
+  });
+  detail.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    viewStart += (ev.deltaX || ev.deltaY) / detail.clientWidth * zoom;
+    clampView(); follow = false; draw();
+  }, { passive: false });
+  overview.addEventListener("click", ev => {
+    const t = timeAt(overview, ev, 0, job.duration);
+    audio.currentTime = Math.max(0, Math.min(job.duration, t));
+    centerOn(t); follow = true;
+    select(currentTrackIndex(t));
+  });
+
+  // ---------- transport ----------
+  const playBtn = document.getElementById("play-btn");
+  function togglePlay() { audio.paused ? audio.play() : audio.pause(); }
+  playBtn.addEventListener("click", togglePlay);
+  audio.addEventListener("play", () => { playBtn.textContent = "❚❚ Pause"; follow = true; });
+  audio.addEventListener("pause", () => { playBtn.textContent = "▶ Play"; });
+  audio.addEventListener("error", () => {
+    const code = audio.error ? audio.error.code : "?";
+    showBanner(`The recording couldn't be loaded for playback (media error ${code}). Check that the source file still exists on the server.`);
+  });
+  function seekBy(d) { audio.currentTime = Math.max(0, Math.min(job.duration, audio.currentTime + d)); follow = true; }
+  document.getElementById("back-btn").addEventListener("click", () => seekBy(-5));
+  document.getElementById("fwd-btn").addEventListener("click", () => seekBy(5));
+  document.getElementById("add-btn").addEventListener("click", () => addBoundary(audio.currentTime));
+  document.getElementById("del-btn").addEventListener("click", () => removeBoundary(selected));
+  document.getElementById("speed").addEventListener("change", e => { audio.playbackRate = parseFloat(e.target.value); });
+  document.getElementById("zoom").addEventListener("change", e => {
+    const mid = viewStart + zoom / 2;
+    zoom = parseFloat(e.target.value); centerOn(mid); draw();
+  });
+
+  function tick() {
+    if (job) {
+      const t = audio.currentTime;
+      document.getElementById("time").textContent = `${fmt(t)} / ${fmt(job.duration, false)}`;
+      if (follow && !audio.paused && (t < viewStart + zoom * 0.1 || t > viewStart + zoom * 0.85)) {
+        viewStart = t - zoom * 0.15; clampView();
+      }
+      highlightPlaying();
+      draw();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  document.addEventListener("keydown", ev => {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key === "s") { ev.preventDefault(); save(); return; }
+    const tag = ev.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") {
+      if (ev.key === "Escape") ev.target.blur();
+      return;
+    }
+    const k = ev.key;
+    if (k === " ") { ev.preventDefault(); togglePlay(); }
+    else if (k === "ArrowLeft") { ev.preventDefault(); seekBy(ev.shiftKey ? -1 : -5); }
+    else if (k === "ArrowRight") { ev.preventDefault(); seekBy(ev.shiftKey ? 1 : 5); }
+    else if (k === "b" || k === "B") addBoundary(audio.currentTime);
+    else if (k === "Delete" || k === "Backspace") { ev.preventDefault(); removeBoundary(selected); }
+    else if ((k === "[" || k === "]") && selected > 0) {
+      moveBoundary(selected, tracks[selected].start + (k === "]" ? 0.25 : -0.25)); changed();
+      audio.currentTime = Math.max(0, tracks[selected].start - 2);
+    }
+    else if (k === "j" || k === "J" || k === "k" || k === "K") {
+      const n = selected + ((k === "k" || k === "K") ? 1 : -1);
+      if (n >= 0 && n < tracks.length) { select(n); audio.currentTime = Math.max(0, tracks[n].start - 2); centerOn(tracks[n].start); }
+    }
+    else if (k === "t" || k === "T") markTalk(selected);
+  });
+
+  // ---------- save / import ----------
+  async function save() {
+    if (!dirty) return true;
+    saveBtn.disabled = true;
+    saveState.textContent = "Saving…";
+    try {
+      const data = await api(API, { method: "PUT", body: JSON.stringify({ tracks }) });
+      job = data; tracks = data.tracks;
+      setDirty(false); renderTable(); draw();
+      return true;
+    } catch (e) {
+      showBanner(`Save failed: ${e.message}`);
+      setDirty(true);
+      return false;
+    }
+  }
+  saveBtn.addEventListener("click", save);
+  importBtn.addEventListener("click", async () => {
+    const again = job.status === "done" ? "\n\nThis recording was already imported; its previous files will be replaced." : "";
+    if (!window.confirm(`Cut into ${tracks.length} tracks and add them to the library?${again}`)) return;
+    if (!(await save())) return;
+    importBtn.disabled = true;
+    const old = importBtn.textContent;
+    importBtn.textContent = "Cutting…";
+    try {
+      const data = await api(API + "import/", { method: "POST", body: "{}" });
+      job.status = data.status;
+      setDirty(false);
+      showBanner(`Imported ${data.imported} tracks into the library.`, "ok");
+    } catch (e) {
+      showBanner(`Import failed: ${e.message}`);
+    } finally {
+      importBtn.disabled = false; importBtn.textContent = old;
+    }
+  });
+  window.addEventListener("beforeunload", ev => { if (dirty) { ev.preventDefault(); ev.returnValue = ""; } });
+  window.addEventListener("resize", draw);
+
+  // ---------- load ----------
+  async function load() {
+    try {
+      job = await api(API);
+    } catch (e) {
+      saveState.textContent = "Failed to load";
+      showBanner(`Couldn't load this recording: ${e.message}`);
+      return;
+    }
+    tracks = job.tracks.length ? job.tracks : [{ start: 0, title: "Opening", artists: [job.album_artist] }];
+    setDirty(false);
+    importBtn.disabled = false;
+    renderTable(); select(0); draw();
+    requestAnimationFrame(tick);
+    const ws = document.getElementById("waveform-status");
+    ws.textContent = "Loading waveform (first open of a recording takes a few seconds)…";
+    try {
+      const w = await api(API + "waveform/");
+      peaks = w.peaks; res = w.resolution;
+      ws.textContent = "";
+      draw();
+    } catch (e) {
+      ws.textContent = "Waveform unavailable.";
+      showBanner(`Couldn't load the waveform: ${e.message}. Playback and editing still work.`);
+    }
+  }
+  load();
+})();
+</script>
+</body>
+</html>

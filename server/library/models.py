@@ -417,3 +417,47 @@ class VideoChannel(models.Model):
         from django.conf import settings
         from pathlib import Path
         return Path(settings.BASE_DIR) / "video_frames" / str(self.pk)
+
+
+class SplitJob(models.Model):
+    """A long recording (e.g. a radio show episode) to be cut into tracks.
+
+    ``tracks`` is an ordered list of contiguous tracks covering the whole
+    recording: [{"start": seconds, "title": str, "artists": [str]}]. Each
+    track ends where the next one starts; the last ends at ``duration``.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_DONE = "done"
+    STATUS_CHOICES = [(STATUS_PENDING, "Pending"), (STATUS_DONE, "Imported")]
+
+    source_path = models.CharField(max_length=1000, unique=True)
+    duration = models.FloatField()
+    album_title = models.CharField(max_length=500)
+    album_artist = models.CharField(max_length=500)
+    dest_folder = models.CharField(
+        max_length=500, help_text="Folder name created under <library>/<album artist>/",
+    )
+    year = models.PositiveSmallIntegerField(null=True, blank=True)
+    genre = models.CharField(max_length=200, blank=True, default="")
+    playlist = models.JSONField(
+        default=list, blank=True,
+        help_text='Known songs in order: [{"title", "artists", "expected_length"}]',
+    )
+    tracks = models.JSONField(default=list, blank=True)
+    segments = models.JSONField(
+        default=list, blank=True, help_text='Speech/music hints: [["music"|"speech", start, end]]',
+    )
+    waveform = models.JSONField(default=list, blank=True, help_text="Cached peak values, 0-255")
+    waveform_resolution = models.FloatField(default=0.25, help_text="Seconds per waveform value")
+    review_notes = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    output_files = models.JSONField(default=list, blank=True)
+    imported_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["album_title"]
+
+    def __str__(self):
+        return self.album_title
