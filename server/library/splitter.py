@@ -16,14 +16,48 @@ from library.tags import read_tags
 from library.views import check_cover_status
 
 WAVEFORM_SAMPLE_RATE = 8000
+# Browsers seek VBR MP3s (especially ones without a Xing seek table) by
+# estimating a byte offset, so playback can drift seconds away from the
+# reported currentTime. The editor plays a constant-bitrate copy instead,
+# which seeks exactly; cuts are still made from the original file.
+PROXY_DIR = Path.home() / ".radioserver" / "splitter_proxies"
 
 
 class SplitError(Exception):
     pass
 
 
-def compute_waveform(job: SplitJob) -> list[int]:
-    """Decode the source to mono PCM and return one peak (0-255) per resolution step."""
+def proxy_path(job: SplitJob) -> Path:
+    return PROXY_DIR / f"{job.pk}.mp3"
+
+
+def ensure_playback_proxy(job: SplitJob) -> Path:
+    """Return a CBR MP3 copy of the job's source for accurate in-browser seeking."""
+    out = proxy_path(job)
+    src = Path(job.source_path)
+    if out.is_file() and out.stat().st_mtime >= src.stat().st_mtime:
+        return out
+    PROXY_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp.mp3")
+    proc = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-map", "0:a", "-c:a", "libmp3lame",
+         "-b:a", "128k", "-ar", "44100", "-write_xing", "0", "-map_metadata", "-1", str(tmp)],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise SplitError(f"ffmpeg could not make a playback copy of {src.name}: "
+                         f"{proc.stderr.decode(errors='replace')[-500:]}")
+    tmp.replace(out)
+    return out
+
+
+def compute_waveform(job: SplitJob) -> tuple[list[int], float]:
+    """Decode the source to mono PCM; return (one peak 0-255 per resolution step, exact duration).
+
+    The decoded duration is authoritative: header-based estimates are wrong for
+    VBR MP3s that lack a seek table.
+    """
     import array
 
     proc = subprocess.run(
@@ -37,7 +71,7 @@ def compute_waveform(job: SplitJob) -> list[int]:
     step = max(1, int(WAVEFORM_SAMPLE_RATE * job.waveform_resolution))
     peaks = [max(map(abs, samples[i:i + step]), default=0) for i in range(0, len(samples), step)]
     top = max(peaks, default=0) or 1
-    return [min(255, round(255 * p / top)) for p in peaks]
+    return [min(255, round(255 * p / top)) for p in peaks], len(samples) / WAVEFORM_SAMPLE_RATE
 
 
 def validate_tracks(tracks: list, duration: float) -> list[dict]:
@@ -99,8 +133,10 @@ def cut_and_import(job: SplitJob) -> list[str]:
         end = tracks[i]["start"] if i < total else job.duration
         out = dest / f"{i:02d} {_safe_filename(t['title'])}{src.suffix.lower()}"
         proc = subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-ss", f"{t['start']:.2f}", "-to", f"{end:.2f}",
-             "-i", str(src), "-map", "0:a", "-c", "copy", "-map_metadata", "-1", str(out)],
+            # -ss/-to after -i: read up to the cut point rather than jumping to an
+            # estimated byte offset, which is inaccurate for VBR MP3s.
+            ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ss", f"{t['start']:.2f}", "-to", f"{end:.2f}",
+             "-map", "0:a", "-c", "copy", "-map_metadata", "-1", str(out)],
             capture_output=True,
         )
         if proc.returncode != 0:

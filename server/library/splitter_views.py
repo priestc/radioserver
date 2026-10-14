@@ -10,7 +10,9 @@ from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from library.models import SplitJob
-from library.splitter import SplitError, compute_waveform, cut_and_import, validate_tracks
+from library.splitter import (
+    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, validate_tracks,
+)
 from library.views import ranged_file_response
 
 
@@ -79,20 +81,23 @@ def splitter_waveform(request, job_id):
     job = get_object_or_404(SplitJob, pk=job_id)
     if not job.waveform:
         try:
-            job.waveform = compute_waveform(job)
+            job.waveform, job.duration = compute_waveform(job)
         except SplitError as e:
             return JsonResponse({"error": str(e)}, status=500)
-        job.save(update_fields=["waveform"])
-    return JsonResponse({"resolution": job.waveform_resolution, "peaks": job.waveform})
+        job.save(update_fields=["waveform", "duration"])
+    return JsonResponse({"resolution": job.waveform_resolution, "peaks": job.waveform, "duration": job.duration})
 
 
 @staff_member_required
 @require_GET
 def splitter_audio(request, job_id):
     job = get_object_or_404(SplitJob, pk=job_id)
-    path = Path(job.source_path)
-    if not path.is_file():
+    if not Path(job.source_path).is_file():
         raise Http404("Source recording is missing on disk")
+    try:
+        path = ensure_playback_proxy(job)
+    except SplitError as e:
+        return JsonResponse({"error": str(e)}, status=500)
     return ranged_file_response(request, path)
 
 

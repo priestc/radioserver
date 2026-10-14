@@ -658,7 +658,9 @@
     try {
       const w = await api(API + "waveform/");
       peaks = w.peaks; res = w.resolution;
+      if (w.duration) job.duration = w.duration;   // exact decoded length
       ws.textContent = "";
+      renderTable();
       draw();
     } catch (e) {
       ws.textContent = "Waveform unavailable.";
