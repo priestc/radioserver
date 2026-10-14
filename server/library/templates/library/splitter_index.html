@@ -38,7 +38,7 @@
 <body>
 <main>
   <h1>Track Splitter</h1>
-  <p class="sub">Long recordings waiting to be cut into separate tracks. Episodes with review notes had song boundaries the auto-splitter wasn't sure about.</p>
+  <p class="sub">Long recordings waiting to be cut into separate tracks. Issues are checked against the current tracks: playlist songs not on any track, and tracks whose length doesn't fit the song.</p>
   <div class="filters">
     <button data-filter="all" class="active">All</button>
     <button data-filter="review">Needs review</button>
@@ -46,7 +46,7 @@
     <button data-filter="done">Imported</button>
   </div>
   <table>
-    <thead><tr><th>Recording</th><th>Tracks</th><th>Status</th><th>Review notes</th></tr></thead>
+    <thead><tr><th>Recording</th><th>Tracks</th><th>Status</th><th>Issues</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
   <div id="empty" class="empty" hidden>No recordings match this filter.</div>
@@ -58,7 +58,7 @@
   function render(filter) {
     rows.innerHTML = "";
     const shown = jobs.filter(j =>
-      filter === "all" || (filter === "review" ? j.review_notes && j.status !== "done" : j.status === filter));
+      filter === "all" || (filter === "review" ? j.issues.length && j.status !== "done" : j.status === filter));
     for (const j of shown) {
       const tr = document.createElement("tr");
       const name = document.createElement("td");
@@ -72,7 +72,7 @@
       status.innerHTML = `<span class="badge ${j.status}">${j.status === "done" ? "Imported" : "Not imported"}</span>`;
       const notes = document.createElement("td");
       notes.className = "notes";
-      notes.textContent = j.review_notes;
+      notes.textContent = j.issues.join("; ");
       tr.append(name, count, status, notes);
       rows.append(tr);
     }

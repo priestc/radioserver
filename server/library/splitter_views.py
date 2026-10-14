@@ -11,7 +11,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from library.models import SplitJob
 from library.splitter import (
-    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, validate_tracks,
+    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, job_issues, validate_tracks,
 )
 from library.views import ranged_file_response
 
@@ -22,7 +22,7 @@ def _job_summary(job: SplitJob) -> dict:
         "album_title": job.album_title,
         "status": job.status,
         "track_count": len(job.tracks),
-        "review_notes": job.review_notes,
+        "issues": job_issues(job),
         "imported_at": job.imported_at.isoformat() if job.imported_at else None,
         "updated_at": job.updated_at.isoformat(),
     }

@@ -102,6 +102,8 @@
   .playlist li.missing { box-shadow: inset 3px 0 var(--warn); }
   .help { color: var(--text-dim); font-size: 12.5px; line-height: 1.7; margin-top: 18px; }
   .notes { color: var(--warn); font-size: 12.5px; margin: 6px 0 0; }
+  .notes.clear { color: var(--accent); }
+  .notes:empty { display: none; }
 </style>
 </head>
 <body>
@@ -115,7 +117,7 @@
     <button id="save-btn" disabled>Save <kbd>⌘S</kbd></button>
     <button id="import-btn" class="primary" disabled>Cut &amp; import</button>
   </div>
-  {% if job.review_notes %}<p class="notes">Auto-splitter notes: {{ job.review_notes }}</p>{% endif %}
+  <p class="notes" id="live-notes"></p>
   <div id="banner"><span></span><button type="button" aria-label="Dismiss">×</button></div>
   <div class="transport">
     <button id="play-btn">▶ Play</button>
@@ -241,6 +243,26 @@
   function playlistEntry(t) {
     return job.playlist.find(p => norm(p.title) === norm(t.title));
   }
+  // Tracks include Dylan's talk around the song, so allow up to ~2.5 extra minutes.
+  function lengthProblem(i) {
+    const t = tracks[i], pe = playlistEntry(t), expected = pe && pe.expected_length;
+    if (!expected || isTalk(t)) return null;
+    const len = trackEnd(i) - t.start;
+    if (len < expected * 0.6) return `${t.title} is ${fmt(len, false)}, shorter than its usual ${fmt(expected, false)}`;
+    if (len > expected * 1.2 + 150) return `${t.title} is ${fmt(len, false)}, much longer than its usual ${fmt(expected, false)}`;
+    return null;
+  }
+  function renderNotes() {
+    const el = document.getElementById("live-notes");
+    const used = new Set(tracks.map(t => norm(t.title)));
+    const missing = job.playlist.filter(p => !used.has(norm(p.title))).map(p => p.title);
+    const lengths = tracks.map((_, i) => lengthProblem(i)).filter(Boolean);
+    const parts = [];
+    if (missing.length) parts.push(`Not on any track yet: ${missing.join(", ")}`);
+    if (lengths.length) parts.push(`Check: ${lengths.join("; ")}`);
+    el.classList.toggle("clear", !parts.length);
+    el.textContent = parts.length ? parts.join(" · ") : "Every playlist song is on a track and all lengths look plausible.";
+  }
   function setDirty(v) {
     dirty = v;
     saveState.textContent = v ? "Unsaved changes" : (job.status === "done" ? "Saved · imported" : "Saved");
@@ -344,8 +366,7 @@
       const len = trackEnd(i) - t.start;
       const pe = playlistEntry(t);
       const expected = pe && pe.expected_length;
-      // Tracks include Dylan's talk around the song, so allow up to ~2.5 extra minutes.
-      const bad = expected && !isTalk(t) && (len < expected * 0.6 || len > expected * 1.2 + 150);
+      const bad = !!lengthProblem(i);
       tr.innerHTML = `
         <td class="num">${i + 1}</td>
         <td class="time"><input class="start" value="${fmt(t.start)}" ${i === 0 ? "disabled" : ""} aria-label="Start time"></td>
@@ -365,6 +386,7 @@
       rowsEl.append(tr);
     });
     renderPlaylist();
+    renderNotes();
     highlightPlaying();
   }
 
@@ -406,7 +428,7 @@
   // ---------- editing ----------
   function changed({ table = true } = {}) {
     setDirty(true);
-    if (table) renderTable(); else renderPlaylist();
+    if (table) renderTable(); else { renderPlaylist(); renderNotes(); }
     draw();
   }
   function addBoundary(t) {

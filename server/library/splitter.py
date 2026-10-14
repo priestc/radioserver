@@ -101,6 +101,34 @@ def validate_tracks(tracks: list, duration: float) -> list[dict]:
     return clean
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def job_issues(job: SplitJob) -> list[str]:
+    """Problems with the job's current tracks, matching the editor's live checks."""
+    tracks = job.tracks
+    by_title = {_norm(p["title"]): p for p in job.playlist}
+    used = {_norm(t["title"]) for t in tracks}
+    issues = []
+    missing = [p["title"] for p in job.playlist if _norm(p["title"]) not in used]
+    if missing:
+        issues.append("Not on any track yet: " + ", ".join(missing))
+    for i, t in enumerate(tracks):
+        p = by_title.get(_norm(t["title"]))
+        expected = p and p.get("expected_length")
+        if not expected:
+            continue
+        end = tracks[i + 1]["start"] if i + 1 < len(tracks) else job.duration
+        length = end - t["start"]
+        # Tracks include Dylan's talk around the song, so allow ~2.5 extra minutes.
+        if length < expected * 0.6:
+            issues.append(f"{t['title']} looks too short ({length:.0f}s vs usual {expected:.0f}s)")
+        elif length > expected * 1.2 + 150:
+            issues.append(f"{t['title']} looks too long ({length:.0f}s vs usual {expected:.0f}s)")
+    return issues
+
+
 def _safe_filename(s: str) -> str:
     return re.sub(r'[/\\:*?"<>|]', "_", s).strip() or "untitled"
 
