@@ -99,6 +99,22 @@ def generate_playlist(target_seconds: float, channel=None) -> tuple[int, float]:
     recent_genres: deque[str | None] = deque(maxlen=settings.genre_skip)
     recent_decades: deque[int | None] = deque(maxlen=settings.decade_skip)
 
+    # Seed the skip windows from the tail of this channel's existing queue, so the
+    # rules carry across batches instead of resetting at every top-up (which let the
+    # first pick of a batch repeat the artist that ended the previous one).
+    tail_size = max(settings.artist_skip, settings.genre_skip, settings.decade_skip)
+    if tail_size > 0:
+        tail = list(
+            PlaylistItem.objects.filter(channel=channel, station__isnull=True)
+            .select_related("track__album")
+            .prefetch_related("track__artists")
+            .order_by("-id")[:tail_size]
+        )
+        for item in reversed(tail):
+            recent_artists.append(set(a.id for a in item.track.artists.all()))
+            recent_genres.append(get_genre_group(item.track))
+            recent_decades.append(get_decade(item.track))
+
     total_duration = 0.0
     items_created = 0
 
