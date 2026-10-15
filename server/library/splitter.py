@@ -178,6 +178,8 @@ def music_seconds(segments: list, start: float, end: float) -> float:
 SHORT_RATIO = 0.6   # less music than this fraction of the usual length is "short"
 LONG_RATIO = 1.2    # more than this is "long"
 EXCERPT_SUFFIX = " (Excerpt)"
+# Show intros/outros are kept in the album but never picked for radio playlists.
+NOT_FOR_PLAYLISTS = {"Opening", "Closing"}
 
 
 def length_status(job: SplitJob, i: int) -> tuple[str, float, float] | None:
@@ -312,11 +314,13 @@ def cut_and_import(job: SplitJob) -> list[str]:
 
     album = None
     with transaction.atomic():
-        for path in written:
+        for path, t in zip(written, tracks):
             tag_data = read_tags(path)
             if tag_data is None:
                 raise SplitError(f"Could not read back tags from {Path(path).name}.")
             _upsert_track(tag_data, job.album_artist, source="split recording")
+            if t["title"] in NOT_FOR_PLAYLISTS:
+                Track.objects.filter(file_path=path).update(exclude_from_playlist=True)
         album = Track.objects.get(file_path=written[0]).album
     if album is not None:
         check_cover_status(album)
