@@ -90,7 +90,10 @@ def validate_tracks(tracks: list, duration: float) -> list[dict]:
             raise SplitError(f"Track {i} needs a title.")
         if not artists:
             raise SplitError(f"Track {i} ({title}) needs an artist.")
-        clean.append({"start": round(start, 2), "title": title, "artists": artists})
+        track = {"start": round(start, 2), "title": title, "artists": artists}
+        if t.get("excerpt"):
+            track["excerpt"] = True
+        clean.append(track)
     clean.sort(key=lambda t: t["start"])
     clean[0]["start"] = 0.0
     for a, b in zip(clean, clean[1:]):
@@ -172,11 +175,17 @@ def music_seconds(segments: list, start: float, end: float) -> float:
     return sum(max(0.0, min(e, end) - max(s, start)) for lab, s, e in segments if lab == "music")
 
 
-def length_problem(job: SplitJob, i: int) -> str | None:
-    """Compare the music inside track i with the song's usual recording length.
+SHORT_RATIO = 0.6   # less music than this fraction of the usual length is "short"
+LONG_RATIO = 1.2    # more than this is "long"
+EXCERPT_SUFFIX = " (Excerpt)"
+
+
+def length_status(job: SplitJob, i: int) -> tuple[str, float, float] | None:
+    """Return ("short" | "long" | "ok", music heard, usual length) for a song track.
 
     Only the detected music is measured, since tracks also carry Dylan's talk;
-    with no speech/music hints, the whole track length is used (plus talk allowance).
+    with no speech/music hints, the whole track length is used (plus a talk
+    allowance). Returns None for talk tracks and songs with no known length.
     """
     tracks = job.tracks
     t = tracks[i]
@@ -186,14 +195,45 @@ def length_problem(job: SplitJob, i: int) -> str | None:
         return None
     end = tracks[i + 1]["start"] if i + 1 < len(tracks) else job.duration
     if job.segments:
-        heard, hi = music_seconds(job.segments, t["start"], end), expected * 1.2
+        heard, hi = music_seconds(job.segments, t["start"], end), expected * LONG_RATIO
     else:
-        heard, hi = end - t["start"], expected * 1.2 + 150
-    if heard < expected * 0.6:
-        return f"{t['title']} has {heard:.0f}s of music, short of its usual {expected:.0f}s"
+        heard, hi = end - t["start"], expected * LONG_RATIO + 150
+    if heard < expected * SHORT_RATIO:
+        return "short", heard, expected
     if heard > hi:
-        return f"{t['title']} has {heard:.0f}s of music, more than its usual {expected:.0f}s"
-    return None
+        return "long", heard, expected
+    return "ok", heard, expected
+
+
+def length_issues(job: SplitJob) -> list[str]:
+    """Explain suspicious song lengths.
+
+    A short song next to a long one means the boundary between them is
+    probably misplaced. A short song on its own is most likely an excerpt
+    (unless it's already marked as one); a long one on its own probably has
+    another song hiding in it.
+    """
+    tracks = job.tracks
+    st = [length_status(job, i) for i in range(len(tracks))]
+    kind = [x[0] if x else None for x in st]
+    issues, paired = [], set()
+    for i in range(len(tracks) - 1):
+        if {kind[i], kind[i + 1]} == {"short", "long"}:
+            paired |= {i, i + 1}
+            issues.append(f"The boundary between {tracks[i]['title']} and {tracks[i + 1]['title']} looks off: "
+                          f"one has {st[i][1]:.0f}s of music (usually {st[i][2]:.0f}s), "
+                          f"the other {st[i + 1][1]:.0f}s (usually {st[i + 1][2]:.0f}s)")
+    for i, x in enumerate(st):
+        if not x or i in paired:
+            continue
+        k, heard, expected = x
+        if k == "short" and not tracks[i].get("excerpt"):
+            issues.append(f"{tracks[i]['title']} has only {heard:.0f}s of music (usually {expected:.0f}s): "
+                          "if that's right, mark it as an excerpt")
+        elif k == "long":
+            issues.append(f"{tracks[i]['title']} has {heard:.0f}s of music (usually {expected:.0f}s): "
+                          "another song may need its own boundary")
+    return issues
 
 
 def job_issues(job: SplitJob) -> list[str]:
@@ -203,8 +243,7 @@ def job_issues(job: SplitJob) -> list[str]:
     missing = [p["title"] for p in job.playlist if _norm(p["title"]) not in used]
     if missing:
         issues.append("Not on any track yet: " + ", ".join(missing))
-    issues += [m for m in (length_problem(job, i) for i in range(len(job.tracks))) if m]
-    return issues
+    return issues + length_issues(job)
 
 
 def _safe_filename(s: str) -> str:
@@ -237,7 +276,10 @@ def cut_and_import(job: SplitJob) -> list[str]:
     written = []
     for i, t in enumerate(tracks, 1):
         end = tracks[i]["start"] if i < total else job.duration
-        out = dest / f"{i:02d} {_safe_filename(t['title'])}{src.suffix.lower()}"
+        title = t["title"]
+        if t.get("excerpt") and not title.endswith(EXCERPT_SUFFIX):
+            title += EXCERPT_SUFFIX
+        out = dest / f"{i:02d} {_safe_filename(title)}{src.suffix.lower()}"
         proc = subprocess.run(
             # -ss/-to after -i: read up to the cut point rather than jumping to an
             # estimated byte offset, which is inaccurate for VBR MP3s.
@@ -253,7 +295,7 @@ def cut_and_import(job: SplitJob) -> list[str]:
             raise SplitError(f"Could not open {out.name} to write tags.")
         if audio.tags is None:
             audio.add_tags()
-        audio.tags["title"] = [t["title"]]
+        audio.tags["title"] = [title]
         audio.tags["artist"] = [", ".join(t["artists"])]
         audio.tags["album"] = [job.album_title]
         audio.tags["albumartist"] = [job.album_artist]
