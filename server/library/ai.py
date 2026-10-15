@@ -63,7 +63,7 @@ def _ask_deepseek(prompt: str) -> str:
     client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
                     timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
     response = client.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-flash",  # deepseek-chat is no longer offered
         messages=[{"role": "user", "content": prompt}],
         max_tokens=20,
     )
