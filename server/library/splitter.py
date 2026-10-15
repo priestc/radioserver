@@ -109,7 +109,7 @@ def _norm(s: str) -> str:
 
 
 SONG_MIN_MUSIC = 25.0   # music stretches shorter than this aren't treated as songs
-MUSIC_GAP_MERGE = 2.0   # music separated by less than this is one stretch
+MUSIC_GAP_MERGE = 4.0   # music separated by less than this is one stretch (bridges misread vocals)
 # Fitted to hand-placed boundaries: Dylan usually says a little about the song
 # that ended, then more about the next one, so the switch tends to come ~10s
 # after the music stops. He sometimes talks over a song's last bars, and the

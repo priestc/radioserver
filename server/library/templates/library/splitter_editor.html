@@ -175,6 +175,9 @@
 
     <div class="structure">
       <p>If a song was missed or two songs were merged, add a boundary at the playhead. If this boundary shouldn't exist, delete it (the two sides become one track). For talk that isn't about any song (an email, a phone call), give that stretch its own boundaries and mark it as talk.</p>
+      <p>If the song names after this point are out of step with the music (the auto-splitter missed a song), fix this boundary and its “Starting” song, then <b>Re-flow from here</b>: every later boundary is rebuilt from the remaining playlist songs, in order, on the music that follows.</p>
+      <button id="reflow-btn" title="Rebuild all later boundaries from the playlist (F)">↻ Re-flow from here <kbd>F</kbd></button>
+      <button id="undo-btn" title="Undo the last change (⌘Z)" disabled>Undo <kbd>⌘Z</kbd></button>
       <button id="add-btn">+ Add boundary at playhead</button>
       <button id="del-btn">Delete this boundary</button>
       <button id="talk-left-btn">Mark “Ending” as talk</button>
@@ -192,7 +195,7 @@
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
       <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead<br>
       <kbd>[</kbd>/<kbd>]</kbd> nudge boundary ±0.25s · <kbd>A</kbd> hear the cut · <kbd>R</kbd> replay stretch<br>
-      <kbd>,</kbd>/<kbd>.</kbd> slide the view earlier/later<br>
+      <kbd>,</kbd>/<kbd>.</kbd> slide the view earlier/later · <kbd>F</kbd> re-flow from here · <kbd>⌘Z</kbd> undo<br>
       Click the waveform to move the playhead; drag the yellow line to move the boundary.
     </div>
   </aside>
@@ -207,7 +210,7 @@
   const API = `/library/api/splitter/${JOB_ID}/`;
   const TALK_TITLES = ["Opening", "Commentary", "Closing"];
   // These mirror library/splitter.py (song_regions / boundary_context).
-  const SONG_MIN_MUSIC = 25, MUSIC_GAP_MERGE = 2;
+  const SONG_MIN_MUSIC = 25, MUSIC_GAP_MERGE = 4;
   const SUGGEST_AFTER_MUSIC = 10, SUGGEST_MAX_FRACTION = 1 / 3, WINDOW_BEFORE = 12, WINDOW_AFTER = 6;
   const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
 
@@ -443,7 +446,60 @@
   }
 
   // ---------- editing ----------
-  function changed() { setDirty(true); renderBoundary(); }
+  // Undo history: a snapshot of tracks after every change, starting from the loaded state.
+  let history = [];
+  function commit() {
+    history.push(JSON.stringify(tracks));
+    if (history.length > 300) history.shift();
+    $("undo-btn").disabled = history.length < 2;
+  }
+  function undo() {
+    if (history.length < 2) return;
+    history.pop();
+    tracks = JSON.parse(history[history.length - 1]);
+    $("undo-btn").disabled = history.length < 2;
+    setDirty(true);
+    goTo(Math.min(cur, tracks.length - 1), { seek: false });
+  }
+  function changed() { commit(); setDirty(true); renderBoundary(); }
+
+  // Rebuild every boundary after the current one: the playlist songs after the
+  // "Starting" song go, in order, onto the song-length music that follows it.
+  function reflow() {
+    if (tracks.length < 2) return;
+    const b = tracks[cur].start, start = tracks[cur];
+    const pIdx = job.playlist.findIndex(p => norm(p.title) === norm(start.title));
+    if (pIdx < 0) {
+      showBanner("Set the “Starting” song to one of the playlist songs first, so re-flow knows where in the playlist to carry on from.");
+      return;
+    }
+    const rest = job.playlist.slice(pIdx + 1);
+    const ri = regions.findIndex(r => r[1] > b + 5);       // the Starting song's own music
+    const following = ri < 0 ? [] : regions.slice(ri + 1);
+    const last = tracks[tracks.length - 1];
+    const closing = cur < tracks.length - 1 && isTalk(last) && last.title === "Closing" ? last : null;
+    const rebuilt = tracks.slice(0, cur + 1);
+    let prevEnd = ri < 0 ? b : regions[ri][1];
+    const n = Math.min(rest.length, following.length);
+    const after = (end, next) => end + Math.min(SUGGEST_AFTER_MUSIC, (next - end) * SUGGEST_MAX_FRACTION);
+    for (let k = 0; k < n; k++) {
+      const r = following[k], p = rest[k];
+      rebuilt.push({ start: after(prevEnd, r[0]), title: p.title, artists: [...p.artists] });
+      prevEnd = r[1];
+    }
+    if (following.length > n) prevEnd = following[following.length - 1][1];   // extra music stays on the last song
+    if (closing) rebuilt.push({ start: after(prevEnd, job.duration), title: "Closing", artists: [...closing.artists] });
+    for (let i = 1; i < rebuilt.length; i++) {
+      rebuilt[i].start = Math.round(Math.max(rebuilt[i].start, rebuilt[i - 1].start + 1) * 100) / 100;
+    }
+    while (rebuilt.length > 1 && rebuilt[rebuilt.length - 1].start > job.duration - 1) rebuilt.pop();
+    tracks = rebuilt;
+    commit(); setDirty(true); renderBoundary();
+    const msg = [`Re-flowed ${n} song${n === 1 ? "" : "s"} after this boundary.`];
+    if (rest.length > n) msg.push(`No music left for: ${rest.slice(n).map(p => p.title).join(", ")}.`);
+    if (following.length > n) msg.push(`${following.length - n} extra stretch(es) of music were left on the last song; check for a missed boundary.`);
+    showBanner(msg.join(" "), rest.length === n && following.length === n ? "ok" : "error");
+  }
   function setBoundary(t) {
     if (tracks.length < 2) return;
     const lo = tracks[cur - 1].start + 1, hi = trackEnd(cur) - 1;
@@ -457,7 +513,7 @@
     if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) { showBanner("A boundary needs at least one second on each side."); return; }
     const prev = tracks[i];
     tracks.splice(i + 1, 0, { start: t, title: prev.title, artists: [...prev.artists] });
-    setDirty(true);
+    commit(); setDirty(true);
     goTo(i + 1, { seek: false });
   }
   function deleteBoundary() {
@@ -466,7 +522,7 @@
     // The merged track keeps the "Starting" song's name unless that side is just talk.
     if (isTalk(L) || !isTalk(R)) { L.title = R.title; L.artists = [...R.artists]; }
     tracks.splice(cur, 1);
-    setDirty(true);
+    commit(); setDirty(true);
     goTo(Math.min(cur, tracks.length - 1));
   }
   function markTalk(i) {
@@ -581,6 +637,8 @@
   // Suggest from the middle of the gap this window shows, not where the boundary was dragged to.
   $("reset-btn").addEventListener("click", () => setBoundary(boundaryContext((win[0] + win[1]) / 2).suggested));
   $("add-btn").addEventListener("click", () => addBoundary(audio.currentTime));
+  $("reflow-btn").addEventListener("click", reflow);
+  $("undo-btn").addEventListener("click", undo);
   $("del-btn").addEventListener("click", deleteBoundary);
   $("talk-left-btn").addEventListener("click", () => { if (tracks.length > 1) markTalk(cur - 1); });
   $("talk-right-btn").addEventListener("click", () => { if (tracks.length > 1) markTalk(cur); });
@@ -593,6 +651,7 @@
 
   document.addEventListener("keydown", ev => {
     if ((ev.metaKey || ev.ctrlKey) && ev.key === "s") { ev.preventDefault(); save(); return; }
+    if ((ev.metaKey || ev.ctrlKey) && ev.key === "z" && !["INPUT", "TEXTAREA"].includes(ev.target.tagName)) { ev.preventDefault(); undo(); return; }
     const tag = ev.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") { if (ev.key === "Escape") ev.target.blur(); return; }
     const k = ev.key.toLowerCase();
@@ -603,6 +662,7 @@
     else if (k === "k") goTo(cur + 1);
     else if (k === "b") setBoundary(audio.currentTime);
     else if (k === ",") shiftWindow(-1);
+    else if (k === "f") reflow();
     else if (k === ".") shiftWindow(1);
     else if (k === "a") aroundCut();
     else if (k === "r") fromStart();
@@ -653,6 +713,7 @@
       return;
     }
     tracks = job.tracks.length ? job.tracks : [{ start: 0, title: "Opening", artists: [job.album_artist] }];
+    commit();
     regions = songRegions(job.segments);
     setDirty(false);
     importBtn.disabled = false;
