@@ -427,7 +427,9 @@ def cut_and_import(job: SplitJob) -> list[str]:
 def remove_replaced_albums(job: SplitJob, keep: list[str]) -> list[str]:
     """Delete the albums this job replaces (DB rows and audio files). Returns their titles.
 
-    Runs only after a successful import. Never touches a file this import wrote.
+    Runs only after a successful import. Never touches a file this import wrote: when
+    the old album has the same title, the import's tracks join it, so only the old
+    tracks are removed and the album itself is kept.
     """
     from library.admin import _delete_file_and_cleanup_dir
     from library.models import Album
@@ -438,16 +440,15 @@ def remove_replaced_albums(job: SplitJob, keep: list[str]) -> list[str]:
         album = Album.objects.filter(pk=album_id).first()
         if album is None:
             continue
-        tracks = list(album.tracks.all())
-        if any(t.file_path in keep_set for t in tracks):
-            raise SplitError(f"Refusing to remove “{album.title}”: it contains files from this import.")
+        tracks = [t for t in album.tracks.all() if t.file_path not in keep_set]
         for t in tracks:
             if t.file_path:
                 _delete_file_and_cleanup_dir(Path(t.file_path))
         title = album.title
         Track.objects.filter(pk__in=[t.pk for t in tracks]).delete()
-        Album.objects.filter(pk=album_id).delete()
-        removed.append(title)
+        if not album.tracks.exists():
+            Album.objects.filter(pk=album_id).delete()
+        removed.append(f"{title} ({len(tracks)} old tracks)")
     if removed:
         job.replaces_albums = []
         job.review_notes = (job.review_notes + " " if job.review_notes else "") + "Replaced: " + "; ".join(removed)
