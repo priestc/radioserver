@@ -109,7 +109,7 @@ BACKENDS = {
 
 
 def _check_cooloff(name: str) -> None:
-    """Raise ValueError if a 429 error occurred for this backend in the last 5 minutes."""
+    """Raise ValueError if this backend errored (rate limit, timeout, ...) in the last 5 minutes."""
     from library.models import AIServiceError, AIServiceManager
 
     try:
@@ -118,10 +118,11 @@ def _check_cooloff(name: str) -> None:
         return
     from datetime import timedelta
     cutoff = timezone.now() - timedelta(minutes=5)
-    if service.errors.filter(created_at__gte=cutoff).exists():
+    recent = service.errors.filter(created_at__gte=cutoff).order_by("-created_at").first()
+    if recent:
         raise ValueError(
-            f"{name}: call canceled due to 429 cool-off "
-            f"(rate-limit error within the last 5 minutes)"
+            f"skipped for a 5-minute cool-off after an error at "
+            f"{timezone.localtime(recent.created_at):%H:%M}: {recent.error_message[:120]}"
         )
 
 
