@@ -355,7 +355,9 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
     def track_list(self, obj):
         if not obj.pk:
             return ""
-        tracks = obj.tracks.order_by("disc_number", "track_number", "title")
+        from django.db.models import Prefetch
+        tracks = obj.tracks.order_by("disc_number", "track_number", "title").prefetch_related(
+            Prefetch("artists", queryset=Artist.objects.order_by("trackartist__position")))
         if not tracks.exists():
             return "No tracks"
         multi_disc = obj.total_discs and obj.total_discs > 1
@@ -370,6 +372,7 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             url = reverse("admin:library_track_change", args=[t.pk])
             stream_url = reverse("admin:library_track_stream", args=[t.pk])
             year_str = f" ({t.year})" if t.year else ""
+            artist_str = ", ".join(a.name for a in t.artists.all())
             gain = read_replaygain(t.file_path)
             track_data.append({"stream": stream_url, "gain": gain})
             items.append(format_html(
@@ -377,8 +380,10 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 '<button type="button" data-index="{i}" '
                 'onclick="albumTrackPlay(this)" '
                 'style="font-size:0.75em;padding:1px 6px;cursor:pointer;line-height:1.4">&#9654;</button>'
-                '{num}<a href="{url}">{title}</a>{year}</li>',
+                '{num}<a href="{url}">{title}</a>'
+                '<span style="color:var(--body-quiet-color,#666)">{artist}</span>{year}</li>',
                 i=i, url=url, title=t.title, year=year_str, num=num,
+                artist=f" — {artist_str}" if artist_str else "",
             ))
         track_data_json = mark_safe(_json.dumps(track_data))
         player_html = format_html(
