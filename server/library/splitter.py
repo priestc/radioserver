@@ -74,14 +74,19 @@ def compute_waveform(job: SplitJob) -> tuple[list[int], float]:
     return [min(255, round(255 * p / top)) for p in peaks], len(samples) / WAVEFORM_SAMPLE_RATE
 
 
-def validate_tracks(tracks: list, duration: float) -> list[dict]:
-    """Normalise and validate a tracks list posted from the editor."""
+def validate_tracks(tracks: list, duration: float, require_all: bool = False) -> list[dict]:
+    """Normalise and validate a tracks list posted from the editor.
+
+    The order is fixed by the playlist. A boundary the user hasn't placed yet has
+    start None; that's fine while editing, but cutting needs every one placed
+    (require_all).
+    """
     if not isinstance(tracks, list) or not tracks:
         raise SplitError("At least one track is required.")
     clean = []
     for i, t in enumerate(tracks, 1):
         try:
-            start = float(t["start"])
+            start = None if t["start"] is None and i > 1 else float(t["start"])
         except (KeyError, TypeError, ValueError):
             raise SplitError(f"Track {i} has no valid start time.")
         title = str(t.get("title", "")).strip()
@@ -90,155 +95,35 @@ def validate_tracks(tracks: list, duration: float) -> list[dict]:
             raise SplitError(f"Track {i} needs a title.")
         if not artists:
             raise SplitError(f"Track {i} ({title}) needs an artist.")
-        track = {"start": round(start, 2), "title": title, "artists": artists}
+        track = {"start": None if start is None else round(start, 2), "title": title, "artists": artists}
         if t.get("excerpt"):
             track["excerpt"] = True
         clean.append(track)
-    clean.sort(key=lambda t: t["start"])
     clean[0]["start"] = 0.0
-    for a, b in zip(clean, clean[1:]):
+    unplaced = [t["title"] for t in clean if t["start"] is None]
+    if require_all and unplaced:
+        raise SplitError(f"{len(unplaced)} boundar{'y has' if len(unplaced) == 1 else 'ies have'} not been placed yet "
+                         f"(the start of {', '.join(unplaced[:3])}{'…' if len(unplaced) > 3 else ''}).")
+    placed = [t for t in clean if t["start"] is not None]
+    for a, b in zip(placed, placed[1:]):
         if b["start"] - a["start"] < 1:
-            raise SplitError(f'"{a["title"]}" is shorter than one second; remove one of its boundaries.')
-    if clean[-1]["start"] >= duration - 1:
-        raise SplitError("The last track starts at the very end of the recording.")
+            raise SplitError(f'The start of "{b["title"]}" must come after the start of "{a["title"]}".')
+    if len(placed) > 1 and placed[-1]["start"] >= duration - 1:
+        raise SplitError(f'"{placed[-1]["title"]}" starts at the very end of the recording.')
     return clean
+
+
+def unplaced_count(job: SplitJob) -> int:
+    return sum(1 for t in job.tracks[1:] if t.get("start") is None)
 
 
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
-SONG_MIN_MUSIC = 25.0   # music stretches shorter than this aren't treated as songs
-MUSIC_GAP_MERGE = 4.0   # music separated by less than this is one stretch (bridges misread vocals)
-# Fitted to hand-placed boundaries: Dylan usually says a little about the song
-# that ended, then more about the next one, so the switch tends to come ~10s
-# after the music stops. He sometimes talks over a song's last bars, and the
-# detector still calls that music, so the view starts well before the music ends.
-SUGGEST_AFTER_MUSIC = 10.0   # suggested boundary: this long after the music ends...
-SUGGEST_MAX_FRACTION = 1 / 3  # ...but no further than this far into the gap
-WINDOW_BEFORE = 12.0          # seconds shown before the music ends
-WINDOW_AFTER = 6.0            # seconds shown after the next song starts
-
-
-def song_regions(segments: list) -> list[tuple[float, float]]:
-    """Long stretches of detected music, i.e. the songs."""
-    regions: list[list[float]] = []
-    for lab, s, e in segments:
-        if lab != "music":
-            continue
-        if regions and s - regions[-1][1] < MUSIC_GAP_MERGE:
-            regions[-1][1] = e
-        else:
-            regions.append([s, e])
-    return [(s, e) for s, e in regions if e - s >= SONG_MIN_MUSIC]
-
-
-def boundary_context(segments: list, b: float, duration: float) -> dict:
-    """Describe the gap around boundary time b.
-
-    Returns {"suggested", "window": [start, end]}: the suggestion is a little
-    after the song ending before b stops (see SUGGEST_AFTER_MUSIC); with no gap,
-    the next song's start. If b sits inside a song (back-to-back songs), it's
-    left where it is.
-    """
-    regions = song_regions(segments)
-    before = [r for r in regions if r[0] < b - 1]
-    if not before:
-        nxt = next((r for r in regions if r[0] >= b - 1), None)
-        end = nxt[0] + WINDOW_AFTER if nxt else min(duration, b + 15)
-        return {"suggested": b, "window": [0.0, max(end, b + 10)]}
-    a = before[-1]
-    if b < a[1] - 3:
-        return {"suggested": b, "window": [max(0.0, b - 12), min(duration, b + 12)]}
-    nxt = next((r for r in regions if r[0] >= a[1]), None)
-    gap_end = nxt[0] if nxt else duration
-    suggested = a[1] + min(SUGGEST_AFTER_MUSIC, (gap_end - a[1]) * SUGGEST_MAX_FRACTION)
-    lo, hi = max(0.0, a[1] - WINDOW_BEFORE), min(duration, gap_end + WINDOW_AFTER)
-    if hi - lo < 10:
-        lo, hi = max(0.0, suggested - 5), min(duration, suggested + 5)
-    return {"suggested": round(suggested, 2), "window": [round(lo, 2), round(hi, 2)]}
-
-
-def suggest_boundaries(job: SplitJob) -> list[dict]:
-    """Return job.tracks with every boundary moved to its suggested point."""
-    tracks = [dict(t) for t in job.tracks]
-    for i in range(1, len(tracks)):
-        tracks[i]["start"] = boundary_context(job.segments, tracks[i]["start"], job.duration)["suggested"]
-    # Keep order and at least a second per track if two suggestions collide.
-    for i in range(1, len(tracks)):
-        tracks[i]["start"] = max(tracks[i]["start"], tracks[i - 1]["start"] + 1)
-    return tracks
-
-
 def expected_track_count(job: SplitJob) -> int | None:
     """Opening + one track per playlist song + Closing, when the job has a playlist."""
     return len(job.playlist) + 2 if job.playlist else None
-
-
-def canonical_tracks(job: SplitJob) -> tuple[list[dict], list[str]]:
-    """Return (tracks, inserted titles) with exactly Opening + playlist songs + Closing.
-
-    Existing tracks are matched to that list in order (an LCS on normalised
-    titles, so duplicate titles in a playlist are fine) and keep their start,
-    name and excerpt flag. Unmatched talk tracks are dropped, which merges them
-    into the track before. Songs with no track yet are inserted at the next
-    music breaks between their neighbours, or spread evenly if there are none.
-    """
-    artist = job.album_artist
-    want = ([{"title": "Opening", "artists": [artist]}]
-            + [{"title": p["title"], "artists": list(p["artists"])} for p in job.playlist]
-            + [{"title": "Closing", "artists": [artist]}])
-    have = [t for t in job.tracks if t["start"] >= 1 or _norm(t["title"]) == "opening"]
-    a, b = [_norm(w["title"]) for w in want], [_norm(t["title"]) for t in have]
-    lcs = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
-    for i in range(len(a) - 1, -1, -1):
-        for j in range(len(b) - 1, -1, -1):
-            lcs[i][j] = lcs[i + 1][j + 1] + 1 if a[i] == b[j] else max(lcs[i + 1][j], lcs[i][j + 1])
-    match, i, j = {}, 0, 0
-    while i < len(a) and j < len(b):
-        if a[i] == b[j]:
-            match[i] = have[j]; i += 1; j += 1
-        elif lcs[i + 1][j] >= lcs[i][j + 1]:
-            i += 1
-        else:
-            j += 1
-    match[0] = {**match.get(0, want[0]), "start": 0.0}
-
-    out = []
-    for k, w in enumerate(want):
-        m = match.get(k)
-        t = {"start": m["start"] if m else None, "title": m["title"] if m else w["title"],
-             "artists": list(m["artists"]) if m else w["artists"]}
-        if m and m.get("excerpt"):
-            t["excerpt"] = True
-        out.append(t)
-
-    regions = song_regions(job.segments)
-    breaks = [r1[1] + min(SUGGEST_AFTER_MUSIC, (r2[0] - r1[1]) * SUGGEST_MAX_FRACTION)
-              for r1, r2 in zip(regions, regions[1:])]
-    inserted = []
-    k = 1
-    while k < len(out):
-        if out[k]["start"] is not None:
-            k += 1
-            continue
-        run_end = k
-        while run_end < len(out) and out[run_end]["start"] is None:
-            run_end += 1
-        lo = out[k - 1]["start"]
-        hi = out[run_end]["start"] if run_end < len(out) else job.duration
-        n = run_end - k
-        pts = [p for p in breaks if lo + 10 < p < hi - 10][:n]
-        while len(pts) < n:
-            base = pts[-1] if pts else lo
-            pts.append(base + (hi - base) / (n - len(pts) + 1))
-        for idx, p in zip(range(k, run_end), pts):
-            out[idx]["start"] = round(p, 2)
-            inserted.append(out[idx]["title"])
-        k = run_end
-    for k in range(1, len(out)):
-        out[k]["start"] = round(max(out[k]["start"], out[k - 1]["start"] + 1), 2)
-    return out, inserted
 
 
 def music_seconds(segments: list, start: float, end: float) -> float:
@@ -284,9 +169,11 @@ def length_status(job: SplitJob, i: int) -> tuple[str, float, float] | None:
     t = tracks[i]
     p = next((p for p in job.playlist if _norm(p["title"]) == _norm(t["title"])), None)
     expected = p and p.get("expected_length")
-    if not expected:
+    if not expected or t["start"] is None:
         return None
     end = tracks[i + 1]["start"] if i + 1 < len(tracks) else job.duration
+    if end is None:
+        return None
     if job.segments:
         heard, hi = music_seconds(job.segments, t["start"], end), expected * LONG_RATIO
     else:
@@ -331,11 +218,10 @@ def length_issues(job: SplitJob) -> list[str]:
 
 def job_issues(job: SplitJob) -> list[str]:
     """Problems with the job's current tracks, matching the editor's live checks."""
-    used = {_norm(t["title"]) for t in job.tracks}
     issues = []
-    missing = [p["title"] for p in job.playlist if _norm(p["title"]) not in used]
-    if missing:
-        issues.append("Not on any track yet: " + ", ".join(missing))
+    left = unplaced_count(job)
+    if left:
+        issues.append(f"{left} of {len(job.tracks) - 1} boundaries still to place")
     return issues + length_issues(job)
 
 
@@ -354,7 +240,7 @@ def cut_and_import(job: SplitJob) -> list[str]:
 
     Re-running replaces the files from any previous import of this job.
     """
-    tracks = validate_tracks(job.tracks, job.duration)
+    tracks = validate_tracks(job.tracks, job.duration, require_all=True)
     src = Path(job.source_path)
     if not src.is_file():
         raise SplitError(f"Source recording not found: {src}")
