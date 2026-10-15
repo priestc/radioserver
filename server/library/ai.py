@@ -17,6 +17,13 @@ CONF_KEYS = {
     "groq": ("groq_key", "GROQ_API_KEY"),
 }
 
+# A backend that stalls must fail fast so the next one gets a turn, and a whole
+# lookup must finish well inside nginx's 60s proxy timeout (otherwise the admin
+# page only sees "504 Gateway Time-out").
+REQUEST_TIMEOUT = 12   # seconds per API request
+REQUEST_RETRIES = 1    # client-level retries per request
+LOOKUP_BUDGET = 45     # seconds for one track's lookup across all backends
+
 DISPLAY_NAMES = {
     "openai": "OpenAI",
     "claude": "Claude",
@@ -29,7 +36,7 @@ DISPLAY_NAMES = {
 def _ask_openai(prompt: str) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -41,7 +48,7 @@ def _ask_openai(prompt: str) -> str:
 def _ask_claude(prompt: str) -> str:
     from anthropic import Anthropic
 
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=20,
@@ -53,7 +60,8 @@ def _ask_claude(prompt: str) -> str:
 def _ask_deepseek(prompt: str) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
+                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
     response = client.chat.completions.create(
         model="deepseek-chat",
         messages=[{"role": "user", "content": prompt}],
@@ -65,7 +73,8 @@ def _ask_deepseek(prompt: str) -> str:
 def _ask_groq(prompt: str) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+    client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1",
+                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
@@ -76,8 +85,10 @@ def _ask_groq(prompt: str) -> str:
 
 def _ask_google(prompt: str) -> str:
     from google import genai
+    from google.genai import types
 
-    client = genai.Client(api_key=settings.GOOGLE_AI_API_KEY)
+    client = genai.Client(api_key=settings.GOOGLE_AI_API_KEY,
+                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT * 1000))
     response = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=prompt,
@@ -237,7 +248,11 @@ def lookup_year_with_fallback(
         available.insert(0, preferred_backend)
 
     errors = []
+    started = time.monotonic()
     for name in available:
+        if time.monotonic() - started > LOOKUP_BUDGET - REQUEST_TIMEOUT:
+            errors.append(f"{name}: skipped, out of time ({LOOKUP_BUDGET}s per lookup)")
+            continue
         try:
             ask = get_backend(name)
         except ValueError as e:
@@ -251,6 +266,10 @@ def lookup_year_with_fallback(
             errors.append(f"{name}: could not parse year from response")
         except Exception as e:
             error_str = str(e)
+            if "timed out" in error_str.lower() or type(e).__name__ in ("APITimeoutError", "ReadTimeout", "TimeoutException"):
+                error_str = f"no answer within {REQUEST_TIMEOUT}s ({type(e).__name__})"
+            # Logged errors (timeouts included) put the backend in a 5-minute cool-off,
+            # so the next tracks skip a stalled backend straight away.
             _log_rate_limit_error(name, error_str)
             errors.append(f"{name}: {error_str}")
 
