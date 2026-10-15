@@ -170,6 +170,77 @@ def suggest_boundaries(job: SplitJob) -> list[dict]:
     return tracks
 
 
+def expected_track_count(job: SplitJob) -> int | None:
+    """Opening + one track per playlist song + Closing, when the job has a playlist."""
+    return len(job.playlist) + 2 if job.playlist else None
+
+
+def canonical_tracks(job: SplitJob) -> tuple[list[dict], list[str]]:
+    """Return (tracks, inserted titles) with exactly Opening + playlist songs + Closing.
+
+    Existing tracks are matched to that list in order (an LCS on normalised
+    titles, so duplicate titles in a playlist are fine) and keep their start,
+    name and excerpt flag. Unmatched talk tracks are dropped, which merges them
+    into the track before. Songs with no track yet are inserted at the next
+    music breaks between their neighbours, or spread evenly if there are none.
+    """
+    artist = job.album_artist
+    want = ([{"title": "Opening", "artists": [artist]}]
+            + [{"title": p["title"], "artists": list(p["artists"])} for p in job.playlist]
+            + [{"title": "Closing", "artists": [artist]}])
+    have = [t for t in job.tracks if t["start"] >= 1 or _norm(t["title"]) == "opening"]
+    a, b = [_norm(w["title"]) for w in want], [_norm(t["title"]) for t in have]
+    lcs = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+    for i in range(len(a) - 1, -1, -1):
+        for j in range(len(b) - 1, -1, -1):
+            lcs[i][j] = lcs[i + 1][j + 1] + 1 if a[i] == b[j] else max(lcs[i + 1][j], lcs[i][j + 1])
+    match, i, j = {}, 0, 0
+    while i < len(a) and j < len(b):
+        if a[i] == b[j]:
+            match[i] = have[j]; i += 1; j += 1
+        elif lcs[i + 1][j] >= lcs[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    match[0] = {**match.get(0, want[0]), "start": 0.0}
+
+    out = []
+    for k, w in enumerate(want):
+        m = match.get(k)
+        t = {"start": m["start"] if m else None, "title": m["title"] if m else w["title"],
+             "artists": list(m["artists"]) if m else w["artists"]}
+        if m and m.get("excerpt"):
+            t["excerpt"] = True
+        out.append(t)
+
+    regions = song_regions(job.segments)
+    breaks = [r1[1] + min(SUGGEST_AFTER_MUSIC, (r2[0] - r1[1]) * SUGGEST_MAX_FRACTION)
+              for r1, r2 in zip(regions, regions[1:])]
+    inserted = []
+    k = 1
+    while k < len(out):
+        if out[k]["start"] is not None:
+            k += 1
+            continue
+        run_end = k
+        while run_end < len(out) and out[run_end]["start"] is None:
+            run_end += 1
+        lo = out[k - 1]["start"]
+        hi = out[run_end]["start"] if run_end < len(out) else job.duration
+        n = run_end - k
+        pts = [p for p in breaks if lo + 10 < p < hi - 10][:n]
+        while len(pts) < n:
+            base = pts[-1] if pts else lo
+            pts.append(base + (hi - base) / (n - len(pts) + 1))
+        for idx, p in zip(range(k, run_end), pts):
+            out[idx]["start"] = round(p, 2)
+            inserted.append(out[idx]["title"])
+        k = run_end
+    for k in range(1, len(out)):
+        out[k]["start"] = round(max(out[k]["start"], out[k - 1]["start"] + 1), 2)
+    return out, inserted
+
+
 def music_seconds(segments: list, start: float, end: float) -> float:
     """Seconds of detected music between start and end."""
     return sum(max(0.0, min(e, end) - max(s, start)) for lab, s, e in segments if lab == "music")
@@ -234,7 +305,7 @@ def length_issues(job: SplitJob) -> list[str]:
                           "if that's right, mark it as an excerpt")
         elif k == "long":
             issues.append(f"{tracks[i]['title']} has {heard:.0f}s of music (usually {expected:.0f}s): "
-                          "another song may need its own boundary")
+                          "the next boundary may be too late")
     return issues
 
 

@@ -11,7 +11,8 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from library.models import SplitJob
 from library.splitter import (
-    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, job_issues, validate_tracks,
+    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, expected_track_count, job_issues,
+    validate_tracks,
 )
 from library.views import ranged_file_response
 
@@ -57,7 +58,13 @@ def splitter_job_api(request, job_id):
     if request.method == "PUT":
         try:
             body = json.loads(request.body)
-            job.tracks = validate_tracks(body.get("tracks"), job.duration)
+            tracks = validate_tracks(body.get("tracks"), job.duration)
+            want = expected_track_count(job)
+            if want and len(tracks) != want:
+                return JsonResponse({"error": f"This recording must have exactly {want} tracks "
+                                              f"(Opening, its {want - 2} playlist songs, Closing); got {len(tracks)}."},
+                                    status=400)
+            job.tracks = tracks
         except (json.JSONDecodeError, AttributeError):
             return JsonResponse({"error": "Request body must be JSON with a tracks list."}, status=400)
         except SplitError as e:
