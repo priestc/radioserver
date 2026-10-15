@@ -251,6 +251,26 @@ LONG_RATIO = 1.2    # more than this is "long"
 EXCERPT_SUFFIX = " (Excerpt)"
 # Show intros/outros are kept in the album but never picked for radio playlists.
 NOT_FOR_PLAYLISTS = {"Opening", "Closing"}
+TALK_TITLES = {"Opening", "Commentary", "Closing"}
+
+
+def is_talk(job: SplitJob, track: dict) -> bool:
+    """Host talk (intro, outro, unrelated banter) rather than a song."""
+    return track["title"] in TALK_TITLES and track["artists"] == [job.album_artist]
+
+
+def track_year(job: SplitJob, tracks: list[dict], i: int) -> int | None:
+    """Year to tag on tracks[i]: the broadcast year for talk, the song's own release year
+    (from the playlist) for songs. None when a song's release year isn't known."""
+    t = tracks[i]
+    if is_talk(job, t):
+        return job.year
+    playlist = job.playlist
+    # Track k is playlist song k when the job has the standard Opening + songs + Closing shape.
+    if len(tracks) == len(playlist) + 2 and 1 <= i <= len(playlist):
+        return playlist[i - 1].get("year")
+    match = next((p for p in playlist if _norm(p["title"]) == _norm(t["title"])), None)
+    return match.get("year") if match else None
 
 
 def length_status(job: SplitJob, i: int) -> tuple[str, float, float] | None:
@@ -374,8 +394,9 @@ def cut_and_import(job: SplitJob) -> list[str]:
         audio.tags["albumartist"] = [job.album_artist]
         audio.tags["tracknumber"] = [f"{i}/{total}"]
         audio.tags["discnumber"] = ["1/1"]
-        if job.year:
-            audio.tags["date"] = [str(job.year)]
+        year = track_year(job, tracks, i - 1)
+        if year:
+            audio.tags["date"] = [str(year)]
         if job.genre:
             audio.tags["genre"] = [job.genre]
         audio.save()
