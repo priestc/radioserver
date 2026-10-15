@@ -17,6 +17,9 @@ from library.splitter import (
 from library.views import ranged_file_response
 
 
+AUDIO_CHUNK = 4 * 1024 * 1024  # ~4 minutes of the 128 kbps playback copy per request
+
+
 def _job_summary(job: SplitJob) -> dict:
     return {
         "id": job.id,
@@ -105,7 +108,7 @@ def splitter_audio(request, job_id):
         path = ensure_playback_proxy(job)
     except SplitError as e:
         return JsonResponse({"error": str(e)}, status=500)
-    return ranged_file_response(request, path)
+    return ranged_file_response(request, path, max_chunk=AUDIO_CHUNK)
 
 
 @staff_member_required

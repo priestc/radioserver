@@ -1277,10 +1277,16 @@ def _ranged_file_stream(path, start, length):
             yield chunk
 
 
-def ranged_file_response(request, path: Path):
+def ranged_file_response(request, path: Path, max_chunk: int | None = None):
     """Serve a file honoring Range requests (needed for seeking in <audio>
     and <video> elements) — Django's FileResponse does not implement Range
-    support itself, so it's handled manually here."""
+    support itself, so it's handled manually here.
+
+    With max_chunk, open-ended ranges ("bytes=N-") get at most that many
+    bytes; browsers then request the next piece. That keeps each request
+    short, so a long file never ties up a sync worker or runs into the
+    worker timeout mid-stream.
+    """
     file_size = path.stat().st_size
     content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
 
@@ -1291,6 +1297,8 @@ def ranged_file_response(request, path: Path):
         start_str, end_str = range_match.groups()
         start = int(start_str) if start_str else 0
         end = int(end_str) if end_str else file_size - 1
+        if max_chunk and not end_str:
+            end = start + max_chunk - 1
         end = min(end, file_size - 1)
         if start >= file_size or start > end:
             response = HttpResponse(status=416)

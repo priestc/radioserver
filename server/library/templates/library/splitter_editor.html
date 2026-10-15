@@ -647,9 +647,42 @@
   playBtn.addEventListener("click", togglePlay);
   audio.addEventListener("play", () => { playBtn.textContent = "❚❚ Pause"; });
   audio.addEventListener("pause", () => { playBtn.textContent = "▶ Play"; });
+  // If the audio connection drops (a server restart, a dropped request), reconnect
+  // and carry on from the same spot, rather than leaving the player dead.
+  const AUDIO_SRC = audio.getAttribute("src");
+  const MAX_RECONNECTS = 5;
+  let lastTime = 0, lastPlaying = false, reconnects = 0, reconnecting = false;
+  function reconnect() {
+    if (reconnecting) return;
+    if (reconnects >= MAX_RECONNECTS) {
+      $("waveform-status").textContent = "";
+      showBanner(`Lost the connection to the recording and couldn't get it back after ${MAX_RECONNECTS} tries (media error ${audio.error ? audio.error.code : "?"}). Check that the server is running, then reload the page.`);
+      return;
+    }
+    reconnecting = true;
+    reconnects++;
+    const t = lastTime, resume = lastPlaying;
+    $("waveform-status").textContent = `Audio connection dropped; reconnecting (try ${reconnects} of ${MAX_RECONNECTS})…`;
+    setTimeout(() => {
+      audio.src = `${AUDIO_SRC}?reconnect=${Date.now()}`;
+      audio.addEventListener("loadedmetadata", () => {
+        reconnecting = false;
+        audio.currentTime = t;
+        if (resume) audio.play().catch(e => showBanner(`Reconnected, but playback couldn't resume: ${e.message}. Press Play.`));
+      }, { once: true });
+      audio.load();
+    }, 800 * reconnects);
+  }
   audio.addEventListener("error", () => {
-    const code = audio.error ? audio.error.code : "?";
-    showBanner(`The recording couldn't be loaded for playback (media error ${code}). Check that the source file still exists on the server.`);
+    if (audio.error && audio.error.code === MediaError.MEDIA_ERR_ABORTED) return;   // our own reload
+    reconnecting = false;
+    reconnect();
+  });
+  audio.addEventListener("canplay", () => {
+    if (reconnects && !reconnecting) {
+      reconnects = 0;
+      if ($("waveform-status").textContent.startsWith("Audio connection dropped")) $("waveform-status").textContent = "";
+    }
   });
   const seekBy = d => { audio.currentTime = clampT(audio.currentTime + d); };
   const fromStart = () => { audio.currentTime = win[0]; audio.play(); };
@@ -670,6 +703,7 @@
   $("speed").addEventListener("change", e => { audio.playbackRate = parseFloat(e.target.value); });
 
   function tick() {
+    if (!audio.error && !reconnecting) { lastTime = audio.currentTime; lastPlaying = !audio.paused; }
     if (job) { $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(job.duration, false)}`; draw(); }
     requestAnimationFrame(tick);
   }
