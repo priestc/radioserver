@@ -75,10 +75,13 @@ def _ask_groq(prompt: str) -> str:
 
     client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1",
                     timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
+    # llama-3.3-70b-versatile was retired by Groq. gpt-oss is a reasoning model:
+    # its reasoning counts against max_tokens, so leave room for the answer.
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
+        max_tokens=400,
+        reasoning_effort="low",
     )
     return response.choices[0].message.content.strip()
 
