@@ -73,8 +73,10 @@ def splitter_job_api(request, job_id):
         except SplitError as e:
             return JsonResponse({"error": str(e)}, status=400)
         job.save(update_fields=["tracks", "updated_at"])
+    from library.models import Album
     return JsonResponse({
         **_job_summary(job),
+        "replaces": list(Album.objects.filter(pk__in=job.replaces_albums).values_list("title", flat=True)),
         "duration": job.duration,
         "album_artist": job.album_artist,
         "dest_folder": job.dest_folder,
@@ -121,4 +123,5 @@ def splitter_import(request, job_id):
         return JsonResponse({"error": str(e)}, status=400)
     except Exception as e:  # surface anything unexpected (ffmpeg, DB) to the editor
         return JsonResponse({"error": f"Import failed: {type(e).__name__}: {e}"}, status=500)
-    return JsonResponse({"imported": len(written), "files": written, **_job_summary(job)})
+    return JsonResponse({"imported": len(written), "files": written,
+                         "removed_albums": getattr(job, "removed_albums", []), **_job_summary(job)})

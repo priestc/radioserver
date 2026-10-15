@@ -453,6 +453,11 @@ class SplitJob(models.Model):
     review_notes = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     output_files = models.JSONField(default=list, blank=True)
+    replaces_albums = models.JSONField(
+        default=list, blank=True,
+        help_text="IDs of albums this recording replaces. They're deleted, with their files, "
+                  "after this job imports successfully.",
+    )
     imported_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -42,6 +42,7 @@
   .notes li span { flex: 1; min-width: 200px; }
   .notes li button { padding: 1px 8px; font-size: 12px; }
   .notes.clear { color: var(--accent); }
+  .replaces { color: var(--text-dim); font-size: 12.5px; margin: 6px 0 0; }
   .notes:empty { display: none; }
   .side .exc { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
   .side .exc input { width: auto; margin: 0; }
@@ -119,6 +120,7 @@
     <button id="import-btn" class="primary" disabled>Cut &amp; import</button>
   </div>
   <ul class="notes" id="live-notes"></ul>
+  <p class="replaces" id="replaces" hidden></p>
   <div id="banner"><span></span><button type="button" aria-label="Dismiss">×</button></div>
 </header>
 
@@ -327,6 +329,11 @@
       }
     });
     return out;
+  }
+  function renderReplaces() {
+    const el = $("replaces"), r = job.replaces || [];
+    el.hidden = !r.length;
+    el.textContent = r.length ? `Importing this will replace the old album “${r.join("”, “")}”: it's deleted, with its files, once the import succeeds.` : "";
   }
   function renderNotes() {
     const el = $("live-notes");
@@ -745,14 +752,18 @@
   saveBtn.addEventListener("click", save);
   importBtn.addEventListener("click", async () => {
     const again = job.status === "done" ? "\n\nThis recording was already imported; its previous files will be replaced." : "";
-    if (!window.confirm(`Cut into ${tracks.length} tracks and add them to the library?${again}`)) return;
+    const replaces = (job.replaces || []).length ? `\n\nAfterwards, the old album “${job.replaces.join("”, “")}” will be deleted along with its files.` : "";
+    if (!window.confirm(`Cut into ${tracks.length} tracks and add them to the library?${again}${replaces}`)) return;
     if (!(await save())) return;
     importBtn.disabled = true;
     const old = importBtn.textContent; importBtn.textContent = "Cutting…";
     try {
       const data = await api(API + "import/", { method: "POST", body: "{}" });
       job.status = data.status; setDirty(false);
-      showBanner(`Imported ${data.imported} tracks into the library.`, "ok");
+      const removed = (data.removed_albums || []).length ? ` Deleted the old album “${data.removed_albums.join("”, “")}” and its files.` : "";
+      job.replaces = [];
+      renderReplaces();
+      showBanner(`Imported ${data.imported} tracks into the library.${removed}`, "ok");
     } catch (e) {
       showBanner(`Import failed: ${e.message}`);
     } finally {
@@ -774,6 +785,7 @@
     tracks = job.tracks.length ? job.tracks : [{ start: 0, title: "Opening", artists: [job.album_artist] }];
     commit();
     regions = songRegions(job.segments);
+    renderReplaces();
     setDirty(false);
     importBtn.disabled = false;
     goTo(1);
