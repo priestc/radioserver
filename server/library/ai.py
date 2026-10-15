@@ -66,6 +66,9 @@ def _ask_deepseek(prompt: str) -> str:
         model="deepseek-flash",  # deepseek-chat is no longer offered
         messages=[{"role": "user", "content": prompt}],
         max_tokens=20,
+        # deepseek-flash reasons before answering by default, which uses up max_tokens
+        # and returns an empty reply; a one-word answer doesn't need it.
+        extra_body={"thinking": {"type": "disabled"}},
     )
     return response.choices[0].message.content.strip()
 
