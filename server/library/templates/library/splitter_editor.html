@@ -89,6 +89,8 @@
   .controls select {
     background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
   }
+  .gap-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: 8px; background: #241f0c; }
+  .gap-panel p { margin: 0 0 8px; font-size: 13px; }
   .structure { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
   .structure p { color: var(--text-dim); font-size: 12.5px; margin: 0 0 8px; }
 
@@ -165,12 +167,19 @@
       <button id="from-start-btn" title="Play this stretch from the start (R)">⟲ From start <kbd>R</kbd></button>
       <button id="around-btn" title="Play from 3 seconds before the boundary (A)">Hear the cut <kbd>A</kbd></button>
       <button id="set-btn" class="primary" title="Move this boundary to the playhead (B)">Set boundary here <kbd>B</kbd></button>
-      <button id="reset-btn" title="Move this boundary back to the suggested spot">Reset to suggestion</button>
+      <button id="reset-btn" title="Put this boundary back where the auto-splitter would: 10 seconds after the music in this stretch stops">Auto-place</button>
       <span class="spacer"></span>
       <span id="time">0:00.0</span>
       <label>Speed
         <select id="speed"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option></select>
       </label>
+    </div>
+
+    <div class="gap-panel" id="gap-panel" hidden>
+      <p><b>No boundary here yet.</b> There's talk between two songs' worth of music here, but no boundary, so a song change may have been missed. Listen, then add one. The new track is named after the next playlist song.</p>
+      <button id="gap-add-btn" class="primary" title="Add a boundary at the playhead (B)">+ Add boundary at playhead <kbd>B</kbd></button>
+      <button id="gap-suggest-btn" title="Add it 10 seconds after the music stops">+ Add at the suggested spot</button>
+      <button id="gap-reflow-btn" title="Add the boundary at the playhead, then rebuild every later boundary from the playlist">+ Add at playhead and re-flow the rest</button>
     </div>
 
     <div class="structure">
@@ -191,6 +200,8 @@
     <div class="help">
       Each boundary starts about 10 seconds after a song's music ends. Listen to the talk and put the boundary where he stops talking about the old song and starts on the new one.<br>
       If the real switch isn't in view, use <b>◀ Earlier</b> / <b>Later ▶</b>. If a song was missed entirely (two songs detected as one), slide to it and use <b>+ Add boundary at playhead</b>.<br><br>
+      Prev/Next also stop at breaks in the music that have no boundary yet, so a missed song change can't be skipped.<br>
+      <b>Auto-place</b> puts the boundary back where the auto-splitter would: 10 seconds after the music stops.<br><br>
       Click a playlist song to make it the “Starting” song.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
       <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead<br>
@@ -221,6 +232,8 @@
   let job = null, tracks = [], regions = [];
   let peaks = [], res = 0.25;
   let cur = 1;            // current boundary = start of tracks[cur]
+  let gap = null;         // when stopped at an unmarked break: {suggested, window}
+  let baseWin = [0, 30];  // the view as it was on arrival (Auto-place works from this)
   let win = [0, 30];      // detail view range, pinned per boundary
   let dirty = false;
 
@@ -377,11 +390,17 @@
     for (let i = 1; i < tracks.length; i++) {
       const s = tracks[i].start;
       if (s < t0 || s > t1) continue;
-      const mine = i === cur;
+      const mine = i === cur && !gap;
       ctx.fillStyle = mine ? css("--boundary") : css("--other-boundary");
       ctx.fillRect(Math.round(x(s)) - (mine ? 1.5 : 0.5), 0, mine ? 3 : 1, h);
     }
-    if (opts.labels) {
+    if (opts.labels && gap) {
+      const gx = x(gap.suggested);
+      ctx.strokeStyle = css("--boundary"); ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = "13px -apple-system, BlinkMacSystemFont, sans-serif"; ctx.fillStyle = "#e0a100";
+      ctx.fillText("no boundary yet — suggested spot", Math.min(gx + 8, w - 230), 18);
+    } else if (opts.labels) {
       ctx.font = "13px -apple-system, BlinkMacSystemFont, sans-serif";
       const bx = x(tracks[cur].start);
       const left = tracks[cur - 1], right = tracks[cur];
@@ -390,6 +409,8 @@
       if (bx > 60) ctx.fillText(`${left.title}${left.excerpt ? " (excerpt)" : ""} ◀`, bx - 8, 18);
       ctx.textAlign = "left";
       if (w - bx > 60) ctx.fillText(`▶ ${right.title}${right.excerpt ? " (excerpt)" : ""}`, bx + 8, 18);
+    }
+    if (opts.labels) {
       ctx.fillStyle = "#9a9a9e"; ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
       ctx.fillText(fmt(t0), 4, h - 6);
       ctx.textAlign = "right"; ctx.fillText(fmt(t1), w - 4, h - 6); ctx.textAlign = "left";
@@ -408,11 +429,54 @@
   }
 
   // ---------- boundary navigation ----------
+  const trackAt = t => { let i = 0; while (i + 1 < tracks.length && tracks[i + 1].start <= t) i++; return i; };
+  // Every place Prev/Next can stop: boundaries, plus breaks between two song-length
+  // stretches of music that have no boundary anywhere near them.
+  function navStops() {
+    const stops = tracks.slice(1).map((t, k) => ({ t: t.start, i: k + 1 }));
+    for (let k = 0; k + 1 < regions.length; k++) {
+      const a = regions[k], b = regions[k + 1];
+      if (tracks.some((t, i) => i > 0 && t.start >= a[1] - 15 && t.start <= b[0] + 6)) continue;
+      const suggested = a[1] + Math.min(SUGGEST_AFTER_MUSIC, (b[0] - a[1]) * SUGGEST_MAX_FRACTION);
+      stops.push({ t: suggested, gap: { suggested, window: [Math.max(0, a[1] - WINDOW_BEFORE), Math.min(job.duration, b[0] + WINDOW_AFTER)] } });
+    }
+    return stops.sort((x, y) => x.t - y.t);
+  }
+  const hereT = () => gap ? gap.suggested : (tracks[cur] ? tracks[cur].start : 0);
+  function goStop(dir) {
+    const t0 = hereT(), stops = navStops();
+    const cand = dir > 0 ? stops.find(s => s.t > t0 + 0.5) : [...stops].reverse().find(s => s.t < t0 - 0.5);
+    if (!cand) return;
+    if (cand.gap) enterGap(cand.gap); else goTo(cand.i);
+  }
+  function enterGap(g) {
+    gap = g; win = [...g.window]; baseWin = [...win];
+    cur = Math.max(1, Math.min(tracks.length - 1, trackAt(g.suggested)));
+    audio.currentTime = win[0];
+    renderBoundary();
+  }
   function renderBoundary() {
     const n = tracks.length - 1;
-    $("which").innerHTML = n ? `Boundary <b>${cur}</b> of ${n} · at ${fmt(tracks[cur].start)}` : "No boundaries";
-    $("prev-btn").disabled = cur <= 1;
-    $("next-btn").disabled = cur >= n;
+    const stops = navStops(), t0 = hereT();
+    const gaps = stops.filter(s => s.gap).length;
+    $("which").innerHTML = gap
+      ? `<b>Unmarked break</b> at ${fmt(gap.suggested)} · ${n} boundaries${gaps ? `, ${gaps} unmarked break${gaps === 1 ? "" : "s"}` : ""}`
+      : n ? `Boundary <b>${cur}</b> of ${n} · at ${fmt(tracks[cur].start)}${gaps ? ` · ${gaps} unmarked break${gaps === 1 ? "" : "s"}` : ""}` : "No boundaries";
+    $("prev-btn").disabled = !stops.some(s => s.t < t0 - 0.5);
+    $("next-btn").disabled = !stops.some(s => s.t > t0 + 0.5);
+    $("gap-panel").hidden = !gap;
+    for (const id of ["set-btn", "reset-btn", "around-btn", "del-btn", "reflow-btn", "right-title", "right-artist", "right-excerpt", "talk-right-btn"]) $(id).disabled = !!gap;
+    if (gap) {
+      const L = tracks[trackAt(gap.suggested)];
+      $("left-title").value = L.title; $("left-artist").value = L.artists.join(", ");
+      $("left-excerpt").checked = !!L.excerpt; $("left-excerpt").disabled = true;
+      $("right-title").value = ""; $("right-artist").value = "";
+      $("right-title").placeholder = "(no boundary here yet)";
+      $("window-range").textContent = `showing ${fmt(win[0])} – ${fmt(win[1])}`;
+      renderPlaylist(); renderNotes(); draw();
+      return;
+    }
+    $("right-title").placeholder = "";
     if (n) {
       const L = tracks[cur - 1], R = tracks[cur];
       $("left-title").value = L.title; $("left-artist").value = L.artists.join(", ");
@@ -434,6 +498,7 @@
     renderBoundary();
   }
   function goTo(i, { seek = true } = {}) {
+    gap = null;
     if (tracks.length < 2) { renderBoundary(); return; }
     cur = Math.max(1, Math.min(tracks.length - 1, i));
     win = boundaryContext(tracks[cur].start).window;
@@ -441,6 +506,7 @@
     const b = tracks[cur].start;
     if (b < win[0] + 1) win = [Math.max(0, b - 5), win[1]];
     if (b > win[1] - 1) win = [win[0], Math.min(job.duration, b + 5)];
+    baseWin = [...win];
     if (seek) audio.currentTime = win[0];
     renderBoundary();
   }
@@ -506,15 +572,25 @@
     tracks[cur].start = Math.round(Math.min(Math.max(t, lo), hi) * 100) / 100;
     changed();
   }
-  function addBoundary(t) {
+  function addBoundary(t, name = null) {
     t = Math.round(t * 100) / 100;
-    let i = 0;
-    while (i + 1 < tracks.length && tracks[i + 1].start <= t) i++;
-    if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) { showBanner("A boundary needs at least one second on each side."); return; }
+    const i = trackAt(t);
+    if (t - tracks[i].start < 1 || trackEnd(i) - t < 1) { showBanner("A boundary needs at least one second on each side."); return false; }
     const prev = tracks[i];
-    tracks.splice(i + 1, 0, { start: t, title: prev.title, artists: [...prev.artists] });
+    const named = name || { title: prev.title, artists: prev.artists };
+    tracks.splice(i + 1, 0, { start: t, title: named.title, artists: [...named.artists] });
     commit(); setDirty(true);
     goTo(i + 1, { seek: false });
+    return true;
+  }
+  // At an unmarked break: the new track is the playlist song after the one that's ending.
+  function addMissing(t, { reflowAfter = false } = {}) {
+    const L = tracks[trackAt(t)];
+    const pIdx = job.playlist.findIndex(p => norm(p.title) === norm(L.title));
+    const next = pIdx >= 0 ? job.playlist[pIdx + 1] : null;
+    if (!addBoundary(t, next)) return;
+    if (reflowAfter) reflow();
+    else if (next) showBanner(`Added a boundary for “${next.title}”. If the names after it are now one song off, use Re-flow from here.`, "ok");
   }
   function deleteBoundary() {
     if (tracks.length < 2) return;
@@ -578,7 +654,7 @@
   // ---------- mouse ----------
   const timeAt = (c, ev, t0, t1) => { const r = c.getBoundingClientRect(); return t0 + (ev.clientX - r.left) / r.width * (t1 - t0); };
   function nearBoundary(ev) {
-    if (tracks.length < 2) return false;
+    if (tracks.length < 2 || gap) return false;
     const r = detail.getBoundingClientRect();
     const x = (tracks[cur].start - win[0]) / (win[1] - win[0]) * r.width + r.left;
     return Math.abs(ev.clientX - x) < 8;
@@ -607,11 +683,11 @@
     audio.currentTime = clampT(timeAt(detail, ev, win[0], win[1]));
   });
   overview.addEventListener("click", ev => {
-    if (tracks.length < 2) return;
+    const stops = navStops();
+    if (!stops.length) return;
     const t = timeAt(overview, ev, 0, job.duration);
-    let best = 1;
-    for (let i = 1; i < tracks.length; i++) if (Math.abs(tracks[i].start - t) < Math.abs(tracks[best].start - t)) best = i;
-    goTo(best);
+    const best = stops.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+    if (best.gap) enterGap(best.gap); else goTo(best.i);
   });
 
   // ---------- transport ----------
@@ -629,13 +705,16 @@
   const aroundCut = () => { if (tracks.length > 1) { audio.currentTime = clampT(tracks[cur].start - 3); audio.play(); } };
   $("earlier-btn").addEventListener("click", () => shiftWindow(-1));
   $("later-btn").addEventListener("click", () => shiftWindow(1));
-  $("prev-btn").addEventListener("click", () => goTo(cur - 1));
-  $("next-btn").addEventListener("click", () => goTo(cur + 1));
+  $("prev-btn").addEventListener("click", () => goStop(-1));
+  $("next-btn").addEventListener("click", () => goStop(1));
+  $("gap-add-btn").addEventListener("click", () => addMissing(audio.currentTime));
+  $("gap-suggest-btn").addEventListener("click", () => addMissing(gap.suggested));
+  $("gap-reflow-btn").addEventListener("click", () => addMissing(audio.currentTime, { reflowAfter: true }));
   $("from-start-btn").addEventListener("click", fromStart);
   $("around-btn").addEventListener("click", aroundCut);
   $("set-btn").addEventListener("click", () => setBoundary(audio.currentTime));
-  // Suggest from the middle of the gap this window shows, not where the boundary was dragged to.
-  $("reset-btn").addEventListener("click", () => setBoundary(boundaryContext((win[0] + win[1]) / 2).suggested));
+  // From the stretch this boundary was shown in on arrival, even if the view was slid since.
+  $("reset-btn").addEventListener("click", () => setBoundary(boundaryContext((baseWin[0] + baseWin[1]) / 2).suggested));
   $("add-btn").addEventListener("click", () => addBoundary(audio.currentTime));
   $("reflow-btn").addEventListener("click", reflow);
   $("undo-btn").addEventListener("click", undo);
@@ -658,9 +737,9 @@
     if (k === " ") { ev.preventDefault(); togglePlay(); }
     else if (k === "arrowleft") { ev.preventDefault(); seekBy(ev.shiftKey ? -0.5 : -2); }
     else if (k === "arrowright") { ev.preventDefault(); seekBy(ev.shiftKey ? 0.5 : 2); }
-    else if (k === "j") goTo(cur - 1);
-    else if (k === "k") goTo(cur + 1);
-    else if (k === "b") setBoundary(audio.currentTime);
+    else if (k === "j") goStop(-1);
+    else if (k === "k") goStop(1);
+    else if (k === "b") { if (gap) addMissing(audio.currentTime); else setBoundary(audio.currentTime); }
     else if (k === ",") shiftWindow(-1);
     else if (k === "f") reflow();
     else if (k === ".") shiftWindow(1);
