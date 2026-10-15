@@ -234,47 +234,95 @@ def lookup_year(ask, title: str, artist: str, backend_name: str = "") -> int | N
     return None
 
 
+def verify_year(ask, title: str, artist: str, year: int) -> bool | None:
+    """Ask a backend whether a proposed release year is right. None if the reply is unclear."""
+    answer = ask(
+        f"Is it true that the song '{title}' by {artist} was first released in {year}? "
+        f"Reply with just True or False."
+    ).strip().lower()
+    # Check "false" first so replies like "not true" or "incorrect" aren't read as agreement.
+    if re.search(r"\b(false|incorrect|not true|not correct)\b|^no\b", answer):
+        return False
+    if re.search(r"\b(true|correct)\b|^yes\b", answer):
+        return True
+    return None
+
+
+def _describe_error(e: Exception) -> str:
+    error_str = str(e)
+    if "timed out" in error_str.lower() or type(e).__name__ in ("APITimeoutError", "ReadTimeout", "TimeoutException"):
+        return f"no answer within {REQUEST_TIMEOUT}s ({type(e).__name__})"
+    return error_str
+
+
 def lookup_year_with_fallback(
     title: str, artist: str, preferred_backend: str = "",
 ) -> tuple[int | None, str, list[str]]:
-    """Try lookup_year across backends, falling back on failure.
+    """Find a track's release year, with each answer checked by a second AI service.
 
-    Returns (year_or_none, backend_used, errors).
-    Tries preferred_backend first, then remaining available backends.
+    1. One backend proposes a year.
+    2. A different backend is asked whether that year is right. If it agrees, done.
+    3. If it disagrees, the next backend proposes a year, which is checked the same
+       way, and so on through the available backends.
+
+    Returns (year_or_none, description of who proposed/confirmed it, errors/notes).
+    A year no other backend could check is returned marked "unverified".
     """
     available = get_available_backends()
     if not available:
         return None, "", ["No AI backends configured"]
-
-    # Put preferred backend first if it's available
     if preferred_backend in available:
         available.remove(preferred_backend)
         available.insert(0, preferred_backend)
 
     errors = []
     started = time.monotonic()
-    for name in available:
-        if time.monotonic() - started > LOOKUP_BUDGET - REQUEST_TIMEOUT:
-            errors.append(f"{name}: skipped, out of time ({LOOKUP_BUDGET}s per lookup)")
-            continue
+    out_of_time = lambda: time.monotonic() - started > LOOKUP_BUDGET - REQUEST_TIMEOUT
+
+    def call(name, fn):
+        """Run fn(ask) against one backend; returns (ok, value). Failures are noted and cool the backend off."""
         try:
             ask = get_backend(name)
         except ValueError as e:
             errors.append(f"{name}: {e}")
-            continue
+            return False, None
         try:
-            year = lookup_year(ask, title, artist, backend_name=name)
-            if year is not None:
-                return year, name, errors
-            # Got None (couldn't parse) — not a failure, just no result
-            errors.append(f"{name}: could not parse year from response")
+            return True, fn(ask)
         except Exception as e:
-            error_str = str(e)
-            if "timed out" in error_str.lower() or type(e).__name__ in ("APITimeoutError", "ReadTimeout", "TimeoutException"):
-                error_str = f"no answer within {REQUEST_TIMEOUT}s ({type(e).__name__})"
-            # Logged errors (timeouts included) put the backend in a 5-minute cool-off,
-            # so the next tracks skip a stalled backend straight away.
-            _log_rate_limit_error(name, error_str)
-            errors.append(f"{name}: {error_str}")
+            msg = _describe_error(e)
+            _log_rate_limit_error(name, msg)   # puts the backend in a 5-minute cool-off
+            errors.append(f"{name}: {msg}")
+            return False, None
+
+    for i, proposer in enumerate(available):
+        if out_of_time():
+            errors.append(f"{proposer}: skipped, out of time ({LOOKUP_BUDGET}s per lookup)")
+            continue
+        ok, year = call(proposer, lambda ask: lookup_year(ask, title, artist, backend_name=proposer))
+        if not ok:
+            continue
+        if year is None:
+            errors.append(f"{proposer}: could not parse a year from its answer")
+            continue
+        # Check the proposal with the other backends, starting with the next one.
+        verdict = None
+        for checker in available[i + 1:] + available[:i]:
+            if out_of_time():
+                break
+            ok, answer = call(checker, lambda ask: verify_year(ask, title, artist, year))
+            if not ok:
+                continue
+            if answer is None:
+                errors.append(f"{checker}: unclear answer when checking {year}")
+                continue
+            verdict = (checker, answer)
+            break
+        if verdict is None:
+            errors.append(f"{proposer} said {year}, but no other AI service could check it")
+            return year, f"{proposer} (unverified)", errors
+        checker, agreed = verdict
+        if agreed:
+            return year, f"{proposer}, confirmed by {checker}", errors
+        errors.append(f"{checker} says {year} (from {proposer}) is wrong")
 
     return None, "", errors
