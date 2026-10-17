@@ -8,10 +8,14 @@ AI services get asked.
 """
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,10 +26,14 @@ USER_AGENT = "radioserver/1.0 ( https://github.com/priestc/radioserver )"
 TIMEOUT = 6               # seconds per request
 MB_MIN_INTERVAL = 1.1     # MusicBrainz allows one request per second
 DISCOGS_CHECK = 4         # how many of the earliest Discogs candidates to open and check
+DISCOGS_RETRIES = 3       # Discogs allows 60 requests a minute; a 429 means wait and retry
 EARLIEST_YEAR = 1888
+ARTIST_CACHE_TTL = 24 * 3600   # an artist's MusicBrainz ID and catalogue are reused for a day
 
-_mb_lock = threading.Lock()
-_mb_last = 0.0
+# Shared by every gunicorn worker and management command, so lookups running side by side
+# still keep to MusicBrainz's rate limit and reuse each other's artist data.
+STATE_DIR = Path.home() / ".cache" / "radioserver" / "lookups"
+
 _counter = threading.local()   # HTTP requests made by this thread, for latency records
 
 
@@ -95,26 +103,56 @@ def _lucene(s: str) -> str:
 MB_MAX_RELEASE_GROUPS = 500   # per artist; enough for anyone but the most prolific
 
 
+def _locked_file(name: str):
+    """An exclusively locked file in STATE_DIR (released when closed). Locks threads and processes alike."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    f = open(STATE_DIR / name, "a+")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
+def _mb_wait_turn() -> None:
+    """Wait until MB_MIN_INTERVAL has passed since the last MusicBrainz request from any process."""
+    with _locked_file("musicbrainz.throttle") as f:
+        f.seek(0)
+        try:
+            last = float(f.read() or 0)
+        except ValueError:
+            last = 0.0
+        wait = MB_MIN_INTERVAL - (time.time() - last)
+        if wait > 0:
+            time.sleep(wait)
+        f.seek(0)
+        f.truncate()
+        f.write(str(time.time()))
+
+
 def _mb(path: str, **params) -> dict:
     """One MusicBrainz request, keeping to its one-request-per-second limit."""
-    global _mb_last
     url = f"https://musicbrainz.org/ws/2/{path}?" + urllib.parse.urlencode({**params, "fmt": "json"})
-    with _mb_lock:
+    for attempt in range(3):
+        _mb_wait_turn()
         try:
-            for attempt in range(3):
-                wait = MB_MIN_INTERVAL - (time.monotonic() - _mb_last)
-                if wait > 0:
-                    time.sleep(wait)
-                try:
-                    return _get(url)
-                except LookupError_ as e:
-                    if "HTTP 503" not in str(e) or attempt == 2:
-                        raise
-                    time.sleep(2 * (attempt + 1))     # MusicBrainz's "slow down"
-                finally:
-                    _mb_last = time.monotonic()
-        finally:
-            _mb_last = time.monotonic()
+            return _get(url)
+        except LookupError_ as e:
+            if "HTTP 503" not in str(e) or attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))     # MusicBrainz's "slow down"
+
+
+def _cached(key: str, fetch):
+    """fetch()'s result, reused for ARTIST_CACHE_TTL. Lookups wanting the same key wait for one fetch."""
+    name = hashlib.sha1(key.encode()).hexdigest()
+    with _locked_file(name + ".lock"):
+        path = STATE_DIR / (name + ".json")
+        try:
+            if time.time() - path.stat().st_mtime < ARTIST_CACHE_TTL:
+                return json.loads(path.read_text())
+        except (OSError, ValueError):
+            pass
+        value = fetch()     # errors aren't cached: the next lookup tries again
+        path.write_text(json.dumps(value))
+        return value
 
 
 def _original_issue(rg: dict) -> bool:
@@ -124,10 +162,27 @@ def _original_issue(rg: dict) -> bool:
 
 def _mb_artist_ids(artist: str) -> list[str]:
     """MusicBrainz IDs for the artist as credited, or for its lead act."""
-    names = {_norm(artist), _norm(_main_artist(artist))}
-    found = _mb("artist", query=f'artist:"{_lucene(_main_artist(artist))}"', limit=10).get("artists", [])
-    return [a["id"] for a in found
-            if _norm(a.get("name", "")) in names or any(_norm(x.get("name", "")) in names for x in a.get("aliases", []))][:2]
+    def fetch():
+        names = {_norm(artist), _norm(_main_artist(artist))}
+        found = _mb("artist", query=f'artist:"{_lucene(_main_artist(artist))}"', limit=10).get("artists", [])
+        return [a["id"] for a in found
+                if _norm(a.get("name", "")) in names or any(_norm(x.get("name", "")) in names for x in a.get("aliases", []))][:2]
+    return _cached(f"mb-artist:{_norm(artist)}", fetch)
+
+
+def _mb_original_issues(aid: str) -> list[tuple[str, str]]:
+    """(title, first release date) of each of an artist's own singles, EPs and albums."""
+    def fetch():
+        out, offset = [], 0
+        while offset < MB_MAX_RELEASE_GROUPS:
+            page = _mb("release-group", artist=aid, type="single|album|ep", limit=100, offset=offset)
+            out += [(rg.get("title", ""), rg.get("first-release-date") or "")
+                    for rg in page.get("release-groups", []) if _original_issue(rg)]
+            offset += 100
+            if offset >= page.get("release-group-count", 0):
+                break
+        return out
+    return _cached(f"mb-release-groups:{aid}", fetch)
 
 
 def musicbrainz_year(title: str, artist: str) -> int | None:
@@ -146,16 +201,9 @@ def musicbrainz_year(title: str, artist: str) -> int | None:
         return None
     years = []
     for aid in ids:
-        offset = 0
-        while offset < MB_MAX_RELEASE_GROUPS:
-            page = _mb("release-group", artist=aid, type="single|album|ep", limit=100, offset=offset)
-            for rg in page.get("release-groups", []):
-                if _original_issue(rg) and want in [_title_key(x) for x in rg.get("title", "").split(" / ")]:
-                    if (y := _year(rg.get("first-release-date"))):
-                        years.append(y)
-            offset += 100
-            if offset >= page.get("release-group-count", 0):
-                break
+        for rg_title, date in _mb_original_issues(aid):
+            if want in [_title_key(x) for x in rg_title.split(" / ")] and (y := _year(date)):
+                years.append(y)
     arids = " OR ".join(f"arid:{i}" for i in ids)
     for rec in _mb("recording", query=f'recording:"{_lucene(title)}" AND ({arids})', limit=100).get("recordings", []):
         if _title_key(rec.get("title", "")) != want:
@@ -177,6 +225,17 @@ def _discogs_auth() -> dict | None:
     return None
 
 
+def _discogs(url: str, auth: dict) -> dict:
+    """One Discogs request, waiting and retrying when it says we've made too many."""
+    for attempt in range(DISCOGS_RETRIES):
+        try:
+            return _get(url, auth)
+        except LookupError_ as e:
+            if "HTTP 429" not in str(e) or attempt == DISCOGS_RETRIES - 1:
+                raise
+            time.sleep(3 * (attempt + 1))
+
+
 def discogs_year(title: str, artist: str) -> int | None:
     """Earliest year of a Discogs master (or release) by this artist whose tracklist has this song.
     Compilations are skipped, as with MusicBrainz."""
@@ -187,7 +246,7 @@ def discogs_year(title: str, artist: str) -> int | None:
     for kind in ("master", "release"):
         url = "https://api.discogs.com/database/search?" + urllib.parse.urlencode(
             {"type": kind, "artist": _main_artist(artist), "track": title, "per_page": 50})
-        results = _get(url, auth).get("results", [])
+        results = _discogs(url, auth).get("results", [])
         by_artist = [r for r in results if want_artist in _norm(r.get("title", "").split(" - ")[0])]
         comp_years = [y for r in by_artist if "Compilation" in (r.get("format") or []) and (y := _year(r.get("year")))]
         cands = sorted(
@@ -197,7 +256,7 @@ def discogs_year(title: str, artist: str) -> int | None:
             key=lambda c: c[0],
         )
         for y, r in cands[:DISCOGS_CHECK]:
-            detail = _get(r["resource_url"], auth)
+            detail = _discogs(r["resource_url"], auth)
             if any(_title_key(t.get("title", "")) == want_title for t in detail.get("tracklist", [])):
                 # Compilations with the song before this "original" mean it's really a reissue,
                 # and the true original isn't listed: don't guess.
@@ -213,20 +272,29 @@ def database_year(title: str, artist: str) -> tuple[int | None, str, list[str]]:
         sources.append(("Discogs", discogs_year))
     else:
         notes.append("Discogs: not set up (radioserver install_discogs)")
-    for name, fn in sources:
+
+    def timed(fn):
+        """Run one database's lookup on its own thread: (year or error, seconds, requests made)."""
         _counter.n = 0
         started = time.monotonic()
         try:
             y = fn(title, artist)
         except LookupError_ as e:
-            notes.append(f"{name}: {e}")
-            if (err := record_latency(name, "database", title, artist, time.monotonic() - started,
-                                      False, str(e), _counter.n)):
-                notes.append(err)
-            continue
-        if (err := record_latency(name, "database", title, artist, time.monotonic() - started,
-                                  True, y or "not found", _counter.n)):
+            y = e
+        return y, time.monotonic() - started, _counter.n
+
+    # Both databases at once: a track costs the slower of the two, not both added together.
+    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
+        futures = [(name, pool.submit(timed, fn)) for name, fn in sources]
+    for name, future in futures:
+        y, seconds, requests = future.result()
+        failed = isinstance(y, LookupError_)
+        if (err := record_latency(name, "database", title, artist, seconds, not failed,
+                                  y if failed else (y or "not found"), requests)):
             notes.append(err)
+        if failed:
+            notes.append(f"{name}: {y}")
+            continue
         if y:
             found[name] = y
         else:

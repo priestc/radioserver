@@ -95,6 +95,7 @@
 <script>
 var albumId = {{ album.pk }};
 var backend = "{{ backend }}";
+var PARALLEL_LOOKUPS = 3;   // leaves a gunicorn worker free for the rest of the site
 
 async function startLookups(mode) {
     document.getElementById("missing-btn").style.display = "none";
@@ -118,15 +119,18 @@ async function startLookups(mode) {
         return;
     }
 
-    var blank = 0;
-    for (var i = 0; i < todo.length; i++) {
-        var row = todo[i];
+    var blank = 0, done = 0, next = 0;
+    function showProgress() {
+        progress.textContent = "Looked up " + done + " of " + todo.length + " tracks...";
+    }
+    showProgress();
+
+    async function lookUp(row) {
         var trackId = row.getAttribute("data-track-id");
         var spinner = row.querySelector(".spinner");
         var input = row.querySelector(".year-input");
         var errorSpan = row.querySelector(".error-text");
 
-        progress.textContent = "Looking up track " + (i + 1) + " of " + todo.length + "...";
         input.disabled = false;   // only looked-up tracks are submitted
 
         try {
@@ -160,7 +164,19 @@ async function startLookups(mode) {
             errorSpan.textContent = "Lookup failed, left blank: " + (e.message || "Request failed");
             errorSpan.style.display = "inline";
         }
+        done++;
+        showProgress();
     }
+
+    // A few lookups side by side: while one waits on MusicBrainz, others can use Discogs or the AI services.
+    async function worker() {
+        while (next < todo.length) {
+            await lookUp(todo[next++]);
+        }
+    }
+    var workers = [];
+    for (var w = 0; w < Math.min(PARALLEL_LOOKUPS, todo.length); w++) workers.push(worker());
+    await Promise.all(workers);
 
     progress.textContent = "Looked up " + todo.length + " track" + (todo.length === 1 ? "" : "s") +
         (blank ? "; " + blank + " couldn't be verified and " + (mode === "all" ? "will be cleared" : "stay blank") + " when you save" : "") + ".";
