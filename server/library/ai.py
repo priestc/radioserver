@@ -269,7 +269,7 @@ def lookup_year_with_fallback(
        way, and so on through the available backends.
 
     Returns (year_or_none, description of who proposed/confirmed it, errors/notes).
-    A year no other backend could check is returned marked "unverified".
+    Only a confirmed year is returned: one no other backend could check gives None.
     """
     available = get_available_backends()
     if not available:
@@ -321,8 +321,8 @@ def lookup_year_with_fallback(
             verdict = (checker, answer)
             break
         if verdict is None:
-            errors.append(f"{proposer} said {year}, but no other AI service could check it")
-            return year, f"{proposer} (unverified)", errors
+            errors.append(f"{proposer} said {year}, but no other AI service could check it, so it's left blank")
+            return None, "", errors
         checker, agreed = verdict
         if agreed:
             return year, f"{proposer}, confirmed by {checker}", errors

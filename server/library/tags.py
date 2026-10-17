@@ -134,7 +134,7 @@ FORMAT_MAP = {
 }
 
 
-def write_track_tags(track) -> bool:
+def write_track_tags(track, clear_missing_year: bool = False) -> bool:
     """Write a track's metadata to its file tags. Returns True on success.
 
     Writes: title, artist, genre, date (year), tracknumber, discnumber.
@@ -153,6 +153,8 @@ def write_track_tags(track) -> bool:
         audio.tags["genre"] = [track.genre]
     if track.year is not None:
         audio.tags["date"] = [str(track.year)]
+    elif clear_missing_year and "date" in audio.tags:
+        del audio.tags["date"]
     if track.track_number is not None:
         audio.tags["tracknumber"] = [str(track.track_number)]
     if track.disc_number is not None:
@@ -177,8 +179,9 @@ def write_track_tags(track) -> bool:
 
 
 def write_track_year(track) -> bool:
-    """Write a track's year to its file's date tag. Returns True on success."""
-    return write_track_tags(track)
+    """Write a track's year to its file's date tag, removing the tag when the year
+    was cleared (so a rescan doesn't bring the old year back). Returns True on success."""
+    return write_track_tags(track, clear_missing_year=True)
 
 
 def write_album_tags(album) -> None:

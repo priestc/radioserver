@@ -41,13 +41,19 @@
 
 {% if tracks %}
 <p id="progress">
-    <button type="button" class="default" id="start-btn" onclick="startLookups()">Start Fetching</button>
+    <button type="button" class="default" id="missing-btn" onclick="startLookups('missing')">Add missing dates</button>
+    <button type="button" id="all-btn" onclick="startLookups('all')" style="margin-left:0.5em">Replace all dates</button>
+</p>
+<p class="help">
+    <b>Add missing dates</b> looks up only the tracks with no year. <b>Replace all dates</b> looks up every track and replaces its year.
+    A year is only filled in when a second AI service confirms it; otherwise it's left blank (and with Replace all, a blank clears the track's year).
 </p>
 
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="confirm" value="1">
     <input type="hidden" name="backend" value="{{ backend }}">
+    <input type="hidden" name="mode" id="mode-input" value="missing">
     <table>
         <thead>
             <tr>
@@ -60,14 +66,15 @@
         </thead>
         <tbody>
             {% for item in tracks %}
-            <tr data-track-id="{{ item.track_id }}">
+            <tr data-track-id="{{ item.track_id }}" data-has-year="{% if item.current_year %}1{% endif %}">
                 <td>{{ item.title }}</td>
                 <td>{{ item.artist }}</td>
                 <td>{{ item.current_year|default:"—" }}</td>
                 <td>
                     <input type="text" name="year_{{ item.track_id }}"
                            value="" size="6" style="width:5em; display:none"
-                           class="year-input">
+                           class="year-input" disabled>
+                    <span class="kept-text" style="display:none; color:#666">kept</span>
                     <span class="spinner" style="display:none"></span>
                     <span class="backend-tag" style="display:none"></span>
                     <span class="error-text" style="display:none"></span>
@@ -89,29 +96,35 @@
 var albumId = {{ album.pk }};
 var backend = "{{ backend }}";
 
-async function startLookups() {
-    var startBtn = document.getElementById("start-btn");
-    startBtn.disabled = true;
-    startBtn.style.display = "none";
+async function startLookups(mode) {
+    document.getElementById("missing-btn").style.display = "none";
+    document.getElementById("all-btn").style.display = "none";
+    document.getElementById("mode-input").value = mode;
 
-    var rows = document.querySelectorAll("tr[data-track-id]");
-    var total = rows.length;
+    var rows = Array.from(document.querySelectorAll("tr[data-track-id]"));
+    var todo = rows.filter(function(row) { return mode === "all" || !row.getAttribute("data-has-year"); });
     var progress = document.getElementById("progress");
     var saveBtn = document.getElementById("save-btn");
 
-    // Show all spinners
     rows.forEach(function(row) {
-        row.querySelector(".spinner").style.display = "inline-block";
+        if (todo.indexOf(row) < 0) row.querySelector(".kept-text").style.display = "inline";
+        else row.querySelector(".spinner").style.display = "inline-block";
     });
+    if (!todo.length) {
+        progress.textContent = "Every track already has a year; nothing to look up.";
+        return;
+    }
 
-    for (var i = 0; i < total; i++) {
-        var row = rows[i];
+    var blank = 0;
+    for (var i = 0; i < todo.length; i++) {
+        var row = todo[i];
         var trackId = row.getAttribute("data-track-id");
         var spinner = row.querySelector(".spinner");
         var input = row.querySelector(".year-input");
         var errorSpan = row.querySelector(".error-text");
 
-        progress.textContent = "Looking up track " + (i + 1) + " of " + total + "...";
+        progress.textContent = "Looking up track " + (i + 1) + " of " + todo.length + "...";
+        input.disabled = false;   // only looked-up tracks are submitted
 
         try {
             var url = "/admin/library/album/" + albumId + "/ai-date-finder/lookup/" + trackId + "/?backend=" + encodeURIComponent(backend);
@@ -122,13 +135,14 @@ async function startLookups() {
             var data = await resp.json();
 
             spinner.style.display = "none";
+            input.style.display = "inline";
             if (data.error) {
-                errorSpan.textContent = data.error;
+                input.value = "";
+                blank++;
+                errorSpan.textContent = "Not verified, left blank: " + data.error;
                 errorSpan.style.display = "inline";
-                input.style.display = "inline";
             } else {
                 input.value = data.year;
-                input.style.display = "inline";
                 if (data.backend) {
                     var tag = row.querySelector(".backend-tag");
                     tag.textContent = "via " + data.backend;
@@ -137,13 +151,16 @@ async function startLookups() {
             }
         } catch (e) {
             spinner.style.display = "none";
-            errorSpan.textContent = e.message || "Request failed";
-            errorSpan.style.display = "inline";
+            input.value = "";
             input.style.display = "inline";
+            blank++;
+            errorSpan.textContent = "Lookup failed, left blank: " + (e.message || "Request failed");
+            errorSpan.style.display = "inline";
         }
     }
 
-    progress.textContent = "All " + total + " tracks looked up.";
+    progress.textContent = "Looked up " + todo.length + " track" + (todo.length === 1 ? "" : "s") +
+        (blank ? "; " + blank + " couldn't be verified and " + (mode === "all" ? "will be cleared" : "stay blank") + " when you save" : "") + ".";
     saveBtn.disabled = false;
 }
 </script>

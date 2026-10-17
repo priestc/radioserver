@@ -3,7 +3,7 @@ from urllib.parse import quote_plus
 
 from django import forms
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
@@ -602,19 +602,40 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         if request.method == "POST" and request.POST.get("confirm"):
             from library.tags import write_track_year
 
-            tracks = album.tracks.all()
-            updated = 0
-            for track in tracks:
-                raw = request.POST.get(f"year_{track.pk}", "").strip()
+            # "missing": only tracks that had no year are filled in. "all": every looked-up
+            # track takes the result, and a blank result (nothing verified) clears its year.
+            mode = request.POST.get("mode", "missing")
+            updated = cleared = 0
+            bad = []
+            for track in album.tracks.all():
+                key = f"year_{track.pk}"
+                if key not in request.POST:
+                    continue                      # not looked up this time
+                raw = request.POST[key].strip()
+                if mode == "missing" and track.year is not None:
+                    continue
                 if raw:
                     try:
-                        track.year = int(raw)
-                        track.save(update_fields=["year"])
-                        write_track_year(track)
-                        updated += 1
-                    except (ValueError, TypeError):
-                        pass
-            self.message_user(request, f"Updated {updated} track(s).")
+                        year = int(raw)
+                    except ValueError:
+                        bad.append(f"{track.title}: “{raw}”")
+                        continue
+                    if year == track.year:
+                        continue
+                    track.year = year
+                    updated += 1
+                elif mode == "all" and track.year is not None:
+                    track.year = None
+                    cleared += 1
+                else:
+                    continue
+                track.save(update_fields=["year"])
+                if not write_track_year(track):
+                    bad.append(f"{track.title}: couldn't write the file's tags")
+            msg = f"Set {updated} year(s)" + (f", cleared {cleared} that couldn't be verified" if cleared else "") + "."
+            self.message_user(request, msg)
+            if bad:
+                self.message_user(request, "Not saved: " + "; ".join(bad), level=messages.ERROR)
             return redirect("admin:library_album_change", album_id)
 
         # Build track metadata without querying AI
