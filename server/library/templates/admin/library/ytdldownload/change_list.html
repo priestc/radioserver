@@ -249,6 +249,9 @@ function showMetadata(data) {
 
   document.getElementById('metadata-section').style.display = 'block';
   document.getElementById('download-error').textContent = '';
+  // A previous download on this page left the button disabled; this is a new album.
+  document.getElementById('download-btn').disabled = false;
+  document.getElementById('download-spinner').style.display = 'none';
 }
 
 function startDownload() {
