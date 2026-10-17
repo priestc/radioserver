@@ -319,6 +319,27 @@ class AIServiceError(models.Model):
         return f"{self.service} — {self.created_at:%Y-%m-%d %H:%M}"
 
 
+class LookupLatency(models.Model):
+    """How long one service took to answer one release-year lookup (date finder speed tracking)."""
+
+    service = models.CharField(max_length=50, db_index=True)   # "MusicBrainz", "Discogs", or an AI backend name
+    kind = models.CharField(max_length=20)                     # "database", "propose" or "verify"
+    title = models.CharField(max_length=500)
+    artist = models.CharField(max_length=500)
+    seconds = models.FloatField()
+    requests = models.PositiveIntegerField(null=True, blank=True)   # HTTP requests made (databases only)
+    ok = models.BooleanField()
+    result = models.CharField(max_length=200, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "lookup latencies"
+
+    def __str__(self):
+        return f"{self.service} {self.seconds:.1f}s — {self.title}"
+
+
 class YtdlDownload(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

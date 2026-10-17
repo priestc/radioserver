@@ -282,26 +282,34 @@ def lookup_year_with_fallback(
     started = time.monotonic()
     out_of_time = lambda: time.monotonic() - started > budget - REQUEST_TIMEOUT
 
-    def call(name, fn):
+    def call(name, kind, fn):
         """Run fn(ask) against one backend; returns (ok, value). Failures are noted and cool the backend off."""
+        from library.release_dates import record_latency
+
         try:
             ask = get_backend(name)
         except ValueError as e:
             errors.append(f"{name}: {e}")
             return False, None
+        t0 = time.monotonic()
         try:
-            return True, fn(ask)
+            value = fn(ask)
         except Exception as e:
             msg = _describe_error(e)
             _log_rate_limit_error(name, msg)   # puts the backend in a 5-minute cool-off
             errors.append(f"{name}: {msg}")
+            if (err := record_latency(name, kind, title, artist, time.monotonic() - t0, False, msg)):
+                errors.append(err)
             return False, None
+        if (err := record_latency(name, kind, title, artist, time.monotonic() - t0, True, value)):
+            errors.append(err)
+        return True, value
 
     for i, proposer in enumerate(available):
         if out_of_time():
             errors.append(f"{proposer}: skipped, out of time ({LOOKUP_BUDGET}s per lookup)")
             continue
-        ok, year = call(proposer, lambda ask: lookup_year(ask, title, artist, backend_name=proposer))
+        ok, year = call(proposer, "propose", lambda ask: lookup_year(ask, title, artist, backend_name=proposer))
         if not ok:
             continue
         if year is None:
@@ -312,7 +320,7 @@ def lookup_year_with_fallback(
         for checker in available[i + 1:] + available[:i]:
             if out_of_time():
                 break
-            ok, answer = call(checker, lambda ask: verify_year(ask, title, artist, year))
+            ok, answer = call(checker, "verify", lambda ask: verify_year(ask, title, artist, year))
             if not ok:
                 continue
             if answer is None:

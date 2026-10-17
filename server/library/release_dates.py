@@ -26,6 +26,22 @@ EARLIEST_YEAR = 1888
 
 _mb_lock = threading.Lock()
 _mb_last = 0.0
+_counter = threading.local()   # HTTP requests made by this thread, for latency records
+
+
+def record_latency(service: str, kind: str, title: str, artist: str, seconds: float,
+                   ok: bool, result: str = "", requests: int | None = None) -> str | None:
+    """Save how long a service took for one lookup. Returns an error note if it couldn't be saved."""
+    from library.models import LookupLatency
+
+    try:
+        LookupLatency.objects.create(
+            service=service, kind=kind, title=title[:500], artist=artist[:500], seconds=round(seconds, 3),
+            requests=requests, ok=ok, result=str(result)[:200],
+        )
+    except Exception as e:
+        return f"{service}: latency not recorded ({e})"
+    return None
 
 
 class LookupError_(Exception):
@@ -33,6 +49,7 @@ class LookupError_(Exception):
 
 
 def _get(url: str, headers: dict | None = None) -> dict:
+    _counter.n = getattr(_counter, "n", 0) + 1
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
@@ -197,11 +214,19 @@ def database_year(title: str, artist: str) -> tuple[int | None, str, list[str]]:
     else:
         notes.append("Discogs: not set up (radioserver install_discogs)")
     for name, fn in sources:
+        _counter.n = 0
+        started = time.monotonic()
         try:
             y = fn(title, artist)
         except LookupError_ as e:
             notes.append(f"{name}: {e}")
+            if (err := record_latency(name, "database", title, artist, time.monotonic() - started,
+                                      False, str(e), _counter.n)):
+                notes.append(err)
             continue
+        if (err := record_latency(name, "database", title, artist, time.monotonic() - started,
+                                  True, y or "not found", _counter.n)):
+            notes.append(err)
         if y:
             found[name] = y
         else:
