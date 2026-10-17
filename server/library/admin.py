@@ -315,7 +315,7 @@ class ArtistAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
 @admin.register(Album)
 class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
     form = AlbumForm
-    list_display = ["display_title", "artist", "year", "total_tracks", "has_artwork", "exclude_from_playlist"]
+    list_display = ["display_title", "artist", "year", "total_tracks", "has_artwork", "all_tracks_dated", "exclude_from_playlist"]
     list_editable = ["exclude_from_playlist"]
     list_filter = ["year", "cover_status"]
     search_fields = ["title", "artist__name"]
@@ -342,6 +342,20 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             " — or use the upload field below.",
             search_url,
         )
+
+    def get_queryset(self, request):
+        from django.db.models import Count, Q
+        return super().get_queryset(request).annotate(
+            undated_tracks=Count("tracks", filter=Q(tracks__year__isnull=True)),
+            track_rows=Count("tracks"),
+        )
+
+    @admin.display(description="All tracks dated", boolean=True, ordering="undated_tracks")
+    def all_tracks_dated(self, obj):
+        """Green check when every track has a year, red X when any is missing one."""
+        if not getattr(obj, "track_rows", 0):
+            return None
+        return obj.undated_tracks == 0
 
     @admin.display(description="Artwork", boolean=True)
     def has_artwork(self, obj):
