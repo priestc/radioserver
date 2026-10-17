@@ -171,6 +171,8 @@ def discogs_year(title: str, artist: str) -> int | None:
         url = "https://api.discogs.com/database/search?" + urllib.parse.urlencode(
             {"type": kind, "artist": _main_artist(artist), "track": title, "per_page": 50})
         results = _get(url, auth).get("results", [])
+        by_artist = [r for r in results if want_artist in _norm(r.get("title", "").split(" - ")[0])]
+        comp_years = [y for r in by_artist if "Compilation" in (r.get("format") or []) and (y := _year(r.get("year")))]
         cands = sorted(
             ((y, r) for r in results
              if (y := _year(r.get("year"))) and want_artist in _norm(r.get("title", "").split(" - ")[0])
@@ -180,7 +182,9 @@ def discogs_year(title: str, artist: str) -> int | None:
         for y, r in cands[:DISCOGS_CHECK]:
             detail = _get(r["resource_url"], auth)
             if any(_title_key(t.get("title", "")) == want_title for t in detail.get("tracklist", [])):
-                return y
+                # Compilations with the song before this "original" mean it's really a reissue,
+                # and the true original isn't listed: don't guess.
+                return None if comp_years and min(comp_years) < y else y
     return None
 
 
