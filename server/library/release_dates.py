@@ -161,7 +161,8 @@ def _discogs_auth() -> dict | None:
 
 
 def discogs_year(title: str, artist: str) -> int | None:
-    """Earliest year of a Discogs master (or release) by this artist whose tracklist has this song."""
+    """Earliest year of a Discogs master (or release) by this artist whose tracklist has this song.
+    Compilations are skipped, as with MusicBrainz."""
     auth = _discogs_auth()
     if not auth:
         return None
@@ -172,7 +173,8 @@ def discogs_year(title: str, artist: str) -> int | None:
         results = _get(url, auth).get("results", [])
         cands = sorted(
             ((y, r) for r in results
-             if (y := _year(r.get("year"))) and want_artist in _norm(r.get("title", "").split(" - ")[0])),
+             if (y := _year(r.get("year"))) and want_artist in _norm(r.get("title", "").split(" - ")[0])
+             and "Compilation" not in (r.get("format") or [])),   # a compilation's year isn't the song's
             key=lambda c: c[0],
         )
         for y, r in cands[:DISCOGS_CHECK]:
