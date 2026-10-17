@@ -1,7 +1,7 @@
 """Release years from music databases, asked before any AI service.
 
-MusicBrainz (no key needed) and Discogs (needs a personal token: `radioserver
-install_discogs TOKEN`) are both searched, and the earliest year either one
+MusicBrainz (no key needed) and Discogs (needs a personal token, or an app's
+consumer key and secret: see `radioserver install_discogs`) are both searched, and the earliest year either one
 has for a matching recording wins: reissues and compilations only ever make a
 song look newer than it is. Only when neither database knows the song do the
 AI services get asked.
@@ -149,12 +149,22 @@ def musicbrainz_year(title: str, artist: str) -> int | None:
     return min(years) if years else None
 
 
+def _discogs_auth() -> dict | None:
+    """Discogs auth header: a personal token, or an app's consumer key and secret."""
+    token = getattr(settings, "DISCOGS_TOKEN", "")
+    if token:
+        return {"Authorization": f"Discogs token={token}"}
+    key, secret = getattr(settings, "DISCOGS_KEY", ""), getattr(settings, "DISCOGS_SECRET", "")
+    if key and secret:
+        return {"Authorization": f"Discogs key={key}, secret={secret}"}
+    return None
+
+
 def discogs_year(title: str, artist: str) -> int | None:
     """Earliest year of a Discogs master (or release) by this artist whose tracklist has this song."""
-    token = getattr(settings, "DISCOGS_TOKEN", "")
-    if not token:
+    auth = _discogs_auth()
+    if not auth:
         return None
-    auth = {"Authorization": f"Discogs token={token}"}
     want_title, want_artist = _title_key(title), _artist_key(artist)
     for kind in ("master", "release"):
         url = "https://api.discogs.com/database/search?" + urllib.parse.urlencode(
@@ -176,10 +186,10 @@ def database_year(title: str, artist: str) -> tuple[int | None, str, list[str]]:
     """Ask MusicBrainz and Discogs. Returns (earliest year found, which database(s) said so, notes)."""
     found, notes = {}, []
     sources = [("MusicBrainz", musicbrainz_year)]
-    if getattr(settings, "DISCOGS_TOKEN", ""):
+    if _discogs_auth():
         sources.append(("Discogs", discogs_year))
     else:
-        notes.append("Discogs: no token set (radioserver install_discogs TOKEN)")
+        notes.append("Discogs: not set up (radioserver install_discogs)")
     for name, fn in sources:
         try:
             y = fn(title, artist)
