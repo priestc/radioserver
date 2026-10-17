@@ -587,17 +587,10 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         album = Album.objects.get(id=album_id)
         available = get_available_backends()
 
-        if not available:
-            return TemplateResponse(request, "admin/library/ai_date_finder.html", {
-                "album": album,
-                "backend": "none",
-                "error": "No AI backends configured. Add an API key via radioserver install_* commands.",
-                "tracks": [],
-            })
-
-        backend_name = request.GET.get("backend") or request.POST.get("backend") or available[0]
+        # MusicBrainz and Discogs are asked first, so the page works even with no AI service set up.
+        backend_name = request.GET.get("backend") or request.POST.get("backend") or (available[0] if available else "")
         if backend_name not in available:
-            backend_name = available[0]
+            backend_name = available[0] if available else ""
 
         if request.method == "POST" and request.POST.get("confirm"):
             from library.tags import write_track_year
@@ -638,7 +631,8 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 self.message_user(request, "Not saved: " + "; ".join(bad), level=messages.ERROR)
             return redirect("admin:library_album_change", album_id)
 
-        # Build track metadata without querying AI
+        # Build track metadata without querying anything yet
+        from library.release_dates import is_show_talk
         track_data = []
         for track in album.tracks.order_by("disc_number", "track_number", "title"):
             artist = track.artists.first()
@@ -648,6 +642,7 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
                 "title": track.title,
                 "artist": artist_name,
                 "current_year": track.year,
+                "talk": is_show_talk(track),
             })
 
         return TemplateResponse(request, "admin/library/ai_date_finder.html", {
@@ -657,14 +652,14 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         })
 
     def ai_date_finder_lookup(self, request, album_id, track_id):
-        from library.ai import lookup_year_with_fallback
+        from library.release_dates import find_release_year
 
         backend_name = request.GET.get("backend", "")
         track = Track.objects.get(pk=track_id, album_id=album_id)
         artist = track.artists.first()
         artist_name = artist.name if artist else "Unknown Artist"
 
-        year, used_backend, errors = lookup_year_with_fallback(
+        year, used_backend, errors = find_release_year(
             track.title, artist_name, preferred_backend=backend_name,
         )
         if year is not None:
@@ -836,13 +831,13 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         )
 
     def ai_year_lookup_view(self, request, track_id):
-        from library.ai import lookup_year_with_fallback
+        from library.release_dates import find_release_year
 
         track = Track.objects.get(pk=track_id)
         artist = track.artists.first()
         artist_name = artist.name if artist else "Unknown Artist"
 
-        year, used_backend, errors = lookup_year_with_fallback(
+        year, used_backend, errors = find_release_year(
             track.title, artist_name,
         )
         if year is not None:

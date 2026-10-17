@@ -33,7 +33,7 @@
 
 {% block content %}
 <h2>AI Date Finder — {{ album.title }} by {{ album.artist.name }}</h2>
-<p>Backend: <strong>{{ backend }}</strong></p>
+<p>Sources: <strong>MusicBrainz</strong>, then <strong>Discogs</strong>; if neither has the song, AI services ({{ backend|default:"none set up" }} first), each checked by a second one.</p>
 
 {% if error %}
 <p class="errornote">{{ error }}</p>
@@ -46,7 +46,7 @@
 </p>
 <p class="help">
     <b>Add missing dates</b> looks up only the tracks with no year. <b>Replace all dates</b> looks up every track and replaces its year.
-    A year is only filled in when a second AI service confirms it; otherwise it's left blank (and with Replace all, a blank clears the track's year).
+    The year comes from MusicBrainz or Discogs (the earliest either has); only if neither knows the song are the AI services asked, and an AI year is only used when a second service confirms it. Anything else is left blank (and with Replace all, a blank clears the track's year).
 </p>
 
 <form method="post">
@@ -66,7 +66,7 @@
         </thead>
         <tbody>
             {% for item in tracks %}
-            <tr data-track-id="{{ item.track_id }}" data-has-year="{% if item.current_year %}1{% endif %}">
+            <tr data-track-id="{{ item.track_id }}" data-has-year="{% if item.current_year %}1{% endif %}" data-talk="{% if item.talk %}1{% endif %}">
                 <td>{{ item.title }}</td>
                 <td>{{ item.artist }}</td>
                 <td>{{ item.current_year|default:"—" }}</td>
@@ -74,7 +74,7 @@
                     <input type="text" name="year_{{ item.track_id }}"
                            value="" size="6" style="width:5em; display:none"
                            class="year-input" disabled>
-                    <span class="kept-text" style="display:none; color:#666">kept</span>
+                    <span class="kept-text" style="display:none; color:#666">{% if item.talk %}talk: keeps the air year{% else %}kept{% endif %}</span>
                     <span class="spinner" style="display:none"></span>
                     <span class="backend-tag" style="display:none"></span>
                     <span class="error-text" style="display:none"></span>
@@ -102,7 +102,10 @@ async function startLookups(mode) {
     document.getElementById("mode-input").value = mode;
 
     var rows = Array.from(document.querySelectorAll("tr[data-track-id]"));
-    var todo = rows.filter(function(row) { return mode === "all" || !row.getAttribute("data-has-year"); });
+    var todo = rows.filter(function(row) {
+        if (row.getAttribute("data-talk")) return false;   // the show's own talk keeps its air year
+        return mode === "all" || !row.getAttribute("data-has-year");
+    });
     var progress = document.getElementById("progress");
     var saveBtn = document.getElementById("save-btn");
 

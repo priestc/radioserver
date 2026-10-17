@@ -259,7 +259,7 @@ def _describe_error(e: Exception) -> str:
 
 
 def lookup_year_with_fallback(
-    title: str, artist: str, preferred_backend: str = "",
+    title: str, artist: str, preferred_backend: str = "", budget: float = LOOKUP_BUDGET,
 ) -> tuple[int | None, str, list[str]]:
     """Find a track's release year, with each answer checked by a second AI service.
 
@@ -280,7 +280,7 @@ def lookup_year_with_fallback(
 
     errors = []
     started = time.monotonic()
-    out_of_time = lambda: time.monotonic() - started > LOOKUP_BUDGET - REQUEST_TIMEOUT
+    out_of_time = lambda: time.monotonic() - started > budget - REQUEST_TIMEOUT
 
     def call(name, fn):
         """Run fn(ask) against one backend; returns (ok, value). Failures are noted and cool the backend off."""

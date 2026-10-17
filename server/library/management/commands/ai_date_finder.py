@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from library.ai import get_backend, lookup_year_with_fallback
+from library.ai import get_backend
+from library.release_dates import find_release_year
 from library.models import Album
 from library.tags import write_track_year
 
 
 class Command(BaseCommand):
-    help = "Use AI to look up release years for tracks in an album."
+    help = "Look up release years for an album's tracks: MusicBrainz and Discogs first, then AI services."
 
     def add_arguments(self, parser):
         parser.add_argument("album_id", type=int, help="ID of the album to process.")
@@ -50,11 +51,16 @@ class Command(BaseCommand):
         updated = 0
         failed = 0
 
+        from library.release_dates import is_show_talk
+
         for track in tracks:
+            if is_show_talk(track):
+                self.stdout.write(f"  skip: \"{track.title}\" is the show's own talk (keeps {track.year or 'no year'})")
+                continue
             artist = track.artists.first()
             artist_name = artist.name if artist else "Unknown Artist"
 
-            year, used, notes = lookup_year_with_fallback(
+            year, used, notes = find_release_year(
                 track.title, artist_name, preferred_backend=backend,
             )
             if year is None:
