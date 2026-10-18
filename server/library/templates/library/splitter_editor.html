@@ -10,6 +10,7 @@
     --text: #f2f2f3; --text-dim: #9a9a9e; --accent: #1db954; --warn: #e0a100; --danger: #e5484d;
     --music: rgba(29, 185, 84, .18); --speech: rgba(90, 140, 255, .22);
     --boundary: #e0a100; --other-boundary: #f2f2f3; --playhead: #e5484d;
+    --suggest: #4fc3f7; --expected: #c792ea; --crinkle: #ff8a65;
   }
   * { box-sizing: border-box; }
   body {
@@ -105,6 +106,24 @@
   .playlist li.missing { box-shadow: inset 3px 0 var(--warn); }
   .playlist li.current { background: #1d2a20; }
   .help { color: var(--text-dim); font-size: 12.5px; line-height: 1.7; margin-top: 18px; }
+
+  .tx-head { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 6px; flex-wrap: wrap; }
+  .tx-head h2 { margin: 0; }
+  #suggest-why { color: var(--suggest); font-size: 12.5px; flex: 1; min-width: 200px; }
+  #transcript { position: relative; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+  #transcript:empty::before { content: attr(data-empty); display: block; padding: 10px 12px; color: var(--text-dim); font-size: 12.5px; }
+  .sent { display: flex; gap: 10px; align-items: baseline; padding: 4px 10px; border-left: 3px solid transparent; cursor: pointer; }
+  .sent:hover { background: var(--bg-elevated); }
+  .sent .st { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--text-dim); min-width: 52px; }
+  .sent .tx { flex: 1; line-height: 1.45; }
+  .sent .pz { color: var(--text-dim); font-size: 11.5px; white-space: nowrap; }
+  .sent .cut { padding: 1px 8px; font-size: 12px; visibility: hidden; }
+  .sent:hover .cut { visibility: visible; }
+  .sent.playing { background: #2a2414; }
+  .sent.suggested { border-left-color: var(--suggest); }
+  .sent.starts { border-left-color: var(--boundary); }
+  .sent.crinkled .pz::before { content: "page turn? · "; color: var(--crinkle); }
+  .gapline { padding: 2px 10px; color: var(--text-dim); font-size: 11.5px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); background: rgba(29,185,84,.07); }
 </style>
 </head>
 <body>
@@ -160,6 +179,9 @@
       <span><i style="background:var(--speech)"></i>Talk</span>
       <span><i style="background:var(--boundary)"></i>This boundary (drag it)</span>
       <span><i style="background:var(--playhead)"></i>Playhead</span>
+      <span><i style="background:var(--suggest)"></i>Suggested (from the transcript)</span>
+      <span><i style="background:var(--expected)"></i>Where a song should end, by its usual length</span>
+      <span><i style="background:var(--crinkle)"></i>Noise burst: maybe a page turn</span>
       <span id="waveform-status">Loading waveform…</span>
     </div>
     <div class="unplaced-hint" id="unplaced-hint" hidden></div>
@@ -169,6 +191,7 @@
       <button id="from-start-btn" title="Play the view from its start (R)">⟲ From start <kbd>R</kbd></button>
       <button id="around-btn" title="Play from 3 seconds before the boundary (A)">Hear the cut <kbd>A</kbd></button>
       <button id="set-btn" class="primary" title="Put this boundary at the playhead (B)">Set boundary here <kbd>B</kbd></button>
+      <button id="suggest-btn" title="Put this boundary where the transcript suggests (G)">Use suggestion <kbd>G</kbd></button>
       <span class="spacer"></span>
       <span id="time">0:00.0</span>
       <label>Speed
@@ -176,8 +199,14 @@
       </label>
     </div>
 
+    <div class="tx-head">
+      <h2>What he's saying</h2>
+      <span id="suggest-why"></span>
+    </div>
+    <div id="transcript" data-empty="Loading…"></div>
+
     <div class="structure">
-      <p>One boundary per song, in playlist order. Nothing is guessed: you place each one, and Next puts the following one a song-length later for you to move.</p>
+      <p>One boundary per song, in playlist order. Next puts the following one at the transcript's suggestion when there is one, otherwise a song-length later, for you to check and move.</p>
       <button id="undo-btn" title="Undo the last change (⌘Z)" disabled>Undo <kbd>⌘Z</kbd></button>
     </div>
   </section>
@@ -187,11 +216,12 @@
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
       Play, then press <b>B</b> where the first song starts (where Dylan starts talking about it).<br>
-      <b>Next boundary</b> then puts the next one a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
+      <b>Next boundary</b> then puts the next one at the suggestion (blue), or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
+      Under the waveform is the transcript of the view: click a sentence to hear it, or <b>Cut before</b> to start the track in the pause before it. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
       A boundary can go anywhere after the one before it. If you move it past later boundaries, those are cleared and Next places them again.<br><br>
       Click a playlist song to jump to its boundary.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
-      <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead<br>
+      <kbd>J</kbd>/<kbd>K</kbd> previous/next boundary · <kbd>B</kbd> set boundary at playhead · <kbd>G</kbd> use the suggestion<br>
       <kbd>[</kbd>/<kbd>]</kbd> nudge boundary ±0.25s · <kbd>A</kbd> hear the cut · <kbd>R</kbd> replay view<br>
       <kbd>,</kbd>/<kbd>.</kbd> slide the view earlier/later · <kbd>⌘Z</kbd> undo<br>
       Click the waveform to move the playhead; drag the yellow line to move the boundary.
@@ -219,6 +249,8 @@
   let cur = 1;            // current boundary = start of tracks[cur]
   let win = [0, 60];      // detail view range
   let dirty = false;
+  let hints = { sentences: [], suggestions: null, crinkles: [] };
+  const atSuggestion = new Set();   // boundaries Next put at the suggestion, until they're moved
 
   // ---------- helpers ----------
   function fmt(t, precise = true) {
@@ -251,6 +283,12 @@
   const clampT = t => Math.max(0, Math.min(job.duration, t));
   const round2 = t => Math.round(t * 100) / 100;
   const songLength = t => { const p = playlistEntry(t); return (p && p.expected_length) || DEFAULT_SONG_LENGTH; };
+  const knownLength = t => { const p = !isTalk(t) && playlistEntry(t); return (p && p.expected_length) || null; };
+  // The transcript's suggested start for track i, if there is one and it still names this track.
+  function suggestion(i) {
+    const s = hints.suggestions && hints.suggestions[i];
+    return s && norm(s.title) === norm(tracks[i].title) ? s : null;
+  }
 
   function setDirty(v) {
     dirty = v;
@@ -355,6 +393,7 @@
         ctx.fillRect(px, mid - ph, 1, Math.max(1, ph * 2));
       }
     }
+    if (opts.labels) drawHelpers(ctx, w, h, t0, t1, x);
     for (let i = 1; i < tracks.length; i++) {
       if (!placed(i)) continue;
       const s = tracks[i].start;
@@ -385,6 +424,38 @@
       ctx.strokeRect(x(win[0]) + .5, .5, Math.max(3, x(win[1]) - x(win[0])), h - 1);
     }
   }
+  // Detail-view helpers: noise bursts, where songs should end by their usual length, the suggestion.
+  function drawHelpers(ctx, w, h, t0, t1, x) {
+    ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.fillStyle = css("--crinkle");
+    for (const [t, len] of hints.crinkles || []) {
+      if (t + len < t0 || t > t1) continue;
+      ctx.globalAlpha = .35; ctx.fillRect(x(t), 0, Math.max(2, x(t + len) - x(t)), h); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.moveTo(x(t) - 5, h - 18); ctx.lineTo(x(t) + 5, h - 18); ctx.lineTo(x(t), h - 10); ctx.fill();
+    }
+    ctx.strokeStyle = ctx.fillStyle = css("--expected"); ctx.lineWidth = 1.5;
+    let row = 0;
+    for (const i of [cur - 1, cur]) {
+      const L = knownLength(tracks[i]);
+      if (!L || !placed(i)) continue;
+      const t = tracks[i].start + L;
+      if (t < t0 || t > t1) continue;
+      ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(x(t), 0); ctx.lineTo(x(t), h); ctx.stroke(); ctx.setLineDash([]);
+      const label = `“${tracks[i].title}” usually ends here (${fmt(L, false)} long)`;
+      const right = x(t) > w - 240;
+      ctx.textAlign = right ? "right" : "left";
+      ctx.fillText(label, x(t) + (right ? -5 : 5), h - 26 - 14 * row++);
+    }
+    const sg = suggestion(cur);
+    if (sg && sg.start >= t0 && sg.start <= t1) {
+      ctx.strokeStyle = ctx.fillStyle = css("--suggest");
+      ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x(sg.start), 24); ctx.lineTo(x(sg.start), h); ctx.stroke(); ctx.setLineDash([]);
+      const right = x(sg.start) > w - 90;
+      ctx.textAlign = right ? "right" : "left";
+      ctx.fillText("suggested", x(sg.start) + (right ? -5 : 5), 36);
+    }
+    ctx.textAlign = "left";
+  }
   function draw() {
     if (!job) return;
     drawRange(overview, 0, job.duration, { viewport: true });
@@ -395,7 +466,11 @@
   function renderBoundary() {
     const n = tracks.length - 1, here = placed(cur);
     const R = tracks[cur], L = tracks[cur - 1];
-    $("which").innerHTML = `Boundary <b>${cur}</b> of ${n} · ${here ? `at ${fmt(R.start)}` : "<b>not placed yet</b>"} · ${placedCount()} of ${n} placed`;
+    const sg = suggestion(cur);
+    if (here && atSuggestion.has(cur) && !(sg && Math.abs(sg.start - R.start) < 0.01)) atSuggestion.delete(cur);
+    $("which").innerHTML = `Boundary <b>${cur}</b> of ${n} · ${here ? `at ${fmt(R.start)}` : "<b>not placed yet</b>"}${atSuggestion.has(cur) ? " (the suggestion: check it)" : ""} · ${placedCount()} of ${n} placed`;
+    $("suggest-btn").disabled = !sg || (here && Math.abs(sg.start - R.start) < 0.01);
+    $("suggest-why").textContent = sg ? `Suggested start: ${fmt(sg.start)}. ${sg.why}` : "";
     $("prev-btn").disabled = cur <= 1;
     $("next-btn").disabled = cur >= n || !here;
     $("next-btn").title = !here ? "Place this boundary first (B)" : "Next boundary (K). The first time, it's placed one song-length after this one.";
@@ -407,7 +482,7 @@
     $("left-excerpt").checked = !!L.excerpt; $("left-excerpt").disabled = isTalk(L);
     $("right-excerpt").checked = !!R.excerpt; $("right-excerpt").disabled = isTalk(R);
     $("window-range").textContent = `showing ${fmt(win[0])} – ${fmt(win[1])}`;
-    renderPlaylist(); renderNotes(); draw();
+    renderPlaylist(); renderNotes(); renderTranscript(); draw();
   }
   // Slide the zoomed view by half its width.
   function shiftWindow(dir) {
@@ -438,7 +513,10 @@
     if (!placed(cur) || cur >= tracks.length - 1) return;
     const nxt = cur + 1;
     if (!placed(nxt)) {
-      const t = tracks[cur].start + songLength(tracks[cur]);
+      const sg = suggestion(nxt);
+      const useSg = sg && sg.start > tracks[cur].start + 1 && sg.start < job.duration - 1.5;
+      const t = useSg ? sg.start : tracks[cur].start + songLength(tracks[cur]);
+      if (useSg) atSuggestion.add(nxt);
       tracks[nxt].start = round2(Math.min(t, job.duration - 2));
       if (tracks[nxt].start <= tracks[cur].start + 1) tracks[nxt].start = round2(Math.min(tracks[cur].start + 1, job.duration - 1.5));
       commit(); setDirty(true);
@@ -520,6 +598,68 @@
       });
       list.append(li);
     });
+  }
+
+  // ---------- transcript ----------
+  // The sentences in the view (and a little either side), with the pauses between them.
+  let txRows = [], playingRow = -1;
+  function cutBefore(k) {
+    const S = hints.sentences, start = S[k][0];
+    const pause = k > 0 ? start - S[k - 1][1] : 2;
+    return start - Math.max(0, Math.min(pause / 2, 1));
+  }
+  function renderTranscript() {
+    const box = $("transcript"), S = hints.sentences || [];
+    box.innerHTML = ""; txRows = []; playingRow = -1;
+    box.dataset.empty = S.length ? "No talk in this stretch." : "No transcript for this recording yet.";
+    if (!S.length) return;
+    const lo = win[0] - 5, hi = win[1] + 5, sg = suggestion(cur);
+    const crinkles = hints.crinkles || [];
+    let shown = 0;
+    for (let k = 0; k < S.length; k++) {
+      const [a, b, text] = S[k];
+      if (b < lo || a > hi) continue;
+      const prevEnd = k > 0 ? S[k - 1][1] : 0, pause = a - prevEnd;
+      if (shown && musicSeconds(prevEnd, a) > 8) {
+        const g = document.createElement("div"); g.className = "gapline";
+        g.textContent = `♪ ${fmt(musicSeconds(prevEnd, a), false)} of music`;
+        box.append(g);
+      }
+      shown++;
+      const row = document.createElement("div"); row.className = "sent";
+      const cut = cutBefore(k);
+      if (sg && sg.start >= prevEnd - 0.05 && sg.start <= a + 0.05) row.classList.add("suggested");
+      if (placed(cur) && tracks[cur].start >= prevEnd - 0.05 && tracks[cur].start <= a + 0.05) row.classList.add("starts");
+      if (crinkles.some(([t]) => t >= prevEnd - 0.5 && t <= a + 0.1)) row.classList.add("crinkled");
+      row.innerHTML = `<span class="st"></span><span class="tx"></span><span class="pz"></span><button type="button" class="cut">Cut before</button>`;
+      row.querySelector(".st").textContent = fmt(a);
+      row.querySelector(".tx").textContent = text;
+      row.querySelector(".pz").textContent = pause >= 0.8 && k > 0 ? `${pause.toFixed(1)}s pause` : "";
+      row.title = `Click to play from here. "Cut before" starts “${tracks[cur].title}” at ${fmt(cut)}.`;
+      row.addEventListener("click", ev => {
+        if (ev.target.classList.contains("cut")) { if (setBoundary(cut)) aroundCut(); return; }
+        audio.currentTime = clampT(a - 0.3); audio.play();
+      });
+      box.append(row);
+      txRows.push([a, b, row]);
+    }
+    const first = box.querySelector(".starts") || box.querySelector(".suggested");
+    if (first) box.scrollTop = first.offsetTop - 60;
+  }
+  function highlightPlaying() {
+    const t = audio.currentTime;
+    let k = -1;
+    for (let i = 0; i < txRows.length; i++) if (t >= txRows[i][0] - 0.1 && t <= txRows[i][1] + 0.1) { k = i; break; }
+    if (k === playingRow) return;
+    if (playingRow >= 0 && txRows[playingRow]) txRows[playingRow][2].classList.remove("playing");
+    playingRow = k;
+    if (k < 0) return;
+    const row = txRows[k][2], box = $("transcript");
+    row.classList.add("playing");
+    if (!audio.paused) {
+      const top = row.offsetTop;
+      if (top < box.scrollTop || top + row.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top - 40;
+    }
   }
 
   // ---------- mouse ----------
@@ -616,12 +756,14 @@
   $("from-start-btn").addEventListener("click", fromStart);
   $("around-btn").addEventListener("click", aroundCut);
   $("set-btn").addEventListener("click", () => setBoundary(audio.currentTime));
+  const useSuggestion = () => { const sg = suggestion(cur); if (sg && setBoundary(sg.start)) aroundCut(); };
+  $("suggest-btn").addEventListener("click", useSuggestion);
   $("undo-btn").addEventListener("click", undo);
   $("speed").addEventListener("change", e => { audio.playbackRate = parseFloat(e.target.value); });
 
   function tick() {
     if (!audio.error && !reconnecting) { lastTime = audio.currentTime; lastPlaying = !audio.paused; }
-    if (job) { $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(job.duration, false)}`; draw(); }
+    if (job) { $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(job.duration, false)}`; draw(); highlightPlaying(); }
     requestAnimationFrame(tick);
   }
 
@@ -637,6 +779,7 @@
     else if (k === "j") goPrev();
     else if (k === "k") goNext();
     else if (k === "b") setBoundary(audio.currentTime);
+    else if (k === "g") useSuggestion();
     else if (k === ",") shiftWindow(-1);
     else if (k === ".") shiftWindow(1);
     else if (k === "a") aroundCut();
@@ -701,6 +844,7 @@
       return;
     }
     tracks = job.tracks;
+    hints = { sentences: [], suggestions: null, crinkles: [], ...(job.hints || {}) };
     if (tracks.length < 2) { showBanner("This recording has no playlist, so there are no boundaries to place."); return; }
     commit();
     renderReplaces();

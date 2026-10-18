@@ -83,6 +83,7 @@ def splitter_job_api(request, job_id):
         "playlist": job.playlist,
         "tracks": job.tracks,
         "segments": job.segments,
+        "hints": job.hints,
         "output_files": job.output_files,
     })
 

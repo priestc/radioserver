@@ -469,6 +469,11 @@ class SplitJob(models.Model):
     segments = models.JSONField(
         default=list, blank=True, help_text='Speech/music hints: [["music"|"speech", start, end]]',
     )
+    hints = models.JSONField(
+        default=dict, blank=True,
+        help_text='Editor helpers: {"sentences": [[start, end, text]], "suggestions": [{"title", "start", "why"}], '
+                  '"crinkles": [[time, length, strength_db]]}',
+    )
     waveform = models.JSONField(default=list, blank=True, help_text="Cached peak values, 0-255")
     waveform_resolution = models.FloatField(default=0.25, help_text="Seconds per waveform value")
     review_notes = models.TextField(blank=True, default="")
