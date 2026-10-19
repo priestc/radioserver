@@ -20,7 +20,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--backend",
-            choices=["openai", "claude", "google", "deepseek", "groq"],
+            choices=["openai", "claude", "google", "deepseek", "groq", "openrouter"],
             default="claude",
             help="AI backend asked first (default: claude); another backend checks its answer.",
         )

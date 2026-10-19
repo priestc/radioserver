@@ -15,6 +15,7 @@ CONF_KEYS = {
     "google": ("google_ai_key", "GOOGLE_AI_API_KEY"),
     "deepseek": ("deepseek_key", "DEEPSEEK_API_KEY"),
     "groq": ("groq_key", "GROQ_API_KEY"),
+    "openrouter": ("openrouter_key", "OPENROUTER_API_KEY"),
 }
 
 # A backend that stalls must fail fast so the next one gets a turn, and a whole
@@ -30,6 +31,7 @@ DISPLAY_NAMES = {
     "google": "Google Gemini",
     "deepseek": "DeepSeek",
     "groq": "Groq",
+    "openrouter": "OpenRouter",
 }
 
 
@@ -89,6 +91,22 @@ def _ask_groq(prompt: str) -> str:
     return response.choices[0].message.content.strip()
 
 
+def _ask_openrouter(prompt: str) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1",
+                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
+    # A non-reasoning model, so a one-word answer fits in max_tokens.
+    response = client.chat.completions.create(
+        model="meta-llama/llama-3.3-70b-instruct",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=20,
+    )
+    if not response.choices:
+        raise RuntimeError(f"OpenRouter returned no answer: {getattr(response, 'error', response)}")
+    return (response.choices[0].message.content or "").strip()
+
+
 def _ask_google(prompt: str) -> str:
     from google import genai
     from google.genai import types
@@ -108,6 +126,7 @@ BACKENDS = {
     "google": ("GOOGLE_AI_API_KEY", _ask_google),
     "deepseek": ("DEEPSEEK_API_KEY", _ask_deepseek),
     "groq": ("GROQ_API_KEY", _ask_groq),
+    "openrouter": ("OPENROUTER_API_KEY", _ask_openrouter),
 }
 
 
