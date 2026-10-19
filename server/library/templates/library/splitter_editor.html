@@ -180,7 +180,7 @@
       <span><i style="background:var(--speech)"></i>Talk</span>
       <span><i style="background:var(--boundary)"></i>This boundary (drag it)</span>
       <span><i style="background:var(--playhead)"></i>Playhead</span>
-      <span><i style="background:var(--named)"></i>Where he mentions a song's title or artist, or says “next up”; the shaded range is where the boundary can go</span>
+      <span><i style="background:var(--named)"></i>Where he mentions a song's artist, or says “next up”; the shaded range is where the boundary can go</span>
       <span><i style="background:var(--suggest)"></i>Blue line: the sentence the AI picked as the start of the lead-in</span>
       <span><i style="background:var(--expected)"></i>Where a song should end, by its usual length</span>
       <span><i style="background:var(--crinkle)"></i>Noise burst: maybe a page turn</span>
@@ -220,7 +220,7 @@
     <div class="help">
       Play, then press <b>B</b> where the first song starts (where Dylan starts talking about it).<br>
       <b>Next boundary</b> then puts the next one right before “next up” if he says it, else on the blue line if it's in the pink range, else at the start of the sentence that mentions the song, or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
-      Under the waveform are the sentences in the view where Dylan mentions a song's title or artist, or says “next up”; click one to hear it. A boundary goes after the last mention of the song that's ending and before the first mention of the one starting, or “next up” if that comes first: that range is shaded pink. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
+      Under the waveform are the sentences in the view where Dylan mentions a song's artist, or says “next up”; click one to hear it. A boundary goes after the last mention of the song that's ending and before the first mention of the one starting, or “next up” if that comes first: that range is shaded pink. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
       A boundary can go anywhere after the one before it. If you move it past later boundaries, those are cleared and Next places them again.<br><br>
       Click a playlist song to jump to its boundary.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
@@ -637,9 +637,9 @@
   }
 
   // ---------- names ----------
-  // Where Dylan says a song's title or artist, to the word. A song's names: each artist's full name and
-  // surname, and the title's first three words, leaving out the episode's theme, the host, and names two
-  // songs share.
+  // Where Dylan says a song's artist, to the word (titles aren't flagged: the user only wants artists).
+  // A song's names: each artist's full name and surname, leaving out the episode's theme, the host, and
+  // names two songs share.
   const STOP = new Set("the and his her their with orchestra band trio quartet quintet featuring feat of a an in on to my your me i you it is".split(" "));
   const MUSIC_MIN = 40, MUSIC_MERGE = 4;   // a record: music this long, across gaps this short
   const nameNorm = s => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -652,8 +652,6 @@
       out.add(ws.join(" "));
       if (ws[ws.length - 1].length >= 4) out.add(ws[ws.length - 1]);
     }
-    const tw = nameNorm(t.title).split(" ").filter(w => w && !STOP.has(w));
-    if (tw.length) out.add(tw.slice(0, 3).join(" "));
     return out;
   }
   function soundex(w) {
@@ -800,13 +798,13 @@
   function renderTranscript() {
     const box = $("transcript"), S = hints.sentences || [];
     box.innerHTML = ""; txRows = []; playingRow = -1;
-    box.dataset.empty = S.length ? "He doesn't mention any of the songs, or say “next up”, in this stretch." : "No transcript for this recording yet.";
+    box.dataset.empty = S.length ? "He doesn't mention any of the artists, or say “next up”, in this stretch." : "No transcript for this recording yet.";
     const w = namingWindow(cur), L = tracks[cur - 1], R = tracks[cur];
     $("window-note").textContent = !w ? "" :
       [w.left ? `after ${heard(w.left)} (${fmt(w.left.end)})` : w.lo > L.start ? `after the record before it ends (${fmt(w.lo)})` : null,
        w.right ? `before ${heard(w.right)} (${fmt(w.right.start)})` : null].filter(Boolean)
         .reduce((txt, part, n) => `${txt}${n ? " and " : ""}${part}`, `“${R.title}” starts `) +
-      (w.right ? "" : `${w.left || w.lo > L.start ? "; " : ""}he doesn't mention “${R.title}” in this break`);
+      (w.right ? "" : `${w.left || w.lo > L.start ? "; " : ""}he doesn't mention its artist in this break`);
     if (!S.length) return;
     const lo = win[0] - 5, hi = win[1] + 5, rows = new Map();
     mentions.forEach((ms, i) => ms.forEach(m => {
