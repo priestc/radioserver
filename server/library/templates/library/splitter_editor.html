@@ -10,7 +10,7 @@
     --text: #f2f2f3; --text-dim: #9a9a9e; --accent: #1db954; --warn: #e0a100; --danger: #e5484d;
     --music: rgba(29, 185, 84, .18); --speech: rgba(90, 140, 255, .22);
     --boundary: #e0a100; --other-boundary: #f2f2f3; --playhead: #e5484d;
-    --suggest: #4fc3f7; --expected: #c792ea; --crinkle: #ff8a65;
+    --suggest: #4fc3f7; --expected: #c792ea; --crinkle: #ff8a65; --named: #f48fb1;
   }
   * { box-sizing: border-box; }
   body {
@@ -109,21 +109,22 @@
 
   .tx-head { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 6px; flex-wrap: wrap; }
   .tx-head h2 { margin: 0; }
-  #suggest-why { color: var(--suggest); font-size: 12.5px; flex: 1; min-width: 200px; }
-  #transcript { position: relative; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+  #window-note { color: var(--named); font-size: 12.5px; flex: 1; min-width: 200px; }
+  #suggest-why { color: var(--suggest); font-size: 12.5px; margin: 0 0 6px; }
+  #suggest-why:empty { display: none; }
+  #transcript { position: relative; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
   #transcript:empty::before { content: attr(data-empty); display: block; padding: 10px 12px; color: var(--text-dim); font-size: 12.5px; }
   .sent { display: flex; gap: 10px; align-items: baseline; padding: 4px 10px; border-left: 3px solid transparent; cursor: pointer; }
   .sent:hover { background: var(--bg-elevated); }
   .sent .st { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--text-dim); min-width: 52px; }
-  .sent .tx { flex: 1; line-height: 1.45; }
-  .sent .pz { color: var(--text-dim); font-size: 11.5px; white-space: nowrap; }
-  .sent .cut { padding: 1px 8px; font-size: 12px; visibility: hidden; }
-  .sent:hover .cut { visibility: visible; }
+  .sent .tx { flex: 1; line-height: 1.45; color: var(--text-dim); }
+  .sent .tx b { color: var(--text); }
+  .sent .who { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 40%; }
+  .chip { font-size: 11.5px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+  .chip.ending { border-color: var(--other-boundary); color: var(--text); }
+  .chip.starting { border-color: var(--named); color: var(--named); }
   .sent.playing { background: #2a2414; }
-  .sent.suggested { border-left-color: var(--suggest); }
-  .sent.starts { border-left-color: var(--boundary); }
-  .sent.crinkled .pz::before { content: "page turn? · "; color: var(--crinkle); }
-  .gapline { padding: 2px 10px; color: var(--text-dim); font-size: 11.5px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); background: rgba(29,185,84,.07); }
+  .sent.edge { border-left-color: var(--named); }
 </style>
 </head>
 <body>
@@ -179,6 +180,7 @@
       <span><i style="background:var(--speech)"></i>Talk</span>
       <span><i style="background:var(--boundary)"></i>This boundary (drag it)</span>
       <span><i style="background:var(--playhead)"></i>Playhead</span>
+      <span><i style="background:var(--named)"></i>Where he names a song; the shaded range is where the boundary can go</span>
       <span><i style="background:var(--suggest)"></i>Suggested (from the transcript)</span>
       <span><i style="background:var(--expected)"></i>Where a song should end, by its usual length</span>
       <span><i style="background:var(--crinkle)"></i>Noise burst: maybe a page turn</span>
@@ -200,9 +202,10 @@
     </div>
 
     <div class="tx-head">
-      <h2>What he's saying</h2>
-      <span id="suggest-why"></span>
+      <h2>Where he names the songs</h2>
+      <span id="window-note"></span>
     </div>
+    <p id="suggest-why"></p>
     <div id="transcript" data-empty="Loading…"></div>
 
     <div class="structure">
@@ -216,8 +219,8 @@
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
       Play, then press <b>B</b> where the first song starts (where Dylan starts talking about it).<br>
-      <b>Next boundary</b> then puts the next one at the suggestion (blue), or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
-      Under the waveform is the transcript of the view: click a sentence to hear it, or <b>Cut before</b> to start the track in the pause before it. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
+      <b>Next boundary</b> then puts the next one at the suggestion (blue) if it's in the pink range, else just before he names the song, or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
+      Under the waveform are the sentences in the view where Dylan names a song (its title or artist); click one to hear it. A boundary goes after the song that's ending is last named and before the starting song is first named: that range is shaded pink. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
       A boundary can go anywhere after the one before it. If you move it past later boundaries, those are cleared and Next places them again.<br><br>
       Click a playlist song to jump to its boundary.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
@@ -250,7 +253,7 @@
   let win = [0, 60];      // detail view range
   let dirty = false;
   let hints = { sentences: [], suggestions: null, crinkles: [] };
-  const atSuggestion = new Set();   // boundaries Next put at the suggestion, until they're moved
+  const placedBy = new Map();   // boundary -> [start, why] for ones Next placed from a helper, until they're moved
 
   // ---------- helpers ----------
   function fmt(t, precise = true) {
@@ -346,6 +349,7 @@
     const n = tracks.length - 1, left = n - placedCount();
     const items = [];
     if (left) items.push({ text: `${left} of ${n} boundaries still to place.`, actions: [] });
+    items.push(...nameIssues());
     items.push(...lengthIssues());
     el.classList.toggle("clear", !items.length);
     if (!items.length) items.push({ text: "Every boundary is placed and all song lengths look plausible.", actions: [] });
@@ -427,6 +431,22 @@
   // Detail-view helpers: noise bursts, where songs should end by their usual length, the suggestion.
   function drawHelpers(ctx, w, h, t0, t1, x) {
     ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+    const nw = namingWindow(cur), pink = css("--named");
+    if (nw) {
+      const a = Math.max(nw.lo, t0), b = Math.min(nw.hi === null ? t1 : nw.hi, t1);
+      if (b > a) { ctx.fillStyle = "rgba(244,143,177,.10)"; ctx.fillRect(x(a), 0, x(b) - x(a), h); }
+      ctx.fillStyle = pink;
+      for (const e of [nw.left ? nw.lo : null, nw.hi]) if (e !== null && e >= t0 && e <= t1) ctx.fillRect(x(e) - 0.5, 0, 1, h);
+    }
+    for (const i of [cur - 1, cur]) {
+      for (const m of mentions[i] || []) {
+        if (m.end < t0 || m.start > t1) continue;
+        ctx.fillStyle = pink; ctx.globalAlpha = i === cur ? 1 : .55;
+        ctx.fillRect(x(m.start), 44, Math.max(3, x(m.end) - x(m.start)), 5);
+        ctx.fillText(`“${tracks[i].title}” named`, Math.max(2, x(m.start)), 61);
+        ctx.globalAlpha = 1;
+      }
+    }
     ctx.fillStyle = css("--crinkle");
     for (const [t, len] of hints.crinkles || []) {
       if (t + len < t0 || t > t1) continue;
@@ -467,8 +487,8 @@
     const n = tracks.length - 1, here = placed(cur);
     const R = tracks[cur], L = tracks[cur - 1];
     const sg = suggestion(cur);
-    if (here && atSuggestion.has(cur) && !(sg && Math.abs(sg.start - R.start) < 0.01)) atSuggestion.delete(cur);
-    $("which").innerHTML = `Boundary <b>${cur}</b> of ${n} · ${here ? `at ${fmt(R.start)}` : "<b>not placed yet</b>"}${atSuggestion.has(cur) ? " (the suggestion: check it)" : ""} · ${placedCount()} of ${n} placed`;
+    if (placedBy.has(cur) && !(here && Math.abs(placedBy.get(cur)[0] - R.start) < 0.01)) placedBy.delete(cur);
+    $("which").innerHTML = `Boundary <b>${cur}</b> of ${n} · ${here ? `at ${fmt(R.start)}` : "<b>not placed yet</b>"}${placedBy.has(cur) ? ` (${placedBy.get(cur)[1]}: check it)` : ""} · ${placedCount()} of ${n} placed`;
     $("suggest-btn").disabled = !sg || (here && Math.abs(sg.start - R.start) < 0.01);
     $("suggest-why").textContent = sg ? `Suggested start: ${fmt(sg.start)}. ${sg.why}` : "";
     $("prev-btn").disabled = cur <= 1;
@@ -513,11 +533,15 @@
     if (!placed(cur) || cur >= tracks.length - 1) return;
     const nxt = cur + 1;
     if (!placed(nxt)) {
-      const sg = suggestion(nxt);
-      const useSg = sg && sg.start > tracks[cur].start + 1 && sg.start < job.duration - 1.5;
-      const t = useSg ? sg.start : tracks[cur].start + songLength(tracks[cur]);
-      if (useSg) atSuggestion.add(nxt);
+      // The suggestion if it's where the names allow, else just before he names the song, else a song-length on.
+      const sg = suggestion(nxt), nw = namingWindow(nxt), after = tracks[cur].start + 1;
+      const fits = t => t > after && t < job.duration - 1.5 && (!nw || (t >= nw.lo - 1 && (nw.hi === null || t <= nw.hi + 0.5)));
+      let t = tracks[cur].start + songLength(tracks[cur]), why = null;
+      if (sg && fits(sg.start)) { t = sg.start; why = "the suggestion"; }
+      else if (nw && nw.right && fits(cutBefore(nw.right.k))) { t = cutBefore(nw.right.k); why = "the start of the sentence that names it"; }
+      else if (nw && nw.left && pauseAfter(nw.left.end) !== null && fits(pauseAfter(nw.left.end))) { t = pauseAfter(nw.left.end); why = "right after the last song is named"; }
       tracks[nxt].start = round2(Math.min(t, job.duration - 2));
+      if (why) placedBy.set(nxt, [tracks[nxt].start, why]);
       if (tracks[nxt].start <= tracks[cur].start + 1) tracks[nxt].start = round2(Math.min(tracks[cur].start + 1, job.duration - 1.5));
       commit(); setDirty(true);
     }
@@ -568,6 +592,7 @@
     const t = tracks[i];
     if (title !== undefined && title.trim()) t.title = title.trim();
     if (artistText !== undefined) t.artists = artistText.split(",").map(s => s.trim()).filter(Boolean);
+    findNames();
     changed();
   }
   $("left-title").addEventListener("change", e => setName(cur - 1, e.target.value));
@@ -600,51 +625,152 @@
     });
   }
 
-  // ---------- transcript ----------
-  // The sentences in the view (and a little either side), with the pauses between them.
-  let txRows = [], playingRow = -1;
+  // ---------- names ----------
+  // Where Dylan says a song's title or artist, to the word. A song's names: each artist's full name and
+  // surname, and the title's first three words, leaving out the episode's theme, the host, and names two
+  // songs share.
+  const STOP = new Set("the and his her their with orchestra band trio quartet quintet featuring feat of a an in on to my your me i you it is".split(" "));
+  const MUSIC_MIN = 40, MUSIC_MERGE = 4;   // a record: music this long, across gaps this short
+  const nameNorm = s => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+  function nameKeys(t) {
+    const out = new Set();
+    for (const a of t.artists) {
+      const ws = nameNorm(a).split(" ").filter(w => w && !STOP.has(w));
+      if (!ws.length) continue;
+      out.add(ws.join(" "));
+      if (ws[ws.length - 1].length >= 4) out.add(ws[ws.length - 1]);
+    }
+    const tw = nameNorm(t.title).split(" ").filter(w => w && !STOP.has(w));
+    if (tw.length) out.add(tw.slice(0, 3).join(" "));
+    return out;
+  }
+  // mentions[i]: every time tracks[i] is named, in time order: {k (sentence), start, end, key}
+  let mentions = [], records = [], words = [];
+  function findNames() {
+    const theme = new Set(nameNorm(`${job.album_title.split(" - ").pop()} ${job.album_artist}`).split(" "));
+    const ks = tracks.map(t => isTalk(t) ? new Set() : nameKeys(t)), counts = {};
+    ks.forEach(set => set.forEach(k => { counts[k] = (counts[k] || 0) + 1; }));
+    const ok = k => counts[k] === 1 && !k.split(" ").every(w => theme.has(w) || STOP.has(w));
+    // The transcript as normalized tokens, each with its word's times (older hints have no words).
+    const S = hints.sentences || [], toks = [];
+    words = [];
+    S.forEach((x, k) => {
+      for (const [a, b, w] of x[3] || [[x[0], x[1], x[2]]]) {
+        words.push([a, b]);
+        for (const t of nameNorm(w).split(" ")) if (t) toks.push([t, a, b, k]);
+      }
+    });
+    mentions = ks.map(set => {
+      const keys = [...set].filter(ok).map(k => k.split(" ")), out = [];
+      for (let p = 0; p < toks.length; p++) {
+        for (const key of keys) {
+          if (p + key.length > toks.length || !key.every((w, j) => toks[p + j][0] === w && toks[p + j][3] === toks[p][3])) continue;
+          const last = toks[p + key.length - 1];
+          const prev = out[out.length - 1];
+          if (prev && prev.k === toks[p][3] && toks[p][1] <= prev.end + 0.01) { prev.end = Math.max(prev.end, last[2]); continue; }
+          out.push({ k: toks[p][3], start: toks[p][1], end: last[2], key: key.join(" ") });
+        }
+      }
+      return out;
+    });
+    records = [];
+    for (const [lab, a, b] of job.segments) {
+      if (lab !== "music") continue;
+      const r = records[records.length - 1];
+      if (r && a - r[1] < MUSIC_MERGE) r[1] = Math.max(r[1], b); else records.push([a, b]);
+    }
+    records = records.filter(([a, b]) => b - a >= MUSIC_MIN);
+  }
+  // A cut in the pause before the first word that starts after t.
+  function pauseAfter(t) {
+    const i = words.findIndex(([a]) => a > t + 0.01);
+    if (i < 0) return null;
+    const prevEnd = i > 0 ? words[i - 1][1] : 0;
+    return words[i][0] - Math.max(0, Math.min((words[i][0] - prevEnd) / 2, 1));
+  }
+  // Where tracks[i] can start: in the talk break after the previous song's record, after the last time
+  // that song is named and before the first time this one is. lo/hi are null when there's no limit.
+  function namingWindow(i) {
+    if (i < 1 || i >= tracks.length || !placed(i - 1) || !mentions.length) return null;
+    const L = tracks[i - 1];
+    let gapStart = L.start;
+    if (!isTalk(L)) {
+      const from = L.start + 0.4 * songLength(L), rec = records.find(([, b]) => b > from);
+      if (rec) gapStart = Math.max(gapStart, rec[1]);
+    }
+    const next = records.find(([a]) => a > gapStart + 1), gapEnd = next ? next[0] : job.duration;
+    // He sometimes names the next song over its intro, so look a little into the next record.
+    const right = mentions[i].find(m => m.start >= gapStart - 1 && m.start <= gapEnd + 30) || null;
+    const until = right ? right.start : gapEnd;
+    const left = mentions[i - 1].filter(m => m.start >= gapStart - 1 && m.end <= until).pop() || null;
+    return { lo: Math.max(gapStart, left ? left.end : 0), hi: right ? right.start : null, left, right };
+  }
+  function nameIssues() {
+    const out = [];
+    for (let i = 1; i < tracks.length; i++) {
+      const w = placed(i) && namingWindow(i);
+      if (!w) continue;
+      const t = tracks[i].start;
+      if (w.left && t < w.left.end - 0.3)
+        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, before Dylan has finished naming “${tracks[i - 1].title}” (${fmt(w.left.end)})`,
+                   actions: [["Go to it", () => goTo(i)]] });
+      else if (w.right && t > w.right.start + 0.5)
+        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, after Dylan names it (${fmt(w.right.start)}); fine only if he's talking over its intro`,
+                   actions: [["Go to it", () => goTo(i)]] });
+    }
+    return out;
+  }
   function cutBefore(k) {
     const S = hints.sentences, start = S[k][0];
     const pause = k > 0 ? start - S[k - 1][1] : 2;
     return start - Math.max(0, Math.min(pause / 2, 1));
   }
+  // The text with the words that name a song in bold.
+  function boldNames(el, text, keys) {
+    const words = new Set(keys.flatMap(k => k.split(" ")));
+    for (const part of text.split(/(\s+)/)) {
+      if (nameNorm(part).split(" ").some(w => words.has(w))) { const b = document.createElement("b"); b.textContent = part; el.append(b); }
+      else el.append(part);
+    }
+  }
+  let txRows = [], playingRow = -1;
   function renderTranscript() {
     const box = $("transcript"), S = hints.sentences || [];
     box.innerHTML = ""; txRows = []; playingRow = -1;
-    box.dataset.empty = S.length ? "No talk in this stretch." : "No transcript for this recording yet.";
+    box.dataset.empty = S.length ? "He doesn't name any of the songs in this stretch." : "No transcript for this recording yet.";
+    const w = namingWindow(cur), L = tracks[cur - 1], R = tracks[cur];
+    $("window-note").textContent = !w ? "" :
+      [w.left ? `after “${L.title}” is named (${fmt(w.left.end)})` : w.lo > L.start ? `after its record ends (${fmt(w.lo)})` : null,
+       w.right ? `before “${R.title}” is named (${fmt(w.right.start)})` : null].filter(Boolean)
+        .reduce((txt, part, n) => `${txt}${n ? " and " : ""}${part}`, `“${R.title}” starts `) +
+      (w.right ? "" : `${w.left || w.lo > L.start ? "; " : ""}he doesn't name “${R.title}” in this break`);
     if (!S.length) return;
-    const lo = win[0] - 5, hi = win[1] + 5, sg = suggestion(cur);
-    const crinkles = hints.crinkles || [];
-    let shown = 0;
-    for (let k = 0; k < S.length; k++) {
-      const [a, b, text] = S[k];
-      if (b < lo || a > hi) continue;
-      const prevEnd = k > 0 ? S[k - 1][1] : 0, pause = a - prevEnd;
-      if (shown && musicSeconds(prevEnd, a) > 8) {
-        const g = document.createElement("div"); g.className = "gapline";
-        g.textContent = `♪ ${fmt(musicSeconds(prevEnd, a), false)} of music`;
-        box.append(g);
-      }
-      shown++;
+    const lo = win[0] - 5, hi = win[1] + 5, rows = new Map();
+    mentions.forEach((ms, i) => ms.forEach(m => {
+      if (m.end < lo || m.start > hi) return;
+      if (!rows.has(m.k)) rows.set(m.k, []);
+      const have = rows.get(m.k).find(([j]) => j === i);
+      if (have) have[1].push(m.key); else rows.get(m.k).push([i, [m.key]]);
+    }));
+    for (const k of [...rows.keys()].sort((a, b) => a - b)) {
+      const [a, b, text] = S[k], who = rows.get(k);
       const row = document.createElement("div"); row.className = "sent";
-      const cut = cutBefore(k);
-      if (sg && sg.start >= prevEnd - 0.05 && sg.start <= a + 0.05) row.classList.add("suggested");
-      if (placed(cur) && tracks[cur].start >= prevEnd - 0.05 && tracks[cur].start <= a + 0.05) row.classList.add("starts");
-      if (crinkles.some(([t]) => t >= prevEnd - 0.5 && t <= a + 0.1)) row.classList.add("crinkled");
-      row.innerHTML = `<span class="st"></span><span class="tx"></span><span class="pz"></span><button type="button" class="cut">Cut before</button>`;
+      if (w && (w.left && w.left.k === k || w.right && w.right.k === k)) row.classList.add("edge");
+      row.innerHTML = `<span class="st"></span><span class="tx"></span><span class="who"></span>`;
       row.querySelector(".st").textContent = fmt(a);
-      row.querySelector(".tx").textContent = text;
-      row.querySelector(".pz").textContent = pause >= 0.8 && k > 0 ? `${pause.toFixed(1)}s pause` : "";
-      row.title = `Click to play from here. "Cut before" starts “${tracks[cur].title}” at ${fmt(cut)}.`;
-      row.addEventListener("click", ev => {
-        if (ev.target.classList.contains("cut")) { if (setBoundary(cut)) aroundCut(); return; }
-        audio.currentTime = clampT(a - 0.3); audio.play();
-      });
+      boldNames(row.querySelector(".tx"), text, who.flatMap(([, keys]) => keys));
+      for (const [i] of who) {
+        const c = document.createElement("span");
+        c.className = "chip" + (i === cur ? " starting" : i === cur - 1 ? " ending" : "");
+        c.textContent = tracks[i].title; c.title = tracks[i].artists.join(", ");
+        row.querySelector(".who").append(c);
+      }
+      row.title = "Click to play from here";
+      row.addEventListener("click", () => { audio.currentTime = clampT(a - 0.3); audio.play(); });
       box.append(row);
       txRows.push([a, b, row]);
     }
-    const first = box.querySelector(".starts") || box.querySelector(".suggested");
-    if (first) box.scrollTop = first.offsetTop - 60;
   }
   function highlightPlaying() {
     const t = audio.currentTime;
@@ -653,13 +779,7 @@
     if (k === playingRow) return;
     if (playingRow >= 0 && txRows[playingRow]) txRows[playingRow][2].classList.remove("playing");
     playingRow = k;
-    if (k < 0) return;
-    const row = txRows[k][2], box = $("transcript");
-    row.classList.add("playing");
-    if (!audio.paused) {
-      const top = row.offsetTop;
-      if (top < box.scrollTop || top + row.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top - 40;
-    }
+    if (k >= 0) txRows[k][2].classList.add("playing");
   }
 
   // ---------- mouse ----------
@@ -845,6 +965,7 @@
     }
     tracks = job.tracks;
     hints = { sentences: [], suggestions: null, crinkles: [], ...(job.hints || {}) };
+    findNames();
     if (tracks.length < 2) { showBanner("This recording has no playlist, so there are no boundaries to place."); return; }
     commit();
     renderReplaces();
