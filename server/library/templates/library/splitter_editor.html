@@ -180,7 +180,7 @@
       <span><i style="background:var(--speech)"></i>Talk</span>
       <span><i style="background:var(--boundary)"></i>This boundary (drag it)</span>
       <span><i style="background:var(--playhead)"></i>Playhead</span>
-      <span><i style="background:var(--named)"></i>Where he mentions a song's title or artist; the shaded range is where the boundary can go</span>
+      <span><i style="background:var(--named)"></i>Where he mentions a song's title or artist, or says “next up”; the shaded range is where the boundary can go</span>
       <span><i style="background:var(--suggest)"></i>Blue line: the sentence the AI picked as the start of the lead-in</span>
       <span><i style="background:var(--expected)"></i>Where a song should end, by its usual length</span>
       <span><i style="background:var(--crinkle)"></i>Noise burst: maybe a page turn</span>
@@ -219,8 +219,8 @@
     <ul class="playlist" id="playlist"></ul>
     <div class="help">
       Play, then press <b>B</b> where the first song starts (where Dylan starts talking about it).<br>
-      <b>Next boundary</b> then puts the next one on the blue line if it's in the pink range, else at the start of the sentence that mentions the song, or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
-      Under the waveform are the sentences in the view where Dylan mentions a song's title or artist; click one to hear it. A boundary goes after the last mention of the song that's ending and before the first mention of the one starting: that range is shaded pink. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
+      <b>Next boundary</b> then puts the next one right before “next up” if he says it, else on the blue line if it's in the pink range, else at the start of the sentence that mentions the song, or else a song-length later (the song's usual length, or 3 minutes if that's unknown). Slide the view with <b>◀ Earlier</b> / <b>Later ▶</b>, find the real spot, and press <b>B</b> or drag the line.<br>
+      Under the waveform are the sentences in the view where Dylan mentions a song's title or artist, or says “next up”; click one to hear it. A boundary goes after the last mention of the song that's ending and before the first mention of the one starting, or “next up” if that comes first: that range is shaded pink. The purple dashed line is where a song should end by its usual length; orange marks are noise bursts in the pauses, often Dylan turning a page just before the next song.<br>
       A boundary can go anywhere after the one before it. If you move it past later boundaries, those are cleared and Next places them again.<br><br>
       Click a playlist song to jump to its boundary.<br>
       <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±2s (<kbd>Shift</kbd> ±0.5s)<br>
@@ -447,14 +447,13 @@
       ctx.fillStyle = pink;
       for (const e of [nw.left ? nw.lo : null, nw.hi]) if (e !== null && e >= t0 && e <= t1) ctx.fillRect(x(e) - 0.5, 0, 1, h);
     }
-    for (const i of [cur - 1, cur]) {
-      for (const m of mentions[i] || []) {
-        if (m.end < t0 || m.start > t1) continue;
-        ctx.fillStyle = pink; ctx.globalAlpha = i === cur ? 1 : .55;
-        ctx.fillRect(x(m.start), 44, Math.max(3, x(m.end) - x(m.start)), 5);
-        ctx.fillText(`${m.said} mentioned`, Math.max(2, x(m.start)), 61);
-        ctx.globalAlpha = 1;
-      }
+    const marks = [...(mentions[cur - 1] || []).map(m => [m, .55]), ...(mentions[cur] || []).map(m => [m, 1]), ...cues.map(m => [m, 1])];
+    for (const [m, alpha] of marks) {
+      if (m.end < t0 || m.start > t1) continue;
+      ctx.fillStyle = pink; ctx.globalAlpha = alpha;
+      ctx.fillRect(x(m.start), 44, Math.max(3, x(m.end) - x(m.start)), 5);
+      ctx.fillText(tag(m), Math.max(2, x(m.start)), 61);
+      ctx.globalAlpha = 1;
     }
     ctx.fillStyle = css("--crinkle");
     for (const [t, len] of hints.crinkles || []) {
@@ -542,12 +541,15 @@
     if (!placed(cur) || cur >= tracks.length - 1) return;
     const nxt = cur + 1;
     if (!placed(nxt)) {
-      // The suggestion if it's where the names allow, else just before he names the song, else a song-length on.
+      // Right before "next up", else the blue line if it's where the names allow, else the sentence that
+      // names the song, else just after the last song's name, else a song-length on.
       const sg = suggestion(nxt), nw = namingWindow(nxt), after = tracks[cur].start + 1;
       const fits = t => t > after && t < job.duration - 1.5 && (!nw || (t >= nw.lo - 1 && (nw.hi === null || t <= nw.hi + 0.5)));
       let t = tracks[cur].start + songLength(tracks[cur]), why = null;
-      if (sg && fits(sg.start)) { t = sg.start; why = "on the blue line"; }
-      else if (nw && nw.right && fits(cutBefore(nw.right.k))) { t = cutBefore(nw.right.k); why = "at the start of the sentence that mentions it"; }
+      // "Next up" lands within a second of the hand-placed boundaries, so it goes first.
+      if (nw && nw.right && nw.right.cue && fits(pauseAfter(nw.right.start - 0.02))) { t = pauseAfter(nw.right.start - 0.02); why = `right before “${nw.right.said}”`; }
+      else if (sg && fits(sg.start)) { t = sg.start; why = "on the blue line"; }
+      else if (nw && nw.right && fits(cutBefore(nw.right.k))) { t = cutBefore(nw.right.k); why = nw.right.cue ? `at the start of the sentence with “${nw.right.said}”` : "at the start of the sentence that mentions it"; }
       else if (nw && nw.left && pauseAfter(nw.left.end) !== null && fits(pauseAfter(nw.left.end))) { t = pauseAfter(nw.left.end); why = "right after the last song is mentioned"; }
       tracks[nxt].start = round2(Math.min(t, job.duration - 2));
       if (why) placedBy.set(nxt, [tracks[nxt].start, why]);
@@ -681,6 +683,11 @@
   }
   // mentions[i]: every time tracks[i] is mentioned, in time order: {k (sentence), start, end, key, said}
   let mentions = [], records = [], words = [];
+  // Phrases that lead straight into the next song; more telling than its name. cues: like mentions, with cue: true.
+  const CUES = [["next", "up"], ["up", "next"]];
+  let cues = [];
+  const heard = m => m.cue ? `“${m.said}” is said` : `“${m.said}” is mentioned`;
+  const tag = m => m.cue ? `“${m.said}” said` : `${m.said} mentioned`;
   function findNames() {
     const theme = new Set(nameNorm(`${job.album_title.split(" - ").pop()} ${job.album_artist}`).split(" "));
     const ks = tracks.map(t => isTalk(t) ? new Set() : nameKeys(t)), counts = {};
@@ -710,9 +717,19 @@
         }
       }
       // What he actually said, e.g. "Tommy Tucker".
-      for (const m of out) m.said = words.slice(m.w0, m.w1 + 1).map(w => w[2]).join(" ").replace(/ (?=[-'’])/g, "").replace(/^[^\w]+|[^\w]+$/g, "");
+      for (const m of out) m.said = saidText(m);
       return out;
     });
+    cues = [];
+    for (let p = 0; p < toks.length; p++) {
+      for (const cue of CUES) {
+        if (p + cue.length > toks.length || !cue.every((w, j) => toks[p + j][0] === w && toks[p + j][3] === toks[p][3])) continue;
+        const last = toks[p + cue.length - 1];
+        const m = { k: toks[p][3], start: toks[p][1], end: last[2], key: cue.join(" "), w0: toks[p][4], w1: last[4], cue: true };
+        m.said = saidText(m);
+        cues.push(m);
+      }
+    }
     records = [];
     for (const [lab, a, b] of job.segments) {
       if (lab !== "music") continue;
@@ -720,6 +737,9 @@
       if (r && a - r[1] < MUSIC_MERGE) r[1] = Math.max(r[1], b); else records.push([a, b]);
     }
     records = records.filter(([a, b]) => b - a >= MUSIC_MIN);
+  }
+  function saidText(m) {
+    return words.slice(m.w0, m.w1 + 1).map(w => w[2]).join(" ").replace(/ (?=[-'’])/g, "").replace(/^[^\w]+|[^\w]+$/g, "");
   }
   // A cut in the pause before the first word that starts after t.
   function pauseAfter(t) {
@@ -729,7 +749,8 @@
     return words[i][0] - Math.max(0, Math.min((words[i][0] - prevEnd) / 2, 1));
   }
   // Where tracks[i] can start: in the talk break after the previous song's record, after the last time
-  // that song is named and before the first time this one is. lo/hi are null when there's no limit.
+  // that song is named and before the first time this one is (or he says "next up", if that's sooner).
+  // lo/hi are null when there's no limit.
   function namingWindow(i) {
     if (i < 1 || i >= tracks.length || !placed(i - 1) || !mentions.length) return null;
     const L = tracks[i - 1];
@@ -740,7 +761,9 @@
     }
     const next = records.find(([a]) => a > gapStart + 1), gapEnd = next ? next[0] : job.duration;
     // He sometimes names the next song over its intro, so look a little into the next record.
-    const right = mentions[i].find(m => m.start >= gapStart - 1 && m.start <= gapEnd + 30) || null;
+    const inGap = m => m.start >= gapStart - 1 && m.start <= gapEnd + 30;
+    const named = mentions[i].find(inGap) || null, cue = isTalk(tracks[i]) ? null : cues.find(inGap) || null;
+    const right = named && cue ? (cue.start < named.start ? cue : named) : named || cue;
     const until = right ? right.start : gapEnd;
     const left = mentions[i - 1].filter(m => m.start >= gapStart - 1 && m.end <= until).pop() || null;
     return { lo: Math.max(gapStart, left ? left.end : 0), hi: right ? right.start : null, left, right };
@@ -752,10 +775,10 @@
       if (!w) continue;
       const t = tracks[i].start;
       if (w.left && t < w.left.end - 0.3)
-        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, before “${w.left.said}” is mentioned (${fmt(w.left.end)}), which belongs to “${tracks[i - 1].title}”`,
+        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, before ${heard(w.left)} (${fmt(w.left.end)}), which belongs to “${tracks[i - 1].title}”`,
                    actions: [["Go to it", () => goTo(i)]] });
       else if (w.right && t > w.right.start + 0.5)
-        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, after “${w.right.said}” is mentioned (${fmt(w.right.start)}); fine only if he's talking over its intro`,
+        out.push({ text: `“${tracks[i].title}” starts at ${fmt(t)}, after ${heard(w.right)} (${fmt(w.right.start)}); fine only if he's talking over its intro`,
                    actions: [["Go to it", () => goTo(i)]] });
     }
     return out;
@@ -777,11 +800,11 @@
   function renderTranscript() {
     const box = $("transcript"), S = hints.sentences || [];
     box.innerHTML = ""; txRows = []; playingRow = -1;
-    box.dataset.empty = S.length ? "He doesn't name any of the songs in this stretch." : "No transcript for this recording yet.";
+    box.dataset.empty = S.length ? "He doesn't mention any of the songs, or say “next up”, in this stretch." : "No transcript for this recording yet.";
     const w = namingWindow(cur), L = tracks[cur - 1], R = tracks[cur];
     $("window-note").textContent = !w ? "" :
-      [w.left ? `after “${w.left.said}” is mentioned (${fmt(w.left.end)})` : w.lo > L.start ? `after the record before it ends (${fmt(w.lo)})` : null,
-       w.right ? `before “${w.right.said}” is mentioned (${fmt(w.right.start)})` : null].filter(Boolean)
+      [w.left ? `after ${heard(w.left)} (${fmt(w.left.end)})` : w.lo > L.start ? `after the record before it ends (${fmt(w.lo)})` : null,
+       w.right ? `before ${heard(w.right)} (${fmt(w.right.start)})` : null].filter(Boolean)
         .reduce((txt, part, n) => `${txt}${n ? " and " : ""}${part}`, `“${R.title}” starts `) +
       (w.right ? "" : `${w.left || w.lo > L.start ? "; " : ""}he doesn't mention “${R.title}” in this break`);
     if (!S.length) return;
@@ -790,8 +813,13 @@
       if (m.end < lo || m.start > hi) return;
       if (!rows.has(m.k)) rows.set(m.k, []);
       const have = rows.get(m.k).find(([j]) => j === i);
-      if (have) have[1].push(m.key); else rows.get(m.k).push([i, [m.key], m.said]);
+      if (have) have[1].push(m.key); else rows.get(m.k).push([i, [m.key], m]);
     }));
+    for (const m of cues) {
+      if (m.end < lo || m.start > hi) continue;
+      if (!rows.has(m.k)) rows.set(m.k, []);
+      rows.get(m.k).unshift([-1, [m.key], m]);
+    }
     for (const k of [...rows.keys()].sort((a, b) => a - b)) {
       const [a, b, text] = S[k], who = rows.get(k);
       const row = document.createElement("div"); row.className = "sent";
@@ -799,10 +827,11 @@
       row.innerHTML = `<span class="st"></span><span class="tx"></span><span class="who"></span>`;
       row.querySelector(".st").textContent = fmt(a);
       boldNames(row.querySelector(".tx"), text, who.flatMap(([, keys]) => keys));
-      for (const [i, , said] of who) {
+      for (const [i, , m] of who) {
         const c = document.createElement("span");
-        c.className = "chip" + (i === cur ? " starting" : i === cur - 1 ? " ending" : "");
-        c.textContent = `${said} mentioned`; c.title = `“${tracks[i].title}” by ${tracks[i].artists.join(", ")}`;
+        c.className = "chip" + (i === cur || (m.cue && w && w.right === m) ? " starting" : i === cur - 1 ? " ending" : "");
+        c.textContent = tag(m);
+        c.title = m.cue ? "He usually says this right before the next song" : `“${tracks[i].title}” by ${tracks[i].artists.join(", ")}`;
         row.querySelector(".who").append(c);
       }
       row.title = "Click to play from here";
