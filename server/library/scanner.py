@@ -12,8 +12,8 @@ from library.views import check_cover_status
 
 
 def _get_or_create_artist(name: str) -> Artist:
-    artist, _ = Artist.objects.get_or_create(name=name)
-    return artist
+    # Names aren't unique (an admin rename can duplicate one), so take the oldest.
+    return Artist.objects.filter(name=name).order_by("id").first() or Artist.objects.create(name=name)
 
 
 def _get_or_create_album(title: str, artist: Artist, tag_data: dict) -> Album:

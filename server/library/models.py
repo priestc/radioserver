@@ -5,6 +5,10 @@ import secrets
 from django.db import models
 
 
+# Album artist of compilations; each track keeps its own artists.
+VARIOUS_ARTISTS = "Various Artists"
+
+
 class Artist(models.Model):
     name = models.CharField(max_length=500)
     sort_name = models.CharField(max_length=500, blank=True, default="")
@@ -92,7 +96,8 @@ class Track(models.Model):
         names = list(self.artists.order_by("trackartist__position").values_list("name", flat=True))
         if names:
             return ", ".join(names)
-        if self.album and self.album.artist:
+        # A compilation's album artist says nothing about who plays this track.
+        if self.album and self.album.artist and self.album.artist.name != VARIOUS_ARTISTS:
             return self.album.artist.name
         return "Unknown Artist"
 

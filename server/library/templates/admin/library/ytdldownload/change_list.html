@@ -54,6 +54,11 @@
     <label for="album-genre">Album genre:</label>
     <input type="text" id="album-genre" style="flex: 0 1 240px; padding: 4px 8px;" placeholder="Sets the genre of every track" oninput="applyAlbumGenre()">
   </div>
+  <p style="color:#666; font-size:0.9em; margin: 0 0 8px;">
+    Artists you leave as they are get replaced by the label's own credit in each downloaded file
+    (YouTube's playlist data sometimes has junk names). An album with no artist on more than half its
+    tracks is filed as one Various Artists album, each track keeping its own artist.
+  </p>
   <div id="metadata-errors" class="error-msg" style="display:none; margin-bottom: 8px; white-space: pre-wrap;"></div>
   <div style="overflow-x: auto;">
     <table class="track-table">
@@ -266,6 +271,10 @@ function showMetadata(data) {
   document.getElementById('download-spinner').style.display = 'none';
 }
 
+function edited(input) {
+  return !!input && input.value.trim() !== (input.defaultValue || '').trim();
+}
+
 function startDownload() {
   var tracks = [];
   var rows = document.getElementById('track-list').querySelectorAll('tr');
@@ -277,6 +286,9 @@ function startDownload() {
       title: title.value.trim(),
       artist: (row.querySelector('.track-artist') || {value:''}).value.trim(),
       album_artist: (row.querySelector('.track-album-artist') || {value:''}).value.trim(),
+      // Untouched artists get replaced by the label's credit in the downloaded file
+      artist_edited: edited(row.querySelector('.track-artist')),
+      album_artist_edited: edited(row.querySelector('.track-album-artist')),
       album: (row.querySelector('.track-album') || {value:''}).value.trim(),
       genre: (row.querySelector('.track-genre') || {value:''}).value.trim(),
       thumbnail: row.getAttribute('data-thumbnail') || '',

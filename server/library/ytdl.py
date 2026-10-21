@@ -4,7 +4,114 @@ import json
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from pathlib import Path
+
+from library.models import VARIOUS_ARTISTS
+
+YT_CREDIT = "Provided to YouTube by"
+SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
+
+
+def youtube_credit(path: Path) -> dict | None:
+    """The label's own credit from an auto-generated YouTube Music description.
+
+    yt-dlp --add-metadata stores the video description in the file, and for
+    label uploads it reads "Provided to YouTube by <label>", then
+    "<title> · <artist> · <artist>...", then the album. That's the reliable
+    artist: the playlist's artist/channel fields are sometimes junk (spam
+    channel names in Korean, or "Release"). Returns {"title", "artists", "album"}
+    or None when the file has no such description.
+    """
+    import mutagen
+
+    try:
+        audio = mutagen.File(str(path))
+    except mutagen.MutagenError:
+        return None
+    if audio is None or not audio.tags:
+        return None
+    for _key, value in audio.tags.items():
+        for text in (value if isinstance(value, list) else [value]):
+            text = str(text)
+            if YT_CREDIT not in text:
+                continue
+            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            i = next(i for i, l in enumerate(lines) if YT_CREDIT in l)
+            if i + 1 >= len(lines) or " · " not in lines[i + 1]:
+                return None
+            title, *artists = [p.strip() for p in lines[i + 1].split(" · ")]
+            return {"title": title, "artists": [a for a in artists if a],
+                    "album": lines[i + 2] if i + 2 < len(lines) else ""}
+    return None
+
+
+def album_artist_for(track_artists: list[str]) -> str:
+    """One artist with more than half of an album's tracks is its album artist;
+    otherwise it's a compilation, filed under Various Artists."""
+    firsts = [a.split(",")[0].strip() for a in track_artists if a.strip()]
+    if not firsts:
+        return ""
+    artist, n = Counter(firsts).most_common(1)[0]
+    return artist if n * 2 > len(firsts) else VARIOUS_ARTISTS
+
+
+def resolve_credits(files: list[Path], overrides: dict[int, dict] | None = None) -> dict[Path, str]:
+    """Settle each downloaded file's artist and album artist and write them into its tags.
+
+    Artist: what the user typed on the download page, else the YouTube credit,
+    else what yt-dlp/the page already put in the file. Album artist: what the
+    user typed, else album_artist_for() over the album's tracks, so a
+    compilation becomes one Various Artists album instead of one album per
+    artist. Returns {file: album artist}, the library folder each belongs in.
+    """
+    import mutagen
+    from mutagen import File as MutagenFile
+
+    overrides = overrides or {}
+    info = {}
+    for f in files:
+        try:
+            audio = MutagenFile(str(f), easy=True)
+        except mutagen.MutagenError:
+            audio = None
+        tags = audio.tags if audio is not None and audio.tags is not None else {}
+        ov = overrides.get(_track_number(f), {})
+        credit = youtube_credit(f)
+        artist = ((ov.get("artist") or "").strip() if ov.get("artist_edited") else "") \
+            or (", ".join(credit["artists"]) if credit and credit["artists"] else "") \
+            or (ov.get("artist") or "").strip() or (tags.get("artist") or [""])[0]
+        album = (ov.get("album") or "").strip() or (tags.get("album") or [""])[0] or f.parent.name
+        typed_album_artist = (ov.get("album_artist") or "").strip() if ov.get("album_artist_edited") else ""
+        info[f] = {"audio": audio, "artist": artist, "album": album, "album_artist": typed_album_artist}
+
+    by_album: dict[str, list[Path]] = {}
+    for f, d in info.items():
+        by_album.setdefault(d["album"], []).append(f)
+    result = {}
+    for album, album_files in by_album.items():
+        guess = album_artist_for([info[f]["artist"] for f in album_files])
+        for f in album_files:
+            d = info[f]
+            album_artist = d["album_artist"] or guess or d["artist"] or "Unknown Artist"
+            result[f] = album_artist
+            if d["audio"] is None:
+                continue
+            if d["audio"].tags is None:
+                d["audio"].add_tags()
+            if d["artist"]:
+                d["audio"].tags["artist"] = [d["artist"]]
+            d["audio"].tags["albumartist"] = [album_artist]
+            d["audio"].save()
+    return result
+
+
+def _track_number(path: Path) -> int | None:
+    """Track number from a downloaded file's "NN title.ext" name."""
+    try:
+        return int(path.stem.split(" ", 1)[0])
+    except (ValueError, IndexError):
+        return None
 
 
 def _apply_track_overrides(tmp_dir: Path, track_overrides: list[dict]) -> None:
@@ -178,6 +285,20 @@ def get_metadata_from_ytdl(url: str) -> dict:
             "genre": meta.get("genre") or "",
         })
 
+    # The page pre-fills each track's album artist; a compilation's tracks all get
+    # Various Artists. (The playlist's artist fields can be junk; resolve_credits()
+    # re-checks against each file's YouTube credit after downloading.)
+    albums: dict[str, list[dict]] = {}
+    for t in tracks:
+        albums.setdefault(t["album"], []).append(t)
+    for album_tracks in albums.values():
+        guess = album_artist_for([t["artist"] for t in album_tracks])
+        if guess == VARIOUS_ARTISTS:
+            for t in album_tracks:
+                t["album_artist"] = VARIOUS_ARTISTS
+    if tracks and all(t["album_artist"] == VARIOUS_ARTISTS for t in tracks):
+        artist_name = VARIOUS_ARTISTS
+
     return {
         "album": album_title,
         "artist": artist_name,
@@ -314,11 +435,7 @@ def run_download(download_id: int) -> None:
         dl.progress_message = "Downloading audio files..."
         dl.save(update_fields=["status", "progress_message"])
 
-        artist_name = dl.artist_name or "from youtube music"
         library_root = Path(settings.MUSIC_LIBRARY_PATH)
-        library_dir = library_root / artist_name
-
-        library_dir.mkdir(parents=True, exist_ok=True)
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
         # Track all library dirs affected (for source tagging + ReplayGain)
@@ -344,29 +461,18 @@ def run_download(download_id: int) -> None:
                     if tn is not None:
                         overrides[tn] = ov
 
-            SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
             audio_files = sorted(
                 f for f in tmp_dir.rglob("*")
                 if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS
             )
+            folder_artists = resolve_credits(audio_files, overrides)
 
             art_extracted = set()
 
             for audio_file in audio_files:
-                fname = audio_file.stem
-                parts = fname.split(" ", 1)
-                try:
-                    track_num = int(parts[0])
-                except (ValueError, IndexError):
-                    track_num = None
-
+                track_num = _track_number(audio_file)
                 ov = overrides.get(track_num, {}) if track_num else {}
-                folder_artist = (
-                    ov.get("album_artist", "").strip()
-                    or ov.get("artist", "").strip()
-                    or artist_name
-                    or "Unknown Artist"
-                )
+                folder_artist = folder_artists[audio_file]
                 track_album = ov.get("album", "").strip() or dl.album_title or "Unknown Album"
 
                 dest_dir = library_root / folder_artist / track_album
@@ -426,11 +532,15 @@ def run_download(download_id: int) -> None:
             if _write_replaygain_tags(track.file_path, gain_db, loudness["input_tp"]):
                 rg_ok += 1
 
-        # Find the album that was created
-        album = Album.objects.filter(
-            artist__name=dl.artist_name,
-            tracks__file_path__startswith=str(library_dir),
-        ).first()
+        # Find the album that was created (the first track's folder)
+        album = None
+        if audio_files:
+            first_dir = library_root / folder_artists[audio_files[0]]
+            dl.artist_name = folder_artists[audio_files[0]]
+            album = Album.objects.filter(
+                artist__name=dl.artist_name,
+                tracks__file_path__startswith=str(first_dir) + "/",
+            ).first()
 
         # Build completion message
         msg_parts = [f"Done. {stats['created']} tracks imported, {rg_ok} ReplayGain tagged."]
@@ -470,7 +580,7 @@ def run_download(download_id: int) -> None:
         dl.status = "complete"
         dl.progress_message = "\n".join(msg_parts)
         dl.album = album
-        dl.save(update_fields=["status", "progress_message", "album"])
+        dl.save(update_fields=["status", "progress_message", "album", "artist_name"])
 
     except Exception as e:
         dl.status = "error"

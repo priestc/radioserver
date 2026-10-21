@@ -10,7 +10,9 @@ from django.core.management.base import BaseCommand, CommandError
 
 from library.models import Album, Track
 from library.scanner import scan
-from library.ytdl import get_albumart_from_ytdl, get_audio_files_from_ytdl, get_metadata_from_ytdl
+from library.ytdl import (
+    SUPPORTED_EXTS, get_albumart_from_ytdl, get_audio_files_from_ytdl, get_metadata_from_ytdl, resolve_credits,
+)
 
 
 class Command(BaseCommand):
@@ -79,8 +81,6 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING("Aborted."))
                 return
 
-        library_dir.mkdir(parents=True, exist_ok=True)
-
         # Download audio to a temp dir under ~ so snap yt-dlp has access
         tmp_dir = Path(tempfile.mkdtemp(prefix="ytdl_", dir=Path.home()))
         try:
@@ -91,6 +91,7 @@ class Command(BaseCommand):
                 raise CommandError(str(e))
 
             # Process each album subdirectory
+            dest_dirs = []
             for item in tmp_dir.iterdir():
                 if not item.is_dir():
                     continue
@@ -109,7 +110,15 @@ class Command(BaseCommand):
                         f.unlink()
                         self.stdout.write(f"  Removed {f.name}")
 
-                dest = library_dir / item.name
+                # File it under its album artist: the label's credit, or Various Artists for a compilation
+                files = sorted(f for f in item.rglob("*") if f.suffix.lstrip(".").lower() in SUPPORTED_EXTS)
+                folder_artists = resolve_credits(files)
+                album_artist = folder_artists[files[0]] if files else library_dir.name
+                if album_artist != library_dir.name:
+                    self.stdout.write(f"  Album artist: {album_artist}")
+                dest = library_dir.parent / album_artist / item.name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest_dirs.append(dest)
                 if dest.exists():
                     for f in item.iterdir():
                         shutil.move(str(f), str(dest / f.name))
@@ -128,9 +137,9 @@ class Command(BaseCommand):
 
         # Tag newly created tracks with the source URL
         if stats["created"] > 0:
-            tagged = Track.objects.filter(source="").filter(
-                file_path__startswith=str(library_dir),
-            ).update(source=url)
+            tagged = sum(Track.objects.filter(source="").filter(
+                file_path__startswith=str(d) + "/",
+            ).update(source=url) for d in dest_dirs)
             self.stdout.write(f"  Tagged {tagged} tracks with source URL")
 
         # Apply ReplayGain tags for volume normalization
@@ -138,9 +147,7 @@ class Command(BaseCommand):
             _analyze_loudness, _compute_gain, _write_replaygain_tags,
         )
 
-        new_tracks = list(
-            Track.objects.filter(file_path__startswith=str(library_dir))
-        )
+        new_tracks = [t for d in dest_dirs for t in Track.objects.filter(file_path__startswith=str(d) + "/")]
         if new_tracks:
             self.stdout.write(f"\nApplying ReplayGain to {len(new_tracks)} tracks...")
             rg_ok = 0
