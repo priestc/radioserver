@@ -122,7 +122,6 @@ def _apply_track_overrides(tmp_dir: Path, track_overrides: list[dict]) -> None:
     import mutagen
     from mutagen import File as MutagenFile
 
-    SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     overrides = {}
     for ov in track_overrides:
         tn = ov.get("track_number")
@@ -338,7 +337,6 @@ def get_audio_files_from_ytdl(url: str, dest_dir: Path) -> tuple[list[Path], lis
     stderr = result.stderr.strip()
     error_lines = [l for l in stderr.splitlines() if "ERROR" in l]
 
-    SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
     files = []
     for item in dest_dir.rglob("*"):
         if item.suffix.lstrip(".").lower() in SUPPORTED_EXTS:
@@ -548,7 +546,6 @@ def run_download(download_id: int) -> None:
         # Identify which tracks failed to download
         if dl.track_overrides and download_errors:
             # Parse track numbers from downloaded files
-            SUPPORTED_EXTS = {"mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"}
             downloaded_nums = set()
             for adir in affected_dirs:
                 for f in adir.iterdir():
