@@ -430,7 +430,7 @@
       ctx.fillText(fmt(t0), 4, h - 6);
       ctx.textAlign = "right"; ctx.fillText(fmt(t1), w - 4, h - 6); ctx.textAlign = "left";
     }
-    const p = audio.currentTime;
+    const p = heardTime();
     if (p >= t0 && p <= t1) { ctx.fillStyle = css("--playhead"); ctx.fillRect(Math.round(x(p)) - 1, 0, 2, h); }
     if (opts.viewport) {
       ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 1;
@@ -839,7 +839,7 @@
     }
   }
   function highlightPlaying() {
-    const t = audio.currentTime;
+    const t = heardTime();
     let k = -1;
     for (let i = 0; i < txRows.length; i++) if (t >= txRows[i][0] - 0.1 && t <= txRows[i][1] + 0.1) { k = i; break; }
     if (k === playingRow) return;
@@ -932,7 +932,33 @@
       if ($("waveform-status").textContent.startsWith("Audio connection dropped")) $("waveform-status").textContent = "";
     }
   });
-  const seekBy = d => { audio.currentTime = clampT(audio.currentTime + d); };
+  // While playing, currentTime is ahead of the speakers by the output device's latency (Bluetooth
+  // headphones: 0.1-0.3s), so the playhead, the clock and B use the time being heard. An idle
+  // AudioContext on the same default output reports that latency (0 where it isn't supported).
+  let latencyCtx = null;
+  const outputLatency = () => latencyCtx ? (latencyCtx.outputLatency || 0) + (latencyCtx.baseLatency || 0) : 0;
+  // Right after a seek or play nothing older than where it started is coming out.
+  let playFrom = 0;
+  function heardTime() {
+    if (audio.paused) return audio.currentTime;
+    return Math.max(playFrom, audio.currentTime - outputLatency() * audio.playbackRate);
+  }
+  audio.addEventListener("seeking", () => { playFrom = audio.currentTime; });
+  audio.addEventListener("play", () => {
+    playFrom = audio.currentTime;
+    try {
+      latencyCtx = latencyCtx || new AudioContext();
+      latencyCtx.resume().catch(e => { $("waveform-status").textContent = `Can't measure the speaker delay (${e.message}); the playhead may run a little ahead of the sound.`; });
+    } catch (e) {
+      $("waveform-status").textContent = `Can't measure the speaker delay (${e.message}); the playhead may run a little ahead of the sound.`;
+    }
+  });
+  // What was still on its way to the speakers is dropped on pause, so stop where the sound stopped.
+  audio.addEventListener("pause", () => {
+    const lag = outputLatency() * audio.playbackRate;
+    if (lag > 0 && !audio.ended && !reconnecting) audio.currentTime = Math.max(0, audio.currentTime - lag);
+  });
+  const seekBy = d => { audio.currentTime = clampT(heardTime() + d); };
   const fromStart = () => { audio.currentTime = win[0]; audio.play(); };
   const aroundCut = () => { if (placed(cur)) { audio.currentTime = clampT(tracks[cur].start - 3); audio.play(); } };
   $("earlier-btn").addEventListener("click", () => shiftWindow(-1));
@@ -941,7 +967,7 @@
   $("next-btn").addEventListener("click", goNext);
   $("from-start-btn").addEventListener("click", fromStart);
   $("around-btn").addEventListener("click", aroundCut);
-  $("set-btn").addEventListener("click", () => setBoundary(audio.currentTime));
+  $("set-btn").addEventListener("click", () => setBoundary(heardTime()));
   const useSuggestion = () => { const sg = suggestion(cur); if (sg && setBoundary(sg.start)) aroundCut(); };
   $("suggest-btn").addEventListener("click", useSuggestion);
   $("undo-btn").addEventListener("click", undo);
@@ -949,7 +975,7 @@
 
   function tick() {
     if (!audio.error && !reconnecting) { lastTime = audio.currentTime; lastPlaying = !audio.paused; }
-    if (job) { $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(job.duration, false)}`; draw(); highlightPlaying(); }
+    if (job) { $("time").textContent = `${fmt(heardTime())} / ${fmt(job.duration, false)}`; draw(); highlightPlaying(); }
     requestAnimationFrame(tick);
   }
 
@@ -964,7 +990,7 @@
     else if (k === "arrowright") { ev.preventDefault(); seekBy(ev.shiftKey ? 0.5 : 2); }
     else if (k === "j") goPrev();
     else if (k === "k") goNext();
-    else if (k === "b") setBoundary(audio.currentTime);
+    else if (k === "b") setBoundary(heardTime());
     else if (k === "g") useSuggestion();
     else if (k === ",") shiftWindow(-1);
     else if (k === ".") shiftWindow(1);

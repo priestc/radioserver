@@ -16,11 +16,18 @@ from library.tags import read_tags
 from library.views import check_cover_status
 
 WAVEFORM_SAMPLE_RATE = 8000
+# Seconds per waveform peak: the editor's 60s detail view is ~1000px wide, so
+# coarser peaks show loud spots visibly off from where they're heard.
+WAVEFORM_RESOLUTION = 0.05
 # Browsers seek VBR MP3s (especially ones without a Xing seek table) by
 # estimating a byte offset, so playback can drift seconds away from the
 # reported currentTime. The editor plays a constant-bitrate copy instead,
 # which seeks exactly; cuts are still made from the original file.
 PROXY_DIR = Path.home() / ".radioserver" / "splitter_proxies"
+# LAME puts 1105 samples of priming silence at the start and, without a Xing/LAME
+# tag (left out so seeking stays exact), players don't skip it: the copy would
+# play 25ms late. Trimming that much off the input lines it up with the original.
+MP3_ENCODER_DELAY = 1105
 
 
 class SplitError(Exception):
@@ -28,7 +35,7 @@ class SplitError(Exception):
 
 
 def proxy_path(job: SplitJob) -> Path:
-    return PROXY_DIR / f"{job.pk}.mp3"
+    return PROXY_DIR / f"{job.pk}-aligned.mp3"
 
 
 def ensure_playback_proxy(job: SplitJob) -> Path:
@@ -38,9 +45,11 @@ def ensure_playback_proxy(job: SplitJob) -> Path:
     if out.is_file() and out.stat().st_mtime >= src.stat().st_mtime:
         return out
     PROXY_DIR.mkdir(parents=True, exist_ok=True)
+    (PROXY_DIR / f"{job.pk}.mp3").unlink(missing_ok=True)   # older copy that played 25ms late
     tmp = out.with_suffix(".tmp.mp3")
     proc = subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-map", "0:a", "-c:a", "libmp3lame",
+        ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-map", "0:a",
+         "-af", f"aresample=44100,atrim=start_sample={MP3_ENCODER_DELAY}", "-c:a", "libmp3lame",
          "-b:a", "128k", "-ar", "44100", "-write_xing", "0", "-map_metadata", "-1", str(tmp)],
         capture_output=True,
     )

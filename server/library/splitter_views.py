@@ -11,7 +11,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from library.models import SplitJob
 from library.splitter import (
-    SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, expected_track_count, job_issues,
+    WAVEFORM_RESOLUTION, SplitError, compute_waveform, cut_and_import, ensure_playback_proxy, expected_track_count, job_issues,
     validate_tracks,
 )
 from library.views import ranged_file_response
@@ -92,12 +92,13 @@ def splitter_job_api(request, job_id):
 @require_GET
 def splitter_waveform(request, job_id):
     job = get_object_or_404(SplitJob, pk=job_id)
-    if not job.waveform:
+    if not job.waveform or job.waveform_resolution != WAVEFORM_RESOLUTION:
+        job.waveform_resolution = WAVEFORM_RESOLUTION
         try:
             job.waveform, job.duration = compute_waveform(job)
         except SplitError as e:
             return JsonResponse({"error": str(e)}, status=500)
-        job.save(update_fields=["waveform", "duration"])
+        job.save(update_fields=["waveform", "waveform_resolution", "duration"])
     return JsonResponse({"resolution": job.waveform_resolution, "peaks": job.waveform, "duration": job.duration})
 
 
