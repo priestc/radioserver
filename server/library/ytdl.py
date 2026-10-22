@@ -220,6 +220,32 @@ def _album_from_meta(meta: dict) -> str:
     return playlist_title
 
 
+def _track_artists(urls: list[str]) -> dict[str, tuple[str, str | None]]:
+    """Each track's credited artist, from its full yt-dlp metadata.
+
+    Flat-playlist entries only name the uploading channel ("RideOfficial",
+    "Slowdive Official"), not the artist, so each video is looked up on its
+    own, several at a time. Returns {url: (artist, error or None)}.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def lookup(url: str) -> tuple[str, str | None]:
+        result = subprocess.run(
+            ["yt-dlp", "-j", "--skip-download", "--no-playlist", url],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            errors = [l for l in result.stderr.splitlines() if "ERROR" in l]
+            return "", (errors[-1] if errors else "couldn't look up the track's artist")
+        meta = json.loads(result.stdout)
+        artists = meta.get("artists") or meta.get("creators") or []
+        return ", ".join(artists) or meta.get("artist") or meta.get("creator") or "", None
+
+    urls = [u for u in dict.fromkeys(urls) if u]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(zip(urls, pool.map(lookup, urls)))
+
+
 def get_metadata_from_ytdl(url: str) -> dict:
     """Fetch album metadata from a YouTube Music URL.
 
@@ -239,21 +265,16 @@ def get_metadata_from_ytdl(url: str) -> dict:
         detail = error_lines[-1] if error_lines else stderr[-500:] if stderr else "(no output)"
         raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}")
 
+    entries = [json.loads(line) for line in result.stdout.strip().split("\n") if line]
+    credits = _track_artists([m.get("url") or m.get("webpage_url") or "" for m in entries])
+
     tracks = []
     album_title = ""
-    artist_name = ""
     seen_thumbnails = []
     seen_thumbnail_urls = set()
-    for line in result.stdout.strip().split("\n"):
-        if not line:
-            continue
-        meta = json.loads(line)
+    for meta in entries:
         if not album_title:
             album_title = _album_from_meta(meta)
-        if not artist_name:
-            artist_name = meta.get("artist") or meta.get("channel") or ""
-            if artist_name.endswith(" - Topic"):
-                artist_name = artist_name[: -len(" - Topic")]
 
         # Extract best thumbnail for this track
         thumb_url = _best_thumbnail(meta)
@@ -264,37 +285,38 @@ def get_metadata_from_ytdl(url: str) -> dict:
                 "track_title": meta.get("title", ""),
             })
 
-        track_artist = meta.get("artist") or meta.get("channel") or ""
+        url = meta.get("url") or meta.get("webpage_url") or ""
+        credit, error = credits.get(url, ("", None))
+        if error:
+            error_lines.append(f"{meta.get('title', url)}: {error}")
+        # The uploading channel ("RideOfficial") is only a last resort.
+        track_artist = credit or meta.get("artist") or meta.get("channel") or ""
         if track_artist.endswith(" - Topic"):
             track_artist = track_artist[: -len(" - Topic")]
-
-        album_artist = meta.get("album_artist") or meta.get("uploader") or meta.get("channel") or ""
-        if album_artist.endswith(" - Topic"):
-            album_artist = album_artist[: -len(" - Topic")]
 
         tracks.append({
             "title": meta.get("title", ""),
             "track_number": meta.get("playlist_index"),
             "duration": meta.get("duration"),
-            "url": meta.get("url") or meta.get("webpage_url") or "",
+            "url": url,
             "thumbnail": thumb_url,
             "album": _album_from_meta(meta),
             "artist": track_artist,
-            "album_artist": album_artist,
+            "album_artist": meta.get("album_artist") or "",
             "genre": meta.get("genre") or "",
         })
 
-    # The page pre-fills each track's album artist; a compilation's tracks all get
-    # Various Artists. (The playlist's artist fields can be junk; resolve_credits()
-    # re-checks against each file's YouTube credit after downloading.)
+    # The page pre-fills each track's album artist from its album's track artists;
+    # a compilation's tracks all get Various Artists. (resolve_credits() re-checks
+    # against each file's YouTube credit after downloading.)
     albums: dict[str, list[dict]] = {}
     for t in tracks:
         albums.setdefault(t["album"], []).append(t)
     for album_tracks in albums.values():
         guess = album_artist_for([t["artist"] for t in album_tracks])
-        if guess == VARIOUS_ARTISTS:
-            for t in album_tracks:
-                t["album_artist"] = VARIOUS_ARTISTS
+        for t in album_tracks:
+            t["album_artist"] = t["album_artist"] or guess or t["artist"]
+    artist_name = tracks[0]["album_artist"] if tracks else ""
     if tracks and all(t["album_artist"] == VARIOUS_ARTISTS for t in tracks):
         artist_name = VARIOUS_ARTISTS
 
