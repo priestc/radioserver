@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -20,8 +21,11 @@ def youtube_credit(path: Path) -> dict | None:
     label uploads it reads "Provided to YouTube by <label>", then
     "<title> · <artist> · <artist>...", then the album. That's the reliable
     artist: the playlist's artist/channel fields are sometimes junk (spam
-    channel names in Korean, or "Release"). Returns {"title", "artists", "album"}
-    or None when the file has no such description.
+    channel names in Korean, or "Release"). The "℗ 1992 <label>" and
+    "Released on: <date>" lines give the original release year; the earlier
+    of the two wins, since the upload date (what yt-dlp tags) is years later
+    for anything older than YouTube. Returns {"title", "artists", "album",
+    "year"} or None when the file has no such description.
     """
     import mutagen
 
@@ -41,8 +45,10 @@ def youtube_credit(path: Path) -> dict | None:
             if i + 1 >= len(lines) or " · " not in lines[i + 1]:
                 return None
             title, *artists = [p.strip() for p in lines[i + 1].split(" · ")]
+            years = [int(y) for y in re.findall(r"(?:℗|Released on:)\s*(\d{4})", text)]
             return {"title": title, "artists": [a for a in artists if a],
-                    "album": lines[i + 2] if i + 2 < len(lines) else ""}
+                    "album": lines[i + 2] if i + 2 < len(lines) else "",
+                    "year": min(years) if years else None}
     return None
 
 
@@ -57,13 +63,14 @@ def album_artist_for(track_artists: list[str]) -> str:
 
 
 def resolve_credits(files: list[Path], overrides: dict[int, dict] | None = None) -> dict[Path, str]:
-    """Settle each downloaded file's artist and album artist and write them into its tags.
+    """Settle each downloaded file's artist, album artist and year and write them into its tags.
 
     Artist: what the user typed on the download page, else the YouTube credit,
     else what yt-dlp/the page already put in the file. Album artist: what the
     user typed, else album_artist_for() over the album's tracks, so a
     compilation becomes one Various Artists album instead of one album per
-    artist. Returns {file: album artist}, the library folder each belongs in.
+    artist. Year: the original release year from the YouTube credit, replacing
+    the upload date yt-dlp wrote. Returns {file: album artist}, the library folder each belongs in.
     """
     import mutagen
     from mutagen import File as MutagenFile
@@ -83,7 +90,8 @@ def resolve_credits(files: list[Path], overrides: dict[int, dict] | None = None)
             or (ov.get("artist") or "").strip() or (tags.get("artist") or [""])[0]
         album = (ov.get("album") or "").strip() or (tags.get("album") or [""])[0] or f.parent.name
         typed_album_artist = (ov.get("album_artist") or "").strip() if ov.get("album_artist_edited") else ""
-        info[f] = {"audio": audio, "artist": artist, "album": album, "album_artist": typed_album_artist}
+        info[f] = {"audio": audio, "artist": artist, "album": album, "album_artist": typed_album_artist,
+                   "year": credit["year"] if credit else None}
 
     by_album: dict[str, list[Path]] = {}
     for f, d in info.items():
@@ -102,6 +110,8 @@ def resolve_credits(files: list[Path], overrides: dict[int, dict] | None = None)
             if d["artist"]:
                 d["audio"].tags["artist"] = [d["artist"]]
             d["audio"].tags["albumartist"] = [album_artist]
+            if d["year"]:
+                d["audio"].tags["date"] = [str(d["year"])]
             d["audio"].save()
     return result
 
