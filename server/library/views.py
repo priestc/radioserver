@@ -315,6 +315,66 @@ def client_sync(request):
     return JsonResponse({"download": download})
 
 
+@csrf_exempt
+@require_api_key
+@require_POST
+def reset_queue(request):
+    """Throw away every unplayed playlist item for the given channels and generate
+    fresh ones. The client wipes its own cache only after this succeeds, then refills
+    it through the normal client_sync flow."""
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    from library.models import Channel
+    from library.playlist import generate_playlist
+
+    # Record anything the client played but hasn't reported yet, so it lands in
+    # history instead of being deleted along with the rest of the unplayed queue.
+    for entry in body.get("played", []):
+        PlaylistItem.objects.filter(pk=entry["id"]).update(
+            played_at=entry["played_at"],
+            skipped=entry.get("skipped", False),
+        )
+
+    # The song the client is in the middle of playing stays — its file is kept on the
+    # device so the music doesn't cut out, and it gets reported as played as usual.
+    keep_id = body.get("keep_id")
+
+    channel_ids = body.get("channel_ids", [])
+    channels = []
+    for channel_id in channel_ids:
+        if channel_id is None:
+            channels.append(None)
+            continue
+        try:
+            channels.append(Channel.objects.get(pk=channel_id))
+        except Channel.DoesNotExist:
+            return JsonResponse({"error": f"Channel {channel_id} not found"}, status=404)
+
+    from django.db import transaction
+
+    results = []
+    with transaction.atomic():
+        for channel in channels:
+            unplayed = PlaylistItem.objects.filter(played_at__isnull=True, channel=channel)
+            if channel is None:
+                # Decade station items also have no channel — leave those alone.
+                unplayed = unplayed.filter(station__isnull=True)
+            if keep_id is not None:
+                unplayed = unplayed.exclude(pk=keep_id)
+            deleted, _ = unplayed.delete()
+            created, _ = generate_playlist(3600, channel=channel)
+            results.append({
+                "channel_id": channel.id if channel else None,
+                "deleted": deleted,
+                "created": created,
+            })
+
+    return JsonResponse({"channels": results})
+
+
 @require_api_key
 @require_GET
 def decade_stations(request, decade_slug):

@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/splitter/<int:job_id>/import/", splitter_views.splitter_import, name="splitter_import"),
     path("cover/<int:album_id>/", views.cover_art, name="cover_art"),
     path("api/client_sync/", views.client_sync, name="client_sync"),
+    path("api/reset_queue/", views.reset_queue, name="reset_queue"),
     path("api/download_song/<int:playlist_item_id>/", views.download_song, name="download_song"),
     path("api/download_song_lowbitrate/<int:playlist_item_id>/", views.download_song_lowbitrate, name="download_song_lowbitrate"),
     path("api/channels/", views.list_channels, name="list_channels"),
