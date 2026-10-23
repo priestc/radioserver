@@ -264,8 +264,12 @@ def run_video_download(download_id: int) -> None:
         loudness = _analyze_loudness(track.file_path)
         if loudness is None:
             rg_msg = "ReplayGain analysis failed (track imported without it)."
-        elif not _write_replaygain_tags(track.file_path, _compute_gain(loudness["input_i"]), loudness["input_tp"]):
-            rg_msg = "Writing ReplayGain tags failed (track imported without it)."
+        else:
+            gain_db = _compute_gain(loudness["input_i"])
+            if _write_replaygain_tags(track.file_path, gain_db, loudness["input_tp"]):
+                track.store_replaygain(gain_db)
+            else:
+                rg_msg = "Writing ReplayGain tags failed (track imported without it)."
 
         dl.status = "complete"
         dl.progress_message = f"Done. Video saved to {video_dest}\nAudio added as {audio_dest}\n{rg_msg}"

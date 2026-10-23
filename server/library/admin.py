@@ -377,7 +377,6 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             return "No tracks"
         multi_disc = obj.total_discs and obj.total_discs > 1
         from django.urls import reverse
-        from library.tags import read_replaygain
         import json as _json
         track_data = []  # [{stream, gain}]
         items = []
@@ -388,7 +387,7 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
             stream_url = reverse("admin:library_track_stream", args=[t.pk])
             year_str = f" ({t.year})" if t.year else ""
             artist_str = ", ".join(a.name for a in t.artists.all())
-            gain = read_replaygain(t.file_path)
+            gain = t.get_replaygain()
             track_data.append({"stream": stream_url, "gain": gain})
             items.append(format_html(
                 '<li style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
@@ -908,8 +907,7 @@ class TrackAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
 
     @admin.display(description="RG")
     def replaygain(self, obj):
-        from library.tags import read_replaygain
-        gain = read_replaygain(obj.file_path)
+        gain = obj.get_replaygain()
         if gain is None:
             return ""
         return f"{gain:+.1f} dB"

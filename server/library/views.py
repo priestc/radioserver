@@ -206,6 +206,23 @@ def check_cover_status(album):
     return Album.COVER_NONE
 
 
+def _library_avg_bytes_per_second() -> float | None:
+    """Average bytes per second of audio across the whole library. It summed every
+    track on every sync; it barely moves, so it's cached for an hour."""
+    from django.core.cache import cache
+    from django.db.models import Sum
+
+    def compute():
+        totals = Track.objects.exclude(file_size__isnull=True).exclude(duration__isnull=True).aggregate(
+            total_size=Sum("file_size"), total_duration=Sum("duration")
+        )
+        if totals["total_size"] and totals["total_duration"]:
+            return totals["total_size"] / totals["total_duration"]
+        return 0
+
+    return cache.get_or_set("library_avg_bytes_per_second", compute, 3600) or None
+
+
 @csrf_exempt
 @require_api_key
 @require_POST
@@ -269,13 +286,9 @@ def client_sync(request):
         # produce a wildly inflated target once run back through an average bitrate.
         target_seconds = max(target_seconds, explicit_target)
     elif buffer_bytes > 0:
-        bitrate_totals = Track.objects.exclude(file_size__isnull=True).exclude(duration__isnull=True).aggregate(
-            total_size=Sum("file_size"), total_duration=Sum("duration")
-        )
-        if bitrate_totals["total_size"] and bitrate_totals["total_duration"]:
-            avg_bytes_per_second = bitrate_totals["total_size"] / bitrate_totals["total_duration"]
-            if avg_bytes_per_second > 0:
-                target_seconds = max(target_seconds, buffer_bytes / avg_bytes_per_second)
+        avg_bytes_per_second = _library_avg_bytes_per_second()
+        if avg_bytes_per_second:
+            target_seconds = max(target_seconds, buffer_bytes / avg_bytes_per_second)
 
     if unplayed_duration < target_seconds:
         from library.playlist import generate_playlist
@@ -295,8 +308,7 @@ def client_sync(request):
         size = track.file_size or 0
         if total + size > buffer_bytes and download:
             break
-        from library.tags import read_replaygain
-        rg_gain = read_replaygain(track.file_path)
+        rg_gain = track.get_replaygain()
         download.append({
             "id": item.id,
             "title": track.title,
@@ -464,7 +476,6 @@ def decade_station_sync(request, decade_slug, station_slug):
         size = track.file_size or 0
         if total + size > buffer_bytes and download:
             break
-        from library.tags import read_replaygain
         download.append({
             "id": item.id,
             "title": track.title,
@@ -474,7 +485,7 @@ def decade_station_sync(request, decade_slug, station_slug):
             "year": track.year,
             "duration": track.duration,
             "file_format": track.format,
-            "replaygain_track_gain": read_replaygain(track.file_path),
+            "replaygain_track_gain": track.get_replaygain(),
             "download_url": f"/library/api/download_song/{item.id}/",
         })
         total += size
@@ -876,14 +887,9 @@ def search_tracks(request):
         recent_genres.append(get_genre_group(pick))
         recent_decades.append(get_decade(pick))
 
-    from library.tags import read_replaygain
-
     tracks = []
     for t in picked:
-        try:
-            rg = read_replaygain(t.file_path)
-        except Exception:
-            rg = None
+        rg = t.get_replaygain()
         tracks.append({
             "id": t.id,
             "title": t.title,

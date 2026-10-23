@@ -217,6 +217,8 @@ class Command(BaseCommand):
         for i, (path, status, detail) in enumerate(results, 1):
             if status == "tagged":
                 self.stdout.write(f"  [{i}/{total}] {Path(path).name}: {detail}")
+                # Workers have no ORM access; have the stored gain re-read from the new tag.
+                Track.objects.filter(file_path=path).update(replaygain_read=False)
                 tagged += 1
             elif status == "skipped":
                 skipped += 1

@@ -89,6 +89,9 @@ def _upsert_track(tag_data: dict, album_artist_name: str, source: str = "") -> t
     except Track.DoesNotExist:
         pass
 
+    # The file changed on disk, so its ReplayGain tag may have too — re-read it lazily.
+    defaults["replaygain_read"] = False
+
     track, created = Track.objects.update_or_create(
         file_path=tag_data["file_path"],
         defaults=defaults,

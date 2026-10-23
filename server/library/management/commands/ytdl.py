@@ -158,6 +158,7 @@ class Command(BaseCommand):
                     continue
                 gain_db = _compute_gain(loudness["input_i"])
                 if _write_replaygain_tags(track.file_path, gain_db, loudness["input_tp"]):
+                    track.store_replaygain(gain_db)
                     rg_ok += 1
                 else:
                     self.stdout.write(f"  Failed to tag: {track.title}")

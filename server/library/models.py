@@ -78,6 +78,14 @@ class Track(models.Model):
     file_path = models.CharField(max_length=1000, unique=True)
     file_size = models.PositiveBigIntegerField(null=True, blank=True)
     file_mtime = models.FloatField(null=True, blank=True)
+    replaygain_track_gain = models.FloatField(
+        null=True, blank=True,
+        help_text="ReplayGain track gain in dB, copied from the file's tags.",
+    )
+    replaygain_read = models.BooleanField(
+        default=False,
+        help_text="Whether replaygain_track_gain has been read from the file yet.",
+    )
     source = models.CharField(max_length=500, blank=True, default="")
     format = models.CharField(max_length=20, blank=True, default="")
     video_path = models.CharField(
@@ -90,6 +98,27 @@ class Track(models.Model):
     class Meta:
         ordering = ["album", "disc_number", "track_number", "title"]
         indexes = [models.Index(fields=["title"], name="library_track_title_idx")]
+
+    def get_replaygain(self) -> float | None:
+        """ReplayGain track gain in dB. Read from the file's tags the first time it's
+        needed and stored, so syncs don't have to open every queued file again."""
+        if not self.replaygain_read:
+            from library.tags import read_replaygain
+            self.replaygain_track_gain = read_replaygain(self.file_path)
+            self.replaygain_read = True
+            Track.objects.filter(pk=self.pk).update(
+                replaygain_track_gain=self.replaygain_track_gain, replaygain_read=True,
+            )
+        return self.replaygain_track_gain
+
+    def store_replaygain(self, gain_db: float) -> None:
+        """Record a gain that was just written to the file's tags (rounded the same way
+        the tag is written, so it matches what a later read would return)."""
+        self.replaygain_track_gain = round(gain_db, 2)
+        self.replaygain_read = True
+        Track.objects.filter(pk=self.pk).update(
+            replaygain_track_gain=self.replaygain_track_gain, replaygain_read=True,
+        )
 
     @property
     def display_artist(self) -> str:
