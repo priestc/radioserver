@@ -783,8 +783,12 @@
     const L = tracks[i - 1];
     let gapStart = L.start;
     if (!isTalk(L)) {
+      // A record that starts after the song should be over, with this song named before it, is this song's:
+      // half-spoken records (Johnny Cash) come out as short scraps of music that don't count as a record,
+      // so search from partway in instead.
       const from = L.start + 0.4 * songLength(L), rec = records.find(([, b]) => b > from);
-      if (rec) gapStart = Math.max(gapStart, rec[1]);
+      const late = rec && rec[0] >= L.start + songLength(L) + 60 && mentions[i].some(m => m.start > from && m.start < rec[0]);
+      gapStart = Math.max(gapStart, rec && !late ? rec[1] : from);
     }
     const next = records.find(([a]) => a > gapStart + 1), gapEnd = next ? next[0] : job.duration;
     // He sometimes names the next song over its intro, so look a little into the next record.
