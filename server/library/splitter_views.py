@@ -73,6 +73,10 @@ def splitter_job_api(request, job_id):
         except SplitError as e:
             return JsonResponse({"error": str(e)}, status=400)
         job.save(update_fields=["tracks", "updated_at"])
+    return _job_detail(job)
+
+
+def _job_detail(job: SplitJob) -> JsonResponse:
     from library.models import Album
     return JsonResponse({
         **_job_summary(job),
@@ -86,6 +90,39 @@ def splitter_job_api(request, job_id):
         "hints": job.hints,
         "output_files": job.output_files,
     })
+
+
+@staff_member_required
+@require_POST
+def splitter_remove_song(request, job_id):
+    """Drop a playlist song that wasn't actually played, with its track (its time goes to the track before it).
+
+    The body carries the editor's current tracks so unsaved edits are kept.
+    """
+    job = get_object_or_404(SplitJob, pk=job_id)
+    try:
+        body = json.loads(request.body)
+        index = int(body["index"])
+        tracks = validate_tracks(body.get("tracks"), job.duration)
+    except (json.JSONDecodeError, AttributeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"error": "Request body must be JSON with an index and a tracks list."}, status=400)
+    except SplitError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    if not 0 <= index < len(job.playlist):
+        return JsonResponse({"error": f"There is no playlist song {index + 1}."}, status=400)
+    if len(tracks) != expected_track_count(job):
+        return JsonResponse({"error": f"Expected {expected_track_count(job)} tracks, got {len(tracks)}."}, status=400)
+    if len(job.playlist) == 1:
+        return JsonResponse({"error": "That's the only song in the playlist; it can't be removed."}, status=400)
+    del job.playlist[index]
+    del tracks[index + 1]  # track 0 is the Opening
+    tracks[0]["start"] = 0.0
+    job.tracks = tracks
+    suggestions = (job.hints or {}).get("suggestions")
+    if isinstance(suggestions, list) and len(suggestions) > index + 1:
+        del suggestions[index + 1]
+    job.save(update_fields=["playlist", "tracks", "hints", "updated_at"])
+    return _job_detail(job)
 
 
 @staff_member_required

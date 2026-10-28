@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/splitter/<int:job_id>/waveform/", splitter_views.splitter_waveform, name="splitter_waveform"),
     path("api/splitter/<int:job_id>/audio/", splitter_views.splitter_audio, name="splitter_audio"),
     path("api/splitter/<int:job_id>/import/", splitter_views.splitter_import, name="splitter_import"),
+    path("api/splitter/<int:job_id>/remove_song/", splitter_views.splitter_remove_song, name="splitter_remove_song"),
     path("cover/<int:album_id>/", views.cover_art, name="cover_art"),
     path("api/client_sync/", views.client_sync, name="client_sync"),
     path("api/reset_queue/", views.reset_queue, name="reset_queue"),
