@@ -38,8 +38,8 @@ DISPLAY_NAMES = {
 }
 
 
-# Prompts go through AI Delegator (github.com/priestc/AI-delegator), which holds
-# the API keys and logs every call. Its "song-year" task sets which providers
+# Prompts go through the service delegator (github.com/priestc/service-delegator),
+# which holds the API keys and logs every call with its timing. Its "song-year" task sets which providers
 # are used, in which order (who proposes a year first) and with which model;
 # radioserver still decides who checks whom.
 AI_TASK = "song-year"
@@ -63,7 +63,7 @@ class DelegatorError(RuntimeError):
 
 
 def _delegator(path: str, body: dict | None = None, timeout: float = 10) -> dict:
-    url = settings.AI_DELEGATOR_URL.rstrip("/") + path
+    url = settings.SERVICE_DELEGATOR_URL.rstrip("/") + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
                                  method="POST" if body is not None else "GET")
@@ -74,7 +74,7 @@ def _delegator(path: str, body: dict | None = None, timeout: float = 10) -> dict
         try:
             err = json.load(e)
         except ValueError:
-            raise DelegatorError(f"AI delegator returned HTTP {e.code}")
+            raise DelegatorError(f"Service delegator returned HTTP {e.code}")
         # With one provider asked, its own error is the useful part
         notes = err.get("notes") or []
         raise DelegatorError(notes[0].split(": ", 1)[-1] if len(notes) == 1 else
@@ -82,7 +82,7 @@ def _delegator(path: str, body: dict | None = None, timeout: float = 10) -> dict
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         if "timed out" in str(getattr(e, "reason", e)):
             raise DelegatorError(f"no answer within {timeout:.0f}s (timed out)")
-        raise DelegatorError(f"Could not reach the AI delegator at {settings.AI_DELEGATOR_URL}: "
+        raise DelegatorError(f"Could not reach the service delegator at {settings.SERVICE_DELEGATOR_URL}: "
                              f"{getattr(e, 'reason', e)}")
 
 
@@ -91,7 +91,7 @@ def task_routes() -> list[dict]:
     for task in _delegator("/api/tasks")["tasks"]:
         if task["name"] == AI_TASK:
             return task["routes"]
-    raise DelegatorError(f"The AI delegator has no {AI_TASK!r} task; add it on its Tasks page")
+    raise DelegatorError(f"The service delegator has no {AI_TASK!r} task; add it on its AI tasks page")
 
 
 def _asker(name: str, model: str):
@@ -142,7 +142,7 @@ def get_backend(name: str):
 
 
 def get_available_backends() -> list[str]:
-    """Backends in the AI delegator's song-year task, in its order, that aren't
+    """Backends in the service delegator's song-year task, in its order, that aren't
     disabled here. Raises DelegatorError if the delegator can't be reached."""
     from library.models import AIServiceManager
 
@@ -273,7 +273,7 @@ def lookup_year_with_fallback(
     except DelegatorError as e:
         return None, "", [str(e)]
     if not available:
-        return None, "", [f"No AI backends in the AI delegator's {AI_TASK!r} task (or all are disabled here)"]
+        return None, "", [f"No AI backends in the service delegator's {AI_TASK!r} task (or all are disabled here)"]
     if preferred_backend in available:
         available.remove(preferred_backend)
         available.insert(0, preferred_backend)
@@ -283,26 +283,20 @@ def lookup_year_with_fallback(
     out_of_time = lambda: time.monotonic() - started > budget - REQUEST_TIMEOUT
 
     def call(name, kind, fn):
-        """Run fn(ask) against one backend; returns (ok, value). Failures are noted and cool the backend off."""
-        from library.release_dates import record_latency
-
+        """Run fn(ask) against one backend; returns (ok, value). Failures are noted and cool the backend off.
+        (How long each one took is logged by the service delegator.)"""
         try:
             ask = get_backend(name)
         except ValueError as e:
             errors.append(f"{name}: {e}")
             return False, None
-        t0 = time.monotonic()
         try:
             value = fn(ask)
         except Exception as e:
             msg = _describe_error(e)
             _log_rate_limit_error(name, msg)   # puts the backend in a 5-minute cool-off
             errors.append(f"{name}: {msg}")
-            if (err := record_latency(name, kind, title, artist, time.monotonic() - t0, False, msg)):
-                errors.append(err)
             return False, None
-        if (err := record_latency(name, kind, title, artist, time.monotonic() - t0, True, value)):
-            errors.append(err)
         return True, value
 
     for i, proposer in enumerate(available):

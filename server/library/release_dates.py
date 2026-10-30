@@ -12,7 +12,6 @@ import fcntl
 import hashlib
 import json
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -34,22 +33,20 @@ ARTIST_CACHE_TTL = 24 * 3600   # an artist's MusicBrainz ID and catalogue are re
 # still keep to MusicBrainz's rate limit and reuse each other's artist data.
 STATE_DIR = Path.home() / ".cache" / "radioserver" / "lookups"
 
-_counter = threading.local()   # HTTP requests made by this thread, for latency records
+# Requests go through the service delegator's logging proxy, which records how
+# long each one takes: https://musicbrainz.org/ws/2/x becomes
+# <delegator>/proxy/radioserver/musicbrainz/x.
+_PROXIED = {
+    "https://musicbrainz.org/ws/2/": "musicbrainz",
+    "https://api.discogs.com/": "discogs",
+}
 
 
-def record_latency(service: str, kind: str, title: str, artist: str, seconds: float,
-                   ok: bool, result: str = "", requests: int | None = None) -> str | None:
-    """Save how long a service took for one lookup. Returns an error note if it couldn't be saved."""
-    from library.models import LookupLatency
-
-    try:
-        LookupLatency.objects.create(
-            service=service, kind=kind, title=title[:500], artist=artist[:500], seconds=round(seconds, 3),
-            requests=requests, ok=ok, result=str(result)[:200],
-        )
-    except Exception as e:
-        return f"{service}: latency not recorded ({e})"
-    return None
+def _proxied(url: str) -> str:
+    for base, service in _PROXIED.items():
+        if url.startswith(base):
+            return f"{settings.SERVICE_DELEGATOR_URL.rstrip('/')}/proxy/radioserver/{service}/{url[len(base):]}"
+    return url
 
 
 class LookupError_(Exception):
@@ -57,8 +54,8 @@ class LookupError_(Exception):
 
 
 def _get(url: str, headers: dict | None = None) -> dict:
-    _counter.n = getattr(_counter, "n", 0) + 1
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})})
+    req = urllib.request.Request(_proxied(url), headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                                                         "X-Task": "song-year", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return json.load(resp)
@@ -273,25 +270,19 @@ def database_year(title: str, artist: str) -> tuple[int | None, str, list[str]]:
     else:
         notes.append("Discogs: not set up (radioserver install_discogs)")
 
-    def timed(fn):
-        """Run one database's lookup on its own thread: (year or error, seconds, requests made)."""
-        _counter.n = 0
-        started = time.monotonic()
+    def run(fn):
+        """One database's lookup on its own thread: the year, None, or the error."""
         try:
-            y = fn(title, artist)
+            return fn(title, artist)
         except LookupError_ as e:
-            y = e
-        return y, time.monotonic() - started, _counter.n
+            return e
 
     # Both databases at once: a track costs the slower of the two, not both added together.
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        futures = [(name, pool.submit(timed, fn)) for name, fn in sources]
+        futures = [(name, pool.submit(run, fn)) for name, fn in sources]
     for name, future in futures:
-        y, seconds, requests = future.result()
+        y = future.result()
         failed = isinstance(y, LookupError_)
-        if (err := record_latency(name, "database", title, artist, seconds, not failed,
-                                  y if failed else (y or "not found"), requests)):
-            notes.append(err)
         if failed:
             notes.append(f"{name}: {y}")
             continue

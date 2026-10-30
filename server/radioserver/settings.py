@@ -89,8 +89,9 @@ GOOGLE_AI_API_KEY = _config.get("api", "google_ai_key", fallback="")
 DEEPSEEK_API_KEY = _config.get("api", "deepseek_key", fallback="")
 GROQ_API_KEY = _config.get("api", "groq_key", fallback="")
 OPENROUTER_API_KEY = _config.get("api", "openrouter_key", fallback="")
-# AI prompts are sent through AI Delegator (github.com/priestc/AI-delegator)
-AI_DELEGATOR_URL = _config.get("api", "ai_delegator_url", fallback="http://127.0.0.1:5055")
+# AI prompts and MusicBrainz/Discogs requests go through the service delegator
+# (github.com/priestc/service-delegator), which logs how each service performs
+SERVICE_DELEGATOR_URL = _config.get("api", "service_delegator_url", fallback="http://127.0.0.1:5055")
 DISCOGS_TOKEN = _config.get("api", "discogs_token", fallback="")
 DISCOGS_KEY = _config.get("api", "discogs_key", fallback="")
 DISCOGS_SECRET = _config.get("api", "discogs_secret", fallback="")

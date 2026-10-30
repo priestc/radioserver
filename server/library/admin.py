@@ -21,7 +21,6 @@ from library.models import (
     Decade,
     DecadeStation,
     GenreGroup,
-    LookupLatency,
     MusicVideoDownload,
     PlaylistItem,
     PlaylistSettings,
@@ -1551,44 +1550,6 @@ class AIServiceErrorAdmin(admin.ModelAdmin):
         if len(msg) > 120:
             return msg[:120] + "..."
         return msg
-
-
-@admin.register(LookupLatency)
-class LookupLatencyAdmin(admin.ModelAdmin):
-    """Timings of each service's answers in the date finder, slowest services summarised on top."""
-    list_display = ["created_at", "service", "kind", "seconds_display", "requests", "ok", "title", "artist", "short_result"]
-    list_filter = ["service", "kind", "ok", "created_at"]
-    search_fields = ["title", "artist"]
-    date_hierarchy = "created_at"
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    @admin.display(description="Seconds", ordering="seconds")
-    def seconds_display(self, obj):
-        return f"{obj.seconds:.2f}"
-
-    @admin.display(description="Result")
-    def short_result(self, obj):
-        return obj.result[:80]
-
-    def changelist_view(self, request, extra_context=None):
-        from django.db.models import Avg, Count, Max, Q, Sum
-
-        response = super().changelist_view(request, extra_context)
-        cl = getattr(response, "context_data", {}).get("cl")
-        if cl is not None:
-            rows = (
-                cl.queryset.order_by().values("service", "kind")
-                .annotate(calls=Count("id"), avg=Avg("seconds"), slowest=Max("seconds"), total=Sum("seconds"),
-                          failures=Count("id", filter=Q(ok=False)), avg_requests=Avg("requests"))
-                .order_by("-avg")
-            )
-            response.context_data["latency_summary"] = list(rows)
-        return response
 
 
 @admin.register(SplitJob)
