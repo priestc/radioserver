@@ -596,10 +596,14 @@ class AlbumAdmin(DeleteWithFilesMixin, admin.ModelAdmin):
         return redirect("admin:library_album_ai_date_finder", album_id=album.pk)
 
     def ai_date_finder_view(self, request, album_id):
-        from library.ai import get_available_backends
+        from library.ai import DelegatorError, get_available_backends
 
         album = Album.objects.get(id=album_id)
-        available = get_available_backends()
+        try:
+            available = get_available_backends()
+        except DelegatorError as e:
+            available = []
+            self.message_user(request, f"AI services unavailable: {e}", level="error")
 
         # MusicBrainz and Discogs are asked first, so the page works even with no AI service set up.
         backend_name = request.GET.get("backend") or request.POST.get("backend") or (available[0] if available else "")

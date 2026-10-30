@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import configparser
+import json
 import re
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from django.conf import settings
@@ -35,99 +38,78 @@ DISPLAY_NAMES = {
 }
 
 
-def _ask_openai(prompt: str) -> str:
-    from openai import OpenAI
+# Prompts go through AI Delegator (github.com/priestc/AI-delegator), which holds
+# the API keys and logs every call. Its "song-year" task sets which providers
+# are used, in which order (who proposes a year first) and with which model;
+# radioserver still decides who checks whom.
+AI_TASK = "song-year"
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_claude(prompt: str) -> str:
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=20,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text.strip()
-
-
-def _ask_deepseek(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com",
-                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
-    response = client.chat.completions.create(
-        model="deepseek-flash",  # deepseek-chat is no longer offered
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-        # deepseek-flash reasons before answering by default, which uses up max_tokens
-        # and returns an empty reply; a one-word answer doesn't need it.
-        extra_body={"thinking": {"type": "disabled"}},
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_groq(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1",
-                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
-    # llama-3.3-70b-versatile was retired by Groq. gpt-oss is a reasoning model:
-    # its reasoning counts against max_tokens, so leave room for the answer.
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400,
-        reasoning_effort="low",
-    )
-    return response.choices[0].message.content.strip()
-
-
-def _ask_openrouter(prompt: str) -> str:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1",
-                    timeout=REQUEST_TIMEOUT, max_retries=REQUEST_RETRIES)
-    # A non-reasoning model, so a one-word answer fits in max_tokens.
-    response = client.chat.completions.create(
-        model="meta-llama/llama-3.3-70b-instruct",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20,
-    )
-    if not response.choices:
-        raise RuntimeError(f"OpenRouter returned no answer: {getattr(response, 'error', response)}")
-    return (response.choices[0].message.content or "").strip()
-
-
-def _ask_google(prompt: str) -> str:
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=settings.GOOGLE_AI_API_KEY,
-                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT * 1000))
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-    )
-    return response.text.strip()
-
-
-BACKENDS = {
-    "openai": ("OPENAI_API_KEY", _ask_openai),
-    "claude": ("ANTHROPIC_API_KEY", _ask_claude),
-    "google": ("GOOGLE_AI_API_KEY", _ask_google),
-    "deepseek": ("DEEPSEEK_API_KEY", _ask_deepseek),
-    "groq": ("GROQ_API_KEY", _ask_groq),
-    "openrouter": ("OPENROUTER_API_KEY", _ask_openrouter),
+# Used when the delegator's task doesn't name a model for a provider
+DEFAULT_MODELS = {
+    "openai": "gpt-4o-mini",
+    "claude": "claude-haiku-4-5-20251001",
+    "google": "gemini-2.0-flash",
+    "deepseek": "deepseek-flash",
+    "groq": "openai/gpt-oss-120b",
+    "openrouter": "meta-llama/llama-3.3-70b-instruct",
 }
+# gpt-oss on Groq is a reasoning model: its reasoning counts against
+# max_tokens, so leave room for the answer. The others answer in a word.
+MAX_TOKENS = {"groq": 400}
+
+
+class DelegatorError(RuntimeError):
+    pass
+
+
+def _delegator(path: str, body: dict | None = None, timeout: float = 10) -> dict:
+    url = settings.AI_DELEGATOR_URL.rstrip("/") + path
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"},
+                                 method="POST" if body is not None else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.load(e)
+        except ValueError:
+            raise DelegatorError(f"AI delegator returned HTTP {e.code}")
+        # With one provider asked, its own error is the useful part
+        notes = err.get("notes") or []
+        raise DelegatorError(notes[0].split(": ", 1)[-1] if len(notes) == 1 else
+                             (err.get("error") or f"HTTP {e.code}") + (f" ({'; '.join(notes)})" if notes else ""))
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        if "timed out" in str(getattr(e, "reason", e)):
+            raise DelegatorError(f"no answer within {timeout:.0f}s (timed out)")
+        raise DelegatorError(f"Could not reach the AI delegator at {settings.AI_DELEGATOR_URL}: "
+                             f"{getattr(e, 'reason', e)}")
+
+
+def task_routes() -> list[dict]:
+    """The song-year task's providers in order: [{provider, model}]."""
+    for task in _delegator("/api/tasks")["tasks"]:
+        if task["name"] == AI_TASK:
+            return task["routes"]
+    raise DelegatorError(f"The AI delegator has no {AI_TASK!r} task; add it on its Tasks page")
+
+
+def _asker(name: str, model: str):
+    def ask(prompt: str) -> str:
+        answer = _delegator("/api/ask", {
+            "task": AI_TASK, "project": "radioserver", "prompt": prompt, "provider": name, "model": model,
+            "max_tokens": MAX_TOKENS.get(name, 20), "timeout": REQUEST_TIMEOUT,
+        }, timeout=REQUEST_TIMEOUT * (REQUEST_RETRIES + 1) + 5)
+        return answer["text"].strip()
+    return ask
+
+
+def _model_for(name: str) -> str:
+    for r in task_routes():
+        if r["provider"] == name:
+            return r.get("model") or DEFAULT_MODELS[name]
+    return DEFAULT_MODELS[name]
+
 
 
 def _check_cooloff(name: str) -> None:
@@ -150,29 +132,25 @@ def _check_cooloff(name: str) -> None:
 
 def get_backend(name: str):
     """Return the ask function for the given backend name, or raise ValueError."""
-    if name not in BACKENDS:
+    if name not in DEFAULT_MODELS:
         raise ValueError(f"Unknown backend: {name}")
-    setting_name, ask_fn = BACKENDS[name]
-    if not getattr(settings, setting_name, ""):
-        raise ValueError(
-            f"{setting_name} not set. Configure it in ~/.radioserver.conf"
-        )
     _check_cooloff(name)
-    return ask_fn
+    try:
+        return _asker(name, _model_for(name))
+    except DelegatorError as e:
+        raise ValueError(str(e))
 
 
 def get_available_backends() -> list[str]:
-    """Return list of backend names that have API keys configured and are enabled."""
+    """Backends in the AI delegator's song-year task, in its order, that aren't
+    disabled here. Raises DelegatorError if the delegator can't be reached."""
     from library.models import AIServiceManager
 
     disabled = set(
         AIServiceManager.objects.filter(enabled=False).values_list("name", flat=True)
     )
-    available = []
-    for name, (setting_name, _) in BACKENDS.items():
-        if getattr(settings, setting_name, "") and name not in disabled:
-            available.append(name)
-    return available
+    return [r["provider"] for r in task_routes()
+            if r["provider"] in DEFAULT_MODELS and r["provider"] not in disabled]
 
 
 def save_api_key(name: str, key: str) -> None:
@@ -290,9 +268,12 @@ def lookup_year_with_fallback(
     Returns (year_or_none, description of who proposed/confirmed it, errors/notes).
     Only a confirmed year is returned: one no other backend could check gives None.
     """
-    available = get_available_backends()
+    try:
+        available = get_available_backends()
+    except DelegatorError as e:
+        return None, "", [str(e)]
     if not available:
-        return None, "", ["No AI backends configured"]
+        return None, "", [f"No AI backends in the AI delegator's {AI_TASK!r} task (or all are disabled here)"]
     if preferred_backend in available:
         available.remove(preferred_backend)
         available.insert(0, preferred_backend)
