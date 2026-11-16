@@ -41,13 +41,21 @@ struct RadioClientApp: App {
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
+            switch newPhase {
+            case .active:
                 // Re-activate audio session in case iOS deactivated it while backgrounded
                 audioPlayer.reactivateAudioSession()
                 // Flush pendingPlayed immediately whenever the app becomes active
                 // so plays recorded while offline are reported to the server promptly.
                 // Covers both app launch and returning from background.
                 audioPlayer.triggerSync(reason: "app foregrounded")
+            case .inactive, .background:
+                // Save where we are in the current song right away, so if the app is
+                // killed from here (swiped away, jetsammed) the next launch resumes
+                // from this spot rather than up to a couple of seconds earlier.
+                audioPlayer.persistPlaybackPosition()
+            @unknown default:
+                break
             }
         }
     }

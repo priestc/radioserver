@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var isTesting = false
     @State private var showScanner = false
     @State private var cacheCleared = false
+    @State private var confirmResetQueue = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,11 @@ struct SettingsView: View {
                         Text(api.isOnLocalNetwork ? "Local" : "Remote")
                             .foregroundColor(.secondary)
                     }
+
+                    Toggle("Download away from home", isOn: $api.allowRemoteDownloads)
+                    Text("When off, new songs only download while connected to the local server. Cached music always plays.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
                     HStack {
                         TextField("API Key", text: $api.apiKey)
@@ -116,16 +122,47 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.green)
                     }
+
+                    Button(role: .destructive) {
+                        confirmResetQueue = true
+                    } label: {
+                        HStack {
+                            Text("Reset Queue")
+                            Spacer()
+                            if audioPlayer.isResettingQueue {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(audioPlayer.isResettingQueue || !api.isConfigured)
+                    .confirmationDialog(
+                        "Reset the queue for every channel?",
+                        isPresented: $confirmResetQueue,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Reset Queue", role: .destructive) {
+                            audioPlayer.resetQueue()
+                        }
+                    } message: {
+                        Text("Deletes every downloaded upcoming song, has the server pick new ones, then downloads them. The song playing now keeps playing.")
+                    }
+                    if let error = audioPlayer.resetQueueError {
+                        Text("Couldn't reset the queue: \(error)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .onAppear {
                 cacheCleared = false
-                audioPlayer.refreshCacheStats(reason: "settings opened")
+                // Stats are computed on-device — no server round trip just for looking.
+                audioPlayer.recalculateCacheStats()
             }
             // Pick up a newly entered server/key right away — otherwise nothing would
             // talk to the server until the next tab switch or app foreground.
             .onChange(of: api.localURL) { _, _ in audioPlayer.configurationChanged() }
             .onChange(of: api.remoteURL) { _, _ in audioPlayer.configurationChanged() }
+            .onChange(of: api.allowRemoteDownloads) { _, _ in audioPlayer.configurationChanged() }
             .onChange(of: api.apiKey) { _, _ in audioPlayer.configurationChanged() }
             .scrollDismissesKeyboard(.interactively)
             .toolbar {

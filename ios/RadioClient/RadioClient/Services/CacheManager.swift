@@ -190,6 +190,17 @@ class CacheManager {
         try? FileManager.default.removeItem(at: fileURL(for: playlistItemId, ext: ext))
     }
 
+    /// Deletes every downloaded song except the given playlist item's file(s). Artwork
+    /// is left alone — it's keyed by album, so it stays valid for whatever comes next.
+    func clearAudio(keepingPlaylistItemId keepId: Int?) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil) else { return }
+        for file in files {
+            if let keepId, file.deletingPathExtension().lastPathComponent == String(keepId) { continue }
+            try? fm.removeItem(at: file)
+        }
+    }
+
     func clearCache() {
         try? FileManager.default.removeItem(at: cacheDir)
         try? FileManager.default.removeItem(at: artworkDir)

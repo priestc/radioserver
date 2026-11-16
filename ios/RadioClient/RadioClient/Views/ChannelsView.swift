@@ -41,7 +41,8 @@ struct ChannelsView: View {
                 audioPlayer.refreshCacheStats(reason: "channels pull-to-refresh")
             }
             .onAppear {
-                audioPlayer.refreshCacheStats(reason: "channels tab opened")
+                // Stats are computed on-device — no server round trip just for looking.
+                audioPlayer.recalculateCacheStats()
             }
         }
     }

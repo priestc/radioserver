@@ -13,6 +13,11 @@ class APIService: ObservableObject {
         didSet { UserDefaults.standard.set(apiKey, forKey: "apiKey") }
     }
     @Published var isOnLocalNetwork = false
+    /// Off by default: new songs only download while talking to the local server, so
+    /// being away from home never burns cellular data or a hotspot on music downloads.
+    @Published var allowRemoteDownloads: Bool {
+        didSet { UserDefaults.standard.set(allowRemoteDownloads, forKey: "allowRemoteDownloads") }
+    }
 
     private let networkMonitor = NWPathMonitor()
 
@@ -33,6 +38,7 @@ class APIService: ObservableObject {
         }
         self.remoteURL = UserDefaults.standard.string(forKey: "remoteURL") ?? ""
         self.apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
+        self.allowRemoteDownloads = UserDefaults.standard.bool(forKey: "allowRemoteDownloads")
 
         startNetworkMonitor()
     }
@@ -61,8 +67,12 @@ class APIService: ObservableObject {
                 initialOnWifi = onWifi
                 firstReading.signal()
             }
+            // Being on Wi-Fi is only a first guess — it may be someone else's Wi-Fi,
+            // where the LAN address is unreachable and only Tailscale works. The probe
+            // below confirms by actually contacting the local server.
             DispatchQueue.main.async {
                 self?.isOnLocalNetwork = onWifi
+                self?.scheduleProbe()
             }
         }
         networkMonitor.start(queue: DispatchQueue.global(qos: .utility))
@@ -71,8 +81,105 @@ class APIService: ObservableObject {
         }
     }
 
+    // MARK: - Local / remote route selection
+
+    private var probeTask: Task<Void, Never>?
+
+    /// Re-checks which server is reachable, debounced: NWPathMonitor tends to fire
+    /// several updates in a row (e.g. Wi-Fi joins, then the Tailscale VPN reconnects).
+    private func scheduleProbe() {
+        probeTask?.cancel()
+        probeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.probeRoute()
+        }
+    }
+
+    /// Decides between the local and remote URL by actually trying the local server
+    /// with a short timeout. Any HTTP response at all (even a 401) means it's reachable.
+    func probeRoute() async {
+        guard let local = Self.makeBase(localURL), Self.makeBase(remoteURL) != nil else {
+            // Only one URL configured — activeServerURL already falls back to it.
+            return
+        }
+        let reachable = await isReachable(local, timeout: 2)
+        if Task.isCancelled { return }
+        await setRoute(local: reachable, reason: reachable ? "local server answered" : "local server unreachable")
+    }
+
+    private func isReachable(_ base: URL, timeout: TimeInterval) async -> Bool {
+        var request = authorizedRequest(url: base.appendingPathComponent("/library/api/channels/"))
+        request.timeoutInterval = timeout
+        request.httpMethod = "HEAD"
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return response is HTTPURLResponse
+        } catch {
+            return false
+        }
+    }
+
+    @MainActor
+    private func setRoute(local: Bool, reason: String) {
+        guard isOnLocalNetwork != local else { return }
+        isOnLocalNetwork = local
+        NotificationCenter.default.post(name: .serverRouteChanged, object: self)
+        AppLogger.shared.log(.apiSuccess, "Switched to \(local ? "local" : "remote (Tailscale)") server — \(reason)", details: activeServerURL)
+    }
+
+    /// Errors meaning the chosen server couldn't be reached at all — worth trying the
+    /// other URL. `definite` = the request certainly never reached the server, so even
+    /// a non-idempotent POST is safe to resend.
+    private static func routeFailure(_ error: Error) -> (eligible: Bool, definite: Bool) {
+        guard let err = error as? URLError else { return (false, false) }
+        switch err.code {
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+            return (true, true)
+        case .timedOut, .networkConnectionLost:
+            return (true, false)
+        default:
+            return (false, false)
+        }
+    }
+
+    /// Runs `op` against the active server; if that server can't be reached, switches
+    /// to the other one (local ⇄ Tailscale) and retries there. Non-idempotent requests
+    /// are only resent when the first attempt definitely never reached the server;
+    /// otherwise the route is still switched so the caller's next retry goes the right way.
+    private func withFailover<T>(idempotent: Bool, _ op: (URL) async throws -> T) async throws -> T {
+        guard let primary = baseURL else { throw APIError.invalidURL }
+        do {
+            return try await op(primary)
+        } catch {
+            let failure = Self.routeFailure(error)
+            guard failure.eligible, !error.isCancellation,
+                  let alternate = alternateBaseURL, baseURL == primary else { throw error }
+            let switchingToLocal = !isOnLocalNetwork
+            guard idempotent || failure.definite else {
+                if await isReachable(alternate, timeout: 3) {
+                    await setRoute(local: switchingToLocal, reason: "\(primary.host ?? "server") unreachable")
+                }
+                throw error
+            }
+            await setRoute(local: switchingToLocal, reason: "\(primary.host ?? "server") unreachable")
+            return try await op(alternate)
+        }
+    }
+
     var isConfigured: Bool {
         !activeServerURL.isEmpty && !apiKey.isEmpty
+    }
+
+    /// True when requests are actually going to the local server (not just "on Wi-Fi").
+    var isUsingLocalServer: Bool {
+        guard let local = Self.makeBase(localURL) else { return false }
+        return baseURL == local
+    }
+
+    /// Whether new songs may be downloaded right now.
+    var canDownloadSongs: Bool {
+        isUsingLocalServer || allowRemoteDownloads
     }
 
     var activeServerURL: String {
@@ -85,8 +192,16 @@ class APIService: ObservableObject {
         return isOnLocalNetwork ? remoteURL : localURL
     }
 
-    private var baseURL: URL? {
-        let host = activeServerURL
+    private var baseURL: URL? { Self.makeBase(activeServerURL) }
+
+    /// The URL that isn't currently active — what we fail over to.
+    private var alternateBaseURL: URL? {
+        let alt = Self.makeBase(isOnLocalNetwork ? remoteURL : localURL)
+        return alt == baseURL ? nil : alt
+    }
+
+    private static func makeBase(_ host: String) -> URL? {
+        let host = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty else { return nil }
         let urlString = host.hasPrefix("http") ? host : "http://\(host)"
         guard var components = URLComponents(string: urlString) else { return nil }
@@ -109,7 +224,10 @@ class APIService: ObservableObject {
     }
 
     func fetchChannels() async throws -> [Channel] {
-        guard let base = baseURL else { throw APIError.invalidURL }
+        try await withFailover(idempotent: true) { base in try await self.fetchChannels(base: base) }
+    }
+
+    private func fetchChannels(base: URL) async throws -> [Channel] {
         let url = base.appendingPathComponent("/library/api/channels/")
         var request = authorizedRequest(url: url)
         request.timeoutInterval = 10
@@ -134,7 +252,12 @@ class APIService: ObservableObject {
     }
 
     func sync(played: [PlayedSong], bufferCacheMB: Int = 100, nowPlaying: (id: Int, startedAt: Date)? = nil, channelId: Int? = nil, targetDurationSeconds: Double? = nil, reason: String, silent: Bool = false) async throws -> [SongItem] {
-        guard let base = baseURL else { throw APIError.invalidURL }
+        try await withFailover(idempotent: false) { base in
+            try await self.sync(base: base, played: played, bufferCacheMB: bufferCacheMB, nowPlaying: nowPlaying, channelId: channelId, targetDurationSeconds: targetDurationSeconds, reason: reason, silent: silent)
+        }
+    }
+
+    private func sync(base: URL, played: [PlayedSong], bufferCacheMB: Int, nowPlaying: (id: Int, startedAt: Date)?, channelId: Int?, targetDurationSeconds: Double?, reason: String, silent: Bool) async throws -> [SongItem] {
         let url = base.appendingPathComponent("/library/api/client_sync/")
 
         var request = authorizedRequest(url: url)
@@ -188,14 +311,74 @@ class APIService: ObservableObject {
         }
     }
 
+    /// Asks the server to delete every unplayed playlist item for these channels (except
+    /// `keepId`, the song currently playing) and generate fresh ones. `played` is
+    /// reported first so those songs land in history rather than being deleted.
+    func resetQueue(channelIds: [Int?], played: [PlayedSong], keepId: Int?) async throws {
+        try await withFailover(idempotent: false) { base in
+            try await self.resetQueue(base: base, channelIds: channelIds, played: played, keepId: keepId)
+        }
+    }
+
+    private func resetQueue(base: URL, channelIds: [Int?], played: [PlayedSong], keepId: Int?) async throws {
+        let url = base.appendingPathComponent("/library/api/reset_queue/")
+
+        var request = authorizedRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Generating a fresh hour for every channel takes a while on a big library.
+        request.timeoutInterval = 120
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let playedData = played.map { entry in
+            ["id": entry.song.id, "played_at": formatter.string(from: entry.playedAt), "skipped": entry.skipped] as [String: Any]
+        }
+        var body: [String: Any] = [
+            "channel_ids": channelIds.map { $0.map { $0 as Any } ?? NSNull() },
+            "played": playedData,
+        ]
+        if let keepId {
+            body["keep_id"] = keepId
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                AppLogger.shared.log(.apiFailure, "Queue reset failed", details: "POST \(url.absoluteString) → \(code)\(bodySnippet(data))")
+                throw APIError.serverError(code)
+            }
+            AppLogger.shared.log(.apiSuccess, "Server reset the queue for \(channelIds.count) channel\(channelIds.count == 1 ? "" : "s")", details: "POST \(url.absoluteString) → 200")
+        } catch let err as APIError {
+            throw err
+        } catch {
+            if !error.isCancellation {
+                AppLogger.shared.log(.apiFailure, "Queue reset failed — \(error.localizedDescription)", details: "POST \(url.absoluteString)")
+            }
+            throw error
+        }
+    }
+
     func downloadSong(playlistItemId: Int, fileExtension: String = "mp3", lowBitrate: Bool = false, silent: Bool = false) async throws -> URL {
         let cache = CacheManager.shared
         let ext = lowBitrate ? "mp3" : fileExtension
         if cache.hasCached(playlistItemId: playlistItemId, ext: ext) {
             return cache.fileURL(for: playlistItemId, ext: ext)
         }
+        guard canDownloadSongs else { throw APIError.remoteDownloadsDisabled }
+        return try await withFailover(idempotent: true) { base in
+            // Failing over from local to remote mustn't sneak a download past the setting.
+            guard base == Self.makeBase(self.localURL) || self.allowRemoteDownloads else {
+                throw APIError.remoteDownloadsDisabled
+            }
+            return try await self.downloadSong(base: base, playlistItemId: playlistItemId, ext: ext, lowBitrate: lowBitrate, silent: silent)
+        }
+    }
 
-        guard let base = baseURL else { throw APIError.invalidURL }
+    private func downloadSong(base: URL, playlistItemId: Int, ext: String, lowBitrate: Bool, silent: Bool) async throws -> URL {
+        let cache = CacheManager.shared
         let endpoint = lowBitrate ? "download_song_lowbitrate" : "download_song"
         let url = base.appendingPathComponent("/library/api/\(endpoint)/\(playlistItemId)/")
         var request = authorizedRequest(url: url)
@@ -262,6 +445,9 @@ class APIService: ObservableObject {
     }
 
     func testConnection() async -> Result<Int, Error> {
+        // Re-check which server is reachable first, so the test reflects what the app
+        // would actually use right now rather than a stale guess.
+        await probeRoute()
         guard let base = baseURL else { return .failure(APIError.invalidURL) }
         let url = base.appendingPathComponent("/library/api/channels/")
         var request = authorizedRequest(url: url)
@@ -308,12 +494,19 @@ enum APIError: LocalizedError {
     case invalidURL
     case serverError(Int)
     case incompleteDownload(expected: Int64, actual: Int64)
+    case remoteDownloadsDisabled
 
     var errorDescription: String? {
         switch self {
         case .invalidURL: return "Invalid server URL"
         case .serverError(let code): return "Server error (\(code))"
         case .incompleteDownload(let expected, let actual): return "Incomplete download (expected \(expected) bytes, got \(actual))"
+        case .remoteDownloadsDisabled: return "Downloads are off away from the local network (enable in Settings)"
         }
     }
+}
+
+extension Notification.Name {
+    /// Posted when APIService switches between the local and remote server.
+    static let serverRouteChanged = Notification.Name("serverRouteChanged")
 }
