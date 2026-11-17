@@ -1327,6 +1327,136 @@ def browse_genre_mix(request, genre):
     })
 
 
+STATS_RECENT_PER_CHANNEL = 15
+UNTAGGED_GENRE = "(untagged)"
+UNGROUPED_GENRE = "(no group)"
+
+
+def _stats_source_name(channel, station):
+    if channel is not None:
+        return channel.name
+    if station is not None:
+        return f"{station.decade.name} — {station.name}"
+    return "All Music"
+
+
+@require_GET
+def browse_stats(request):
+    """Listening history for the browse UI's Stats page: the latest songs played on
+    every channel, plus how plays break down by genre overall and per month.
+
+    A "play" is a playlist item the client reported with played_at set. Skipped
+    items show up in the recent lists (flagged) but don't count toward genre or
+    channel play totals."""
+    from django.utils import timezone
+
+    from library.models import Channel, DecadeStation
+
+    played = PlaylistItem.objects.filter(played_at__isnull=False)
+
+    # Map each lowercase genre tag to the first genre group that lists it.
+    group_for_genre = {}
+    for group in GenreGroup.objects.all():
+        for g in group.genre_list():
+            group_for_genre.setdefault(g.lower(), group.name)
+
+    # --- Recent songs per channel --------------------------------------------
+    sources = (
+        played.order_by().values_list("channel_id", "station_id").distinct()
+    )
+    channels_by_id = Channel.objects.in_bulk()
+    stations_by_id = DecadeStation.objects.select_related("decade").in_bulk()
+
+    channel_results = []
+    for channel_id, station_id in sources:
+        channel = channels_by_id.get(channel_id) if channel_id else None
+        station = stations_by_id.get(station_id) if station_id else None
+        source_qs = played.filter(channel_id=channel_id, station_id=station_id)
+        recent = (
+            source_qs.order_by("-played_at")
+            .select_related("track", "track__album", "track__album__artist")
+            .prefetch_related("track__artists")[:STATS_RECENT_PER_CHANNEL]
+        )
+        recent_rows = []
+        for item in recent:
+            t = item.track
+            recent_rows.append({
+                "track_id": t.id,
+                "title": t.title,
+                "artist": t.display_artist,
+                "album": t.album.title if t.album else None,
+                "album_id": t.album_id,
+                "year": t.year,
+                "genre": t.genre or None,
+                "duration": t.duration,
+                "played_at": item.played_at.isoformat(),
+                "skipped": item.skipped,
+            })
+        channel_results.append({
+            "channel_id": channel_id,
+            "station_id": station_id,
+            "name": _stats_source_name(channel, station),
+            "kind": "channel" if channel_id else ("station" if station_id else "default"),
+            "plays": source_qs.filter(skipped=False).count(),
+            "skips": source_qs.filter(skipped=True).count(),
+            "last_played": recent_rows[0]["played_at"] if recent_rows else None,
+            "recent": recent_rows,
+        })
+    # Default channel first, then whichever was listened to most recently.
+    channel_results.sort(key=lambda c: c["last_played"] or "", reverse=True)
+    channel_results.sort(key=lambda c: c["kind"] != "default")
+
+    # --- Genre breakdowns, overall and per month -----------------------------
+    totals = {"plays": 0, "skips": 0, "seconds": 0.0}
+    by_tag = {}
+    by_group = {}
+    months = {}
+    first_played = last_played = None
+
+    rows = played.order_by().values_list("played_at", "skipped", "track__genre", "track__duration")
+    for played_at, skipped, genre, duration in rows:
+        if first_played is None or played_at < first_played:
+            first_played = played_at
+        if last_played is None or played_at > last_played:
+            last_played = played_at
+        if skipped:
+            totals["skips"] += 1
+            continue
+        seconds = duration or 0.0
+        tag = (genre or "").strip() or UNTAGGED_GENRE
+        if tag == UNTAGGED_GENRE:
+            group = UNTAGGED_GENRE
+        else:
+            group = group_for_genre.get(tag.lower(), UNGROUPED_GENRE)
+
+        totals["plays"] += 1
+        totals["seconds"] += seconds
+        month_key = timezone.localtime(played_at).strftime("%Y-%m")
+        month = months.setdefault(month_key, {"month": month_key, "plays": 0, "seconds": 0.0, "tag": {}, "group": {}})
+        month["plays"] += 1
+        month["seconds"] += seconds
+        for bucket, name in ((by_tag, tag), (by_group, group)):
+            entry = bucket.setdefault(name, {"name": name, "plays": 0, "seconds": 0.0})
+            entry["plays"] += 1
+            entry["seconds"] += seconds
+        month["tag"][tag] = month["tag"].get(tag, 0) + 1
+        month["group"][group] = month["group"].get(group, 0) + 1
+
+    def ranked(bucket):
+        return sorted(bucket.values(), key=lambda e: (-e["plays"], e["name"].lower()))
+
+    return JsonResponse({
+        "totals": {
+            **totals,
+            "first_played": first_played.isoformat() if first_played else None,
+            "last_played": last_played.isoformat() if last_played else None,
+        },
+        "channels": channel_results,
+        "genres": {"tag": ranked(by_tag), "group": ranked(by_group)},
+        "months": [months[k] for k in sorted(months, reverse=True)],
+    })
+
+
 RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
 STREAM_CHUNK_SIZE = 8192
 
