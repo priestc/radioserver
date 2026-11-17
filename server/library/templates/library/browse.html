@@ -223,10 +223,10 @@
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 14px; font-size: 12px; color: var(--text-dim); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .month { border-radius: 6px; }
-  .month-row { display: grid; grid-template-columns: 110px 1fr 150px; align-items: center; gap: 12px;
+  .month-row { display: grid; grid-template-columns: 150px 1fr 150px; align-items: center; gap: 12px;
     padding: 8px; border-radius: 6px; cursor: pointer; }
   .month-row:hover, .month.open .month-row { background: var(--bg-elevated); }
-  .month-row .m-label { font-size: 13px; font-weight: 600; }
+  .month-row .m-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
   .month-row .m-label .caret { display: inline-block; width: 12px; color: var(--text-dim); font-size: 10px; }
   .month-row .m-val { font-size: 12px; color: var(--text-dim); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .month-row .m-val b { color: var(--text); font-weight: 600; }
@@ -236,7 +236,7 @@
   .stack .seg:last-child { border-radius: 0 4px 4px 0; }
   .stack .seg:only-child { border-radius: 4px; }
   .stack .seg:hover { filter: brightness(1.25); }
-  .month-detail { padding: 6px 8px 14px 130px; }
+  .month-detail { padding: 6px 8px 14px 170px; }
   .month-detail .bar-row { grid-template-columns: 180px 1fr 120px; }
 
   #tooltip { position: fixed; z-index: 1000; pointer-events: none; display: none;
@@ -856,7 +856,7 @@
     var legend = '<div class="legend">' + colored.map(function (name) {
       return '<span><span class="swatch" style="background:' + colors[name] + '"></span>' + escapeHtml(name) + "</span>";
     }).join("") + (genres.length > STATS_COLORED
-      ? '<span><span class="swatch" style="background:var(--other)"></span>Other</span>' : "") + "</div>";
+      ? '<span><span class="swatch" style="background:var(--other)"></span>Other genres</span>' : "") + "</div>";
 
     var rows = months.map(function (m) {
       var counts = m[mode];
@@ -868,7 +868,7 @@
       Object.keys(counts).forEach(function (name) {
         if (!colors[name]) otherPlays += counts[name];
       });
-      if (otherPlays) segs.push({ name: "Other", plays: otherPlays, color: "var(--other)" });
+      if (otherPlays) segs.push({ name: "Other genres", plays: otherPlays, color: "var(--other)" });
 
       var stack = '<div class="stack">' + segs.map(function (s) {
         return '<div class="seg" style="flex:' + s.plays + " 1 0;background:" + s.color + '"' +
