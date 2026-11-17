@@ -92,6 +92,7 @@
     display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
   .card .art svg { width: 34%; height: 34%; opacity: .3; }
+  .art img.cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .card .art .play-overlay {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(0,0,0,.35); opacity: 0; transition: opacity .15s; z-index: 50;
@@ -308,7 +309,16 @@
   "use strict";
 
   var API = "/library/api/browse/";
-  var COVER = function (albumId) { return "/library/cover/" + albumId + "/"; };
+  // Covers come in a few fixed sizes (the server snaps to 128 / 400 / 600) so the
+  // browser cache can share one copy per size across every page.
+  var THUMB = 128, CARD = 400;
+  var COVER = function (albumId, size) { return "/library/cover/" + albumId + "/?size=" + (size || CARD); };
+  // Lazy <img> rather than a CSS background, so a page of hundreds of albums only
+  // fetches the covers that actually scroll into view.
+  function coverImgHtml(albumId) {
+    return '<img class="cover" src="' + COVER(albumId, CARD) + '" alt="" loading="lazy" decoding="async" ' +
+      'onerror="this.remove()">';
+  }
   var STREAM = function (trackId) { return API + "stream/" + trackId + "/"; };
 
   var content = document.getElementById("content");
@@ -363,7 +373,7 @@
     var onQueueChange = null;
 
     function trackCoverUrl(t) {
-      return t.album_id ? COVER(t.album_id) : "";
+      return t.album_id ? COVER(t.album_id, THUMB) : "";
     }
 
     function load(i, autoplay) {
@@ -489,7 +499,7 @@
     }
     content.innerHTML = '<div class="grid">' + albums.map(function (a) {
       return '<div class="card" data-href="#/album/' + a.id + '">' +
-        '<div class="art" style="background-image:url(\'' + COVER(a.id) + '\')">' +
+        '<div class="art">' + coverImgHtml(a.id) +
           '<div class="play-overlay">▶</div>' +
         "</div>" +
         '<div class="title">' + escapeHtml(a.title) + '</div>' +
@@ -556,7 +566,7 @@
     });
     content.innerHTML =
       '<div class="detail-header">' +
-        '<div class="art" style="background-image:url(\'' + COVER(album.id) + '\')"></div>' +
+        '<div class="art">' + coverImgHtml(album.id) + "</div>" +
         '<div class="meta">' +
           '<div class="kind">Album</div>' +
           "<h1>" + escapeHtml(album.title) + "</h1>" +
@@ -574,7 +584,7 @@
       recordRecent({
         type: "album", id: album.id,
         label: album.title + " — " + album.artist,
-        cover: COVER(album.id),
+        cover: COVER(album.id, THUMB),
       });
     }
     bindTrackRows(listEl, tracks, play);
@@ -594,7 +604,7 @@
       "</div>" +
       '<div class="grid">' + artist.albums.map(function (a) {
         return '<div class="card" data-href="#/album/' + a.id + '">' +
-          '<div class="art" style="background-image:url(\'' + COVER(a.id) + '\')">' +
+          '<div class="art">' + coverImgHtml(a.id) +
             '<div class="play-overlay">▶</div>' +
           "</div>" +
           '<div class="title">' + escapeHtml(a.title) + '</div>' +
@@ -616,8 +626,8 @@
       var left = (Math.random() * 40).toFixed(1);
       var style = "top:" + top + "%; left:" + left + "%; z-index:" + i +
         "; transform: rotate(" + angle + "deg);";
-      return '<img class="piece" src="' + COVER(id) + '" style="' + style + '" ' +
-        'loading="lazy" onerror="this.style.display=\'none\'">';
+      return '<img class="piece" src="' + COVER(id, CARD) + '" style="' + style + '" ' +
+        'loading="lazy" decoding="async" onerror="this.style.display=\'none\'">';
     }).join("");
   }
 
@@ -627,7 +637,7 @@
       return '<div class="art">' + svgNote + extraInner + "</div>";
     }
     if (ids.length === 1) {
-      return '<div class="art" style="background-image:url(\'' + COVER(ids[0]) + '\')">' +
+      return '<div class="art">' + coverImgHtml(ids[0]) +
         extraInner + "</div>";
     }
     return '<div class="art collage">' + scatterPiecesHtml(ids) + extraInner + "</div>";
@@ -713,7 +723,7 @@
     }
     content.innerHTML = '<div class="grid">' + results.map(function (r) {
       var art = r.type === "album"
-        ? '<div class="art" style="background-image:url(\'' + COVER(r.id) + '\')"><div class="play-overlay">▶</div></div>'
+        ? '<div class="art">' + coverImgHtml(r.id) + '<div class="play-overlay">▶</div></div>'
         : '<div class="art">' + svgNote + '<div class="play-overlay">▶</div></div>';
       return '<div class="card" data-href="' + searchResultHref(r) + '">' +
         art +
@@ -811,7 +821,7 @@
     return '<div class="chan-grid">' + channels.map(function (c) {
       var rows = c.recent.map(function (s) {
         var thumb = s.album_id
-          ? '<div class="c-thumb" style="background-image:url(\'' + COVER(s.album_id) + '\')"></div>'
+          ? '<div class="c-thumb" style="background-image:url(\'' + COVER(s.album_id, THUMB) + '\')"></div>'
           : '<div class="c-thumb">' + svgNote + "</div>";
         var href = s.album_id ? ' data-href="#/album/' + s.album_id + '"' : "";
         var when = new Date(s.played_at).toLocaleString();

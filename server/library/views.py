@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import mimetypes
+import os
 import random
 import re
 from io import BytesIO
@@ -664,10 +665,20 @@ def download_song_lowbitrate(request, playlist_item_id):
 
 
 MAX_COVER_SIZE = 600
+# Sizes a client may ask for with ?size=; anything else snaps up to the next one.
+# The default stays MAX_COVER_SIZE so the mobile apps get what they always have.
+COVER_SIZES = (128, 400, MAX_COVER_SIZE)
+COVER_BROWSER_MAX_AGE = 7 * 24 * 3600
 
 
-def _resize_cover(image_data):
-    """Resize cover art to fit within MAX_COVER_SIZE pixels, return JPEG bytes.
+def _cover_cache_dir() -> Path:
+    """Resized covers live outside the install dir, which pipx replaces on every deploy."""
+    base = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")
+    return Path(base) / "radioserver" / "covers"
+
+
+def _resize_cover(image_data, max_size=MAX_COVER_SIZE):
+    """Resize cover art to fit within max_size pixels, return JPEG bytes.
 
     Returns None if the image data is not a valid image.
     """
@@ -675,16 +686,73 @@ def _resize_cover(image_data):
 
     try:
         img = Image.open(BytesIO(image_data))
+        # JPEG sources can decode straight at a reduced scale — far cheaper than
+        # decoding a multi-megapixel scan in full and shrinking it afterwards.
+        img.draft("RGB", (max_size, max_size))
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.LANCZOS)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=82, optimize=True, progressive=True)
     except (UnidentifiedImageError, Exception):
         return None
-    if img.width > MAX_COVER_SIZE or img.height > MAX_COVER_SIZE:
-        img.thumbnail((MAX_COVER_SIZE, MAX_COVER_SIZE), Image.LANCZOS)
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    buf = BytesIO()
-    img.save(buf, format="JPEG", quality=80)
-    buf.seek(0)
-    return buf
+    return buf.getvalue()
+
+
+def _cover_source_mtime(album) -> float:
+    """Newest modification time of anything the cover could have come from: the album
+    folder (a cover image added, replaced or removed) and the tracks (embedded art)."""
+    from django.db.models import Max
+
+    newest = Track.objects.filter(album=album).aggregate(m=Max("file_mtime"))["m"] or 0.0
+    track = album.tracks.first()
+    if track:
+        try:
+            newest = max(newest, Path(track.file_path).parent.stat().st_mtime)
+        except OSError:
+            pass
+    return newest
+
+
+def _build_cover(album, size):
+    cover_path = _find_cover_file(album)
+    if cover_path:
+        resized = _resize_cover(cover_path.read_bytes(), size)
+        if resized:
+            return resized
+    data, _ = _extract_embedded_art(album)
+    if data:
+        return _resize_cover(data, size)
+    return None
+
+
+def _cached_cover(album, size):
+    """Path to the resized cover on disk, or None if the album has no usable art.
+
+    Both outcomes are cached, so neither a hit nor an art-less album costs a folder
+    scan, a read through every track's tags or an image resize after the first
+    request. A cached result is rebuilt once the album's files change."""
+    cache_dir = _cover_cache_dir()
+    jpg = cache_dir / f"{album.id}_{size}.jpg"
+    missing = cache_dir / f"{album.id}_{size}.none"
+    source_mtime = _cover_source_mtime(album)
+
+    for path, result in ((jpg, jpg), (missing, None)):
+        try:
+            if path.stat().st_mtime >= source_mtime:
+                return result
+        except FileNotFoundError:
+            pass
+
+    data = _build_cover(album, size)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    target, stale = (jpg, missing) if data else (missing, jpg)
+    tmp = target.with_suffix(f".tmp{os.getpid()}")
+    tmp.write_bytes(data or b"")
+    os.replace(tmp, target)
+    stale.unlink(missing_ok=True)
+    return jpg if data else None
 
 
 def cover_art(request, album_id):
@@ -693,21 +761,27 @@ def cover_art(request, album_id):
     except Album.DoesNotExist:
         raise Http404
 
-    # Try file on disk first
-    cover_path = _find_cover_file(album)
-    if cover_path:
-        resized = _resize_cover(cover_path.read_bytes())
-        if resized:
-            return FileResponse(resized, content_type="image/jpeg")
+    try:
+        requested = int(request.GET.get("size", MAX_COVER_SIZE))
+    except ValueError:
+        requested = MAX_COVER_SIZE
+    size = next((s for s in COVER_SIZES if s >= requested), MAX_COVER_SIZE)
 
-    # Fall back to embedded art
-    data, mime = _extract_embedded_art(album)
-    if data:
-        resized = _resize_cover(data)
-        if resized:
-            return FileResponse(resized, content_type="image/jpeg")
+    path = _cached_cover(album, size)
+    if path is None:
+        raise Http404
 
-    raise Http404
+    stat = path.stat()
+    etag = f'"{album.id}-{size}-{int(stat.st_mtime)}-{stat.st_size}"'
+    cache_control = f"public, max-age={COVER_BROWSER_MAX_AGE}"
+    if etag in request.headers.get("If-None-Match", ""):
+        response = HttpResponse(status=304)
+    else:
+        response = _file_response(path)
+        response["Content-Type"] = "image/jpeg"
+    response["ETag"] = etag
+    response["Cache-Control"] = cache_control
+    return response
 
 
 @require_api_key
