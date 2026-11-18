@@ -22,6 +22,29 @@ struct SongItem: Codable, Identifiable, Equatable {
     var fileExtension: String {
         (fileFormat ?? "mp3").lowercased()
     }
+
+    /// The server measures ReplayGain in the background for songs that were never
+    /// tagged, so a song can first arrive without a gain and come back on a later sync
+    /// with one. Returns `items` with any such gains filled in from `fresh`, or nil if
+    /// nothing changed.
+    static func fillingInGains(_ items: [SongItem], from fresh: [SongItem]) -> [SongItem]? {
+        let freshGains = Dictionary(
+            fresh.compactMap { s in s.replaygainTrackGain.map { (s.id, $0) } },
+            uniquingKeysWith: { a, _ in a }
+        )
+        guard !freshGains.isEmpty else { return nil }
+        var changed = false
+        let updated = items.map { item -> SongItem in
+            guard item.replaygainTrackGain == nil, let gain = freshGains[item.id] else { return item }
+            changed = true
+            return SongItem(
+                id: item.id, title: item.title, artist: item.artist, album: item.album,
+                albumId: item.albumId, year: item.year, duration: item.duration,
+                fileFormat: item.fileFormat, replaygainTrackGain: gain
+            )
+        }
+        return changed ? updated : nil
+    }
 }
 
 struct PlayedSong: Identifiable, Codable {

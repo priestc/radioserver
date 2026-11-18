@@ -620,6 +620,16 @@ class AudioPlayer: ObservableObject {
             let ceiling = await MainActor.run { self.discardedItemIdCeiling }
             let toAdd = newItems.filter { !existingIds.contains($0.id) && $0.id > ceiling }
 
+            let gainsFilled = await MainActor.run { () -> Bool in
+                guard let updated = SongItem.fillingInGains(self.queue, from: newItems) else { return false }
+                self.queue = updated
+                return true
+            }
+            if gainsFilled && toAdd.isEmpty {
+                // Persist the new gains to the offline song library.
+                recalculateCacheStats()
+            }
+
             if !toAdd.isEmpty {
                 await MainActor.run {
                     queue.append(contentsOf: toAdd)
@@ -860,6 +870,16 @@ class AudioPlayer: ObservableObject {
 
         let ceiling = await MainActor.run { self.discardedItemIdCeiling }
         let toAdd = newItems.filter { !existingIds.contains($0.id) && $0.id > ceiling }
+        let gainsFilled = await MainActor.run { () -> Bool in
+            guard let q = self.backgroundQueues[channelId],
+                  let updated = SongItem.fillingInGains(q, from: newItems) else { return false }
+            self.backgroundQueues[channelId] = updated
+            return true
+        }
+        if gainsFilled && toAdd.isEmpty {
+            // Persist the new gains to the offline song library.
+            recalculateCacheStats()
+        }
         if !toAdd.isEmpty {
             await MainActor.run {
                 var q = self.backgroundQueues[channelId] ?? []

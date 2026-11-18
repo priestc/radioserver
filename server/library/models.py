@@ -320,6 +320,15 @@ class PlaylistItem(models.Model):
     def __str__(self):
         return f"#{self.id} — {self.track}"
 
+    def save(self, *args, **kwargs):
+        adding = self._state.adding
+        super().save(*args, **kwargs)
+        if adding:
+            # Queued songs should play at normalized volume; measure any that were
+            # never ReplayGain-tagged (runs in the background — see library.replaygain).
+            from library.replaygain import ensure_replaygain
+            ensure_replaygain(self.track)
+
 
 def _generate_api_key():
     return secrets.token_hex(32)
