@@ -96,7 +96,11 @@ def read_replaygain(path: str | Path) -> float | None:
     type_name = type(audio).__name__
     gain_str = None
 
-    if type_name == "MP3":
+    if type_name == "MP3" or (
+        # WAV/AIFF etc. carry ID3 tags too (that's how the replaygain command writes them).
+        type_name not in ("FLAC", "OggVorbis", "OggOpus", "MP4")
+        and hasattr(getattr(audio, "tags", None), "getall")
+    ):
         if audio.tags:
             for frame in audio.tags.getall("TXXX"):
                 if frame.desc.lower() == "replaygain_track_gain":
